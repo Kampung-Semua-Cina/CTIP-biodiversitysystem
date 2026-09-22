@@ -54,11 +54,19 @@ npm install
 Never commit `.env` files, Supabase keys or MQTT certificates. Copy values from the
 team's shared secrets instead.
 
+## Task tracking
+
+Sprint backlog lives in Jira, project **CTIP**: https://kampungsemuacina.atlassian.net.
+Each workstream has a starting ticket (CTIP-13 to CTIP-18); pick one up in the team
+chat or standup, and it gets assigned to you in Jira. New work within a workstream
+goes to whoever owns it, unless it's raised otherwise.
+
 ## Contributing
 
-- Branch per task, named after the sprint backlog task ID, for example
-  `feature/T13-local-sqlite-schema`.
-- Commit messages start with the task ID, for example `T15: add specimen recording form`.
+- Branch per task, named after the Jira issue key, for example
+  `feature/CTIP-15-local-sqlite-schema`.
+- Commit messages start with the issue key, for example
+  `CTIP-15: add specimen recording form`.
 - Never push to `main`. Open a PR; it needs at least one approval and passing CI.
   Changes to `packages/api-contract/` need two approvals.
 - Pull `main` before branching and keep branches short-lived.
