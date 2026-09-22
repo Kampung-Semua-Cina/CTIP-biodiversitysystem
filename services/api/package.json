@@ -1,0 +1,13 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API for the Smart Ground-Truthing and Digital Biodiversity System",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

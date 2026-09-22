@@ -1,0 +1,13 @@
+# Code owners are automatically requested for review on PRs that touch their paths.
+#
+# TODO (Albian): replace the placeholder handles below with real GitHub usernames
+# or an org team, then uncomment the rule. An entry with an unknown handle is
+# reported as an error by GitHub, so it is left commented out until then.
+#
+# packages/api-contract/ needs two approvals because a change there breaks the
+# mobile app, web app and API at once. CODEOWNERS only makes the owners' review
+# required; to require two approvals, also set "Required approvals" to 2 in the
+# branch protection rule / ruleset for main, and enable "Require review from Code
+# Owners".
+#
+# /packages/api-contract/  @github-username-1 @github-username-2

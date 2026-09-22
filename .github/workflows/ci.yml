@@ -1,0 +1,34 @@
+name: CI
+
+# No path filters on purpose: branch protection requires these checks, and a
+# workflow that is skipped by a path filter leaves the required check pending
+# forever, which blocks the PR.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web (lint and build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  # Add jobs here as each workstream gets something to check, e.g. API tests
+  # (services/api), anomaly-detection tests (services/anomaly-detection) and
+  # `npm audit` for the security assessment.

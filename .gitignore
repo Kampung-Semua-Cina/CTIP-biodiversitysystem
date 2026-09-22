@@ -141,3 +141,27 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Build output (node_modules, dist and .env* are covered above)
+build/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+
+# PlatformIO
+.pio/
+
+# Python (no path prefix, so a venv anywhere in the repo is ignored)
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+infra/mosquitto/certs/
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db

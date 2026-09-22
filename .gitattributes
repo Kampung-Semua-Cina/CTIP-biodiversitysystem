@@ -1,0 +1,5 @@
+# Let Git normalise line endings so Windows (CRLF) checkouts don't create noisy diffs.
+* text=auto
+
+# Shell scripts run on Linux (CI, Mosquitto, ESP32 tooling) and must stay LF.
+*.sh text eol=lf
