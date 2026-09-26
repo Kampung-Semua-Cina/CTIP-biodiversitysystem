@@ -1,6 +1,6 @@
 # Smart Ground-Truthing and Digital Biodiversity System
 
-COS30049 Computing Technology Innovation Project (Swinburne Sarawak), built with
+COS30049 Computing Technology Innovation Project (Swinburne Sarawak University), built with
 NeuonAI Sdn Bhd and Sarawak Forestry Corporation. Pilot site: Niah National Park.
 
 A digital replacement for paper-based plant documentation: a botanist field app that
