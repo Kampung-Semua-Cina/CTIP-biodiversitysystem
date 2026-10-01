@@ -13,10 +13,10 @@
 
 | Role | Can do | Trust level |
 |---|---|---|
-| Botanist | Register plants, add details/photos/GPS, sync | Logged in, but phone is outside our control |
+| Botanist | Scan QR, Register plants, add details/photos/GPS, sync | Logged in |
 | Conservation Officer | Add/edit/delete species, approve observations, export reports | Logged in, high privilege on data |
 | Admin | Manage users, roles, sensor dashboard | Highest privilege |
-| Visitor | Scan QR, view public plant page | **Not logged in. Fully untrusted** |
+| Visitor | view public plant page | **Not logged in. Fully untrusted** |
 
 **Assets we must protect (most valuable first):**
 1. Exact GPS location of endangered/rare plants (poaching risk)
