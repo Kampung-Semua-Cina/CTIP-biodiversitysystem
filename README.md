@@ -16,6 +16,10 @@ an IoT node that protects endangered specimens.
 | `apps/firmware` | ESP32 sensor node (PlatformIO) |
 | `services/api` | REST API (Node + Express) |
 | `services/anomaly-detection` | Sensor anomaly detection (Python) |
+| `packages/design-system` | Shared color, spacing, radius and typography tokens |
+| `packages/hooks` | Platform-neutral React hooks, including plant search/filter |
+| `packages/types` | Shared plant, persona and security integration contracts |
+| `packages/ui` | Shared plant and field components with web/native renderers |
 | `packages/api-contract` | OpenAPI spec, the single source of truth for the API |
 | `infra` | Mosquitto broker config, Supabase migrations and RLS policies |
 | `docs` | Architecture diagrams and testing evidence |
@@ -32,23 +36,37 @@ what is out of scope.
 
 ## Getting started
 
-Each app has its own `package.json`. Install and run from inside its folder
-(PowerShell):
+The web app, mobile app and shared packages use npm workspaces. Install once at
+the repository root (PowerShell):
 
 ```powershell
-# Web
-cd apps/web
 npm install
-npm run dev
+```
 
-# Mobile
-cd apps/mobile
-npm install
-npm start
+Run either app from the repository root:
 
-# API
-cd services/api
-npm install
+```powershell
+npm run dev:web
+npm run dev:mobile
+```
+
+Build and lint the web app with `npm run build:web` and `npm run lint:web`.
+The API service remains a separate package and is installed from
+`services/api`.
+
+### Shared app foundation
+
+`apps/web` and `apps/mobile` consume the same `@ctip/types`, `@ctip/hooks`, and
+`@ctip/ui` workspace packages. UI components have web and React Native
+implementations selected by the platform; navigation and device capabilities
+remain app-specific. The current plant records and operational screens are
+illustrative previews, not connected to the API.
+
+Authentication, server-enforced role permissions, encryption, and key
+management are backend integration requirements. The persona selector is only
+a UI preview and must never be treated as access control. QR scanning, camera,
+GPS capture, durable offline storage, synchronization, review actions, reports,
+and sensor feeds need their platform or API integrations before production use.
 ```
 
 Never commit `.env` files, Supabase keys or MQTT certificates. Copy values from the

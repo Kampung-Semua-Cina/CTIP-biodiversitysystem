@@ -1,0 +1,382 @@
+@import '@ctip/design-system/styles.css';
+
+:root {
+  font-family: system-ui, sans-serif;
+}
+
+.ui-status-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #edf1e8;
+  color: #536249;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ui-plant-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  padding: 12px;
+  background: transparent;
+  color: var(--ctip-ink);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.ui-plant-card:hover,
+.ui-plant-card.is-selected {
+  border-color: var(--ctip-border);
+  background: var(--ctip-surface);
+}
+
+.ui-plant-card__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--ctip-leaf);
+  color: var(--ctip-forest);
+  font-size: 20px;
+}
+
+.ui-plant-card__content {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.ui-plant-card__content strong {
+  font-size: 13px;
+}
+
+.ui-plant-card__content em,
+.ui-plant-card__content > span {
+  overflow: hidden;
+  color: var(--ctip-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-plant-card .ui-status-badge {
+  max-width: 105px;
+}
+
+.ui-detail-frame {
+  overflow: hidden;
+  border: 1px solid var(--ctip-border);
+  border-radius: 18px;
+  background: var(--ctip-surface);
+}
+
+.ui-detail-frame__visual {
+  display: grid;
+  min-height: 145px;
+  place-items: center;
+  background: linear-gradient(135deg, #e4eee2, #f5eadb);
+  font-size: 56px;
+}
+
+.ui-detail-frame__image {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+}
+
+.ui-detail-frame__body {
+  padding: 22px;
+}
+
+.ui-detail-frame__body h2 {
+  margin: 0 0 5px;
+  color: var(--ctip-ink);
+  font: 700 22px/1.2 'Manrope', sans-serif;
+}
+
+.ui-eyebrow {
+  margin: 0 0 8px;
+  color: var(--ctip-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.ui-scientific-name {
+  margin: 0 0 12px;
+  color: var(--ctip-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.ui-detail-frame__description {
+  margin: 18px 0;
+  color: var(--ctip-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.ui-plant-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border-top: 1px solid var(--ctip-border);
+  padding-top: 16px;
+}
+
+.ui-plant-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 12px;
+}
+
+.ui-plant-facts dt {
+  color: var(--ctip-muted);
+}
+
+.ui-plant-facts dd {
+  margin: 0;
+  color: var(--ctip-ink);
+  font-weight: 600;
+  text-align: right;
+}
+
+.ui-search {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--ctip-border);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--ctip-surface);
+  color: var(--ctip-muted);
+}
+
+.ui-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ctip-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ui-search kbd {
+  flex: 0 0 auto;
+  border: 1px solid var(--ctip-border);
+  border-radius: 5px;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+.ui-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.ui-filter {
+  display: grid;
+  gap: 6px;
+  color: var(--ctip-muted);
+  font-size: 11px;
+}
+
+.ui-filter select {
+  min-height: 38px;
+  border: 1px solid var(--ctip-border);
+  border-radius: 9px;
+  padding: 0 9px;
+  background: var(--ctip-surface);
+  color: var(--ctip-ink);
+  font: inherit;
+}
+
+.ui-sync-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ui-sync-status__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #72a47b;
+}
+
+.ui-sync-status > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.ui-sync-status strong {
+  color: var(--ctip-ink);
+  font-size: 11px;
+}
+
+.ui-sync-status small {
+  color: var(--ctip-muted);
+  font-size: 10px;
+}
+
+.ui-security-notice {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #efdfb8;
+  border-radius: 11px;
+  padding: 12px 14px;
+  background: var(--ctip-warning-surface);
+  color: #75591d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ui-security-notice strong {
+  font-size: 12px;
+}
+
+.ui-section-card {
+  border: 1px solid var(--ctip-border);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--ctip-surface);
+}
+
+.ui-section-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ui-section-card__header h2 {
+  margin: 0;
+  color: var(--ctip-ink);
+  font: 700 16px/1.3 'Manrope', sans-serif;
+}
+
+.ui-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 30px 16px;
+  color: var(--ctip-muted);
+  text-align: center;
+}
+
+.ui-empty-state > span {
+  font-size: 25px;
+}
+
+.ui-empty-state strong {
+  color: var(--ctip-ink);
+  font-size: 13px;
+}
+
+.ui-empty-state p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.ui-metric-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--ctip-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--ctip-surface);
+}
+
+.ui-metric-card > span,
+.ui-metric-card small {
+  color: var(--ctip-muted);
+  font-size: 11px;
+}
+
+.ui-metric-card strong {
+  color: var(--ctip-forest);
+  font: 700 24px/1 'Manrope', sans-serif;
+}
+
+.ui-observation-form {
+  display: grid;
+  gap: 15px;
+}
+
+.ui-observation-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--ctip-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ui-observation-form input,
+.ui-observation-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--ctip-border);
+  border-radius: 9px;
+  padding: 10px 11px;
+  background: var(--ctip-surface);
+  color: var(--ctip-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ui-observation-form textarea {
+  resize: vertical;
+}
+
+.ui-form-hint {
+  margin: 0;
+  color: var(--ctip-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ui-primary-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 16px;
+  background: var(--ctip-forest);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ui-primary-button:hover {
+  background: var(--ctip-forest-dark);
+}
+
+@media (max-width: 650px) {
+  .ui-plant-card {
+    flex-wrap: wrap;
+  }
+}

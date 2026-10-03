@@ -1,0 +1,13 @@
+{
+  "name": "@ctip/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  }
+}

@@ -1,16 +1,22 @@
-# React + Vite
+# Biodiversity knowledge system
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The web app provides the shared plant directory and persona-preview workspaces
+for visitors, botanists, conservation officers, and admins. Its plant records
+and monitoring/review screens are illustrative until the API is connected.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Install dependencies at the repository root and run:
 
-## React Compiler
+```powershell
+npm run dev:web
+npm run build:web
+npm run lint:web
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The web app consumes `@ctip/ui`, `@ctip/hooks`, and `@ctip/types` from the
+workspace. UI components have browser-specific renderers; use app-level
+navigation for web-only layout and routes.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The persona picker is only a UI preview. Authentication, authorization,
+encryption, and key management must be implemented and enforced by the backend.

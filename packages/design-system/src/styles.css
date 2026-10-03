@@ -1,0 +1,20 @@
+:root {
+  --ctip-forest: #244b3b;
+  --ctip-forest-dark: #173528;
+  --ctip-leaf: #dceadf;
+  --ctip-canvas: #f5f7f3;
+  --ctip-surface: #fff;
+  --ctip-ink: #1d2922;
+  --ctip-muted: #68756d;
+  --ctip-border: #dfe6df;
+  --ctip-accent: #b45d32;
+  --ctip-warning-surface: #fff4d8;
+  --ctip-space-xs: 4px;
+  --ctip-space-sm: 8px;
+  --ctip-space-md: 16px;
+  --ctip-space-lg: 24px;
+  --ctip-space-xl: 32px;
+  --ctip-radius-sm: 8px;
+  --ctip-radius-md: 14px;
+  --ctip-radius-lg: 22px;
+}
