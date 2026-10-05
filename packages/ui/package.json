@@ -14,11 +14,12 @@
   },
   "dependencies": {
     "@ctip/design-system": "*",
-    "@ctip/types": "*"
+    "@ctip/types": "*",
+    "expo": "44.0.6"
   },
   "peerDependencies": {
     "react": ">=19",
-    "react-native": ">=0.76"
+    "react-native": "^0.72.17"
   },
   "peerDependenciesMeta": {
     "react-native": {
