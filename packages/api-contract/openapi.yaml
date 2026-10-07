@@ -13,7 +13,17 @@ info:
     - **Admins**: everything, plus user management.
 
     **Auth:** send the Supabase access token as `Authorization: Bearer <token>`.
-    Sensor devices use the `X-Sensor-Key` header instead.
+    Sensor devices and the MQTT bridge use the `X-Sensor-Key` header instead.
+
+    **Sensor data flow**
+    - **Readings go over MQTT, not HTTP.** Each node publishes one reading as JSON
+      to the topic `nodes/{node_id}/telemetry` on the Mosquitto broker (TLS, QoS 1).
+      The payload is one `TelemetryReadingInput` object.
+    - **The MQTT bridge** (a small backend subscriber) forwards those readings to
+      `POST /telemetry`. That keeps validation, storage and alert rules in one
+      place. The sensor simulator may call `POST /telemetry` directly.
+    - **Images go over HTTP.** A node sends a JPEG straight to
+      `POST /sensor-nodes/{id}/images`, because MQTT is unsuited to large payloads.
 
     This is a contract only: endpoints and data shapes are agreed here first,
     then implemented by the backend and consumed by the web/mobile apps.
@@ -42,6 +52,8 @@ tags:
   - name: Sensors
   - name: Alerts
   - name: Notifications
+  - name: Reports
+    description: File exports for officers and admins
 
 paths:
 
@@ -807,7 +819,10 @@ paths:
     post:
       tags: [Sensors]
       operationId: ingestTelemetry
-      summary: Sensor devices push readings (may create alerts)
+      summary: Store sensor readings (may create alerts)
+      description: |
+        Called by the MQTT bridge and the sensor simulator, not by the nodes
+        themselves: nodes publish to MQTT (see "Sensor data flow" at the top).
       security:
         - sensorKey: []
       requestBody:
@@ -821,16 +836,76 @@ paths:
                 node_id: { type: string, format: uuid }
                 readings:
                   type: array
-                  items:
-                    type: object
-                    required: [ts]
-                    properties:
-                      ts: { type: string, format: date-time }
-                      temperature: { type: number }
-                      soil_moisture: { type: number }
+                  items: { $ref: '#/components/schemas/TelemetryReadingInput' }
       responses:
         '202': { description: Accepted }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /sensor-nodes/{id}/images:
+    get:
+      tags: [Sensors]
+      operationId: listNodeImages
+      summary: Images captured by one node, newest first (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Images
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SensorImage' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Sensors]
+      operationId: uploadNodeImage
+      summary: A sensor node uploads one JPEG (e.g. when motion is detected)
+      description: |
+        The request body is the raw JPEG bytes, not JSON or multipart, so the
+        ESP32-CAM can send its camera buffer in a single request. The API stores
+        the file in the private `sensor-images` bucket.
+      security:
+        - sensorKey: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: captured_at
+          in: query
+          description: When the image was taken. Defaults to the time of upload.
+          schema: { type: string, format: date-time }
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+              maxLength: 2097152
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorImage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Image is larger than 2 MB }
+        '415': { description: Body is not image/jpeg }
 
   # ------------------------------------------------------------------ Alerts
   /alerts:
@@ -1009,6 +1084,53 @@ paths:
       responses:
         '204': { description: All marked read }
 
+  # ----------------------------------------------------------------- Reports
+  # Each report is one GET that returns a downloadable file. The response
+  # carries a Content-Disposition header so browsers save it with a filename.
+  /reports/observations:
+    get:
+      tags: [Reports]
+      operationId: exportObservationReport
+      summary: Export observation records as a file (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/ReportFormat'
+        - name: from
+          in: query
+          description: Only observations made on or after this time
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Only observations made before this time
+          schema: { type: string, format: date-time }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ObservationStatus' }
+        - name: species_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/ReportFile' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /reports/species:
+    get:
+      tags: [Reports]
+      operationId: exportSpeciesReport
+      summary: Export the species catalogue with specimen counts (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/ReportFormat'
+        - name: conservation_status
+          in: query
+          schema: { type: string }
+        - name: family
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/ReportFile' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 
 components:
 
@@ -1048,8 +1170,22 @@ components:
       in: query
       description: Search scientific or common name
       schema: { type: string }
+    ReportFormat:
+      name: format
+      in: query
+      schema: { type: string, enum: [csv, pdf], default: csv }
 
   responses:
+    ReportFile:
+      description: The report as a file download
+      headers:
+        Content-Disposition:
+          schema: { type: string, examples: ['attachment; filename="observations-2026-10-08.csv"'] }
+      content:
+        text/csv:
+          schema: { type: string }
+        application/pdf:
+          schema: { type: string, format: binary }
     Unauthorized:
       description: Missing or invalid token
       content:
@@ -1395,12 +1531,16 @@ components:
       properties:
         specimen_id: { type: string, format: uuid }
         status: { type: string, enum: [active, offline, maintenance, retired] }
+        lat: { type: number, minimum: -90, maximum: 90, description: Where the node was installed }
+        lng: { type: number, minimum: -180, maximum: 180 }
         thresholds:
           type: object
           description: Readings outside these limits create an alert
           properties:
             temperature_min: { type: number }
             temperature_max: { type: number }
+            humidity_min: { type: number }
+            humidity_max: { type: number }
             soil_moisture_min: { type: number }
             soil_moisture_max: { type: number }
 
@@ -1414,6 +1554,21 @@ components:
             created_at: { type: string, format: date-time }
             updated_at: { type: string, format: date-time }
 
+    TelemetryReadingInput:
+      type: object
+      description: |
+        One reading from a node. This is also the MQTT payload. Only `ts` is
+        required, so a node sends just the sensors it has.
+      required: [ts]
+      properties:
+        ts: { type: string, format: date-time }
+        temperature: { type: number, description: Degrees Celsius }
+        humidity: { type: number, minimum: 0, maximum: 100, description: Relative humidity in percent }
+        soil_moisture: { type: number, minimum: 0, maximum: 100, description: Percent }
+        motion_detected: { type: boolean, description: True if the motion sensor fired since the last reading }
+        lat: { type: number, minimum: -90, maximum: 90, description: Only for nodes with a GPS module }
+        lng: { type: number, minimum: -180, maximum: 180 }
+
     TelemetryReading:
       type: object
       properties:
@@ -1421,7 +1576,30 @@ components:
         node_id: { type: string, format: uuid }
         ts: { type: string, format: date-time }
         temperature: { type: [number, 'null'] }
+        humidity: { type: [number, 'null'] }
         soil_moisture: { type: [number, 'null'] }
+        motion_detected: { type: [boolean, 'null'] }
+        lat: { type: [number, 'null'] }
+        lng: { type: [number, 'null'] }
+
+    SensorImage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        alert_id:
+          type: [string, 'null']
+          format: uuid
+          description: Set when the image was captured as evidence for an alert
+        captured_at: { type: string, format: date-time }
+        s3_bucket: { type: string, examples: ['sensor-images'] }
+        s3_key: { type: string, examples: ['<node_id>/<image_id>.jpg'] }
+        size_bytes: { type: integer }
+        view_url:
+          type: [string, 'null']
+          format: uri
+          description: Short-lived signed URL (private bucket)
+        created_at: { type: string, format: date-time }
 
     # ---------- alerts
     Alert:

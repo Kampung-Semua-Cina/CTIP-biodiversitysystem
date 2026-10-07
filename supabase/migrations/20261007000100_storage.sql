@@ -1,6 +1,6 @@
 -- =====================================================================
 -- STORAGE: buckets + access rules for photos
--- Run in SQL Editor AFTER schema.sql.
+-- Runs after the schema migration (the filename timestamp sets the order).
 --
 -- Folder convention (the app must upload using these paths):
 --   observation-photos/{observation_id}/{photo_id}.jpg
