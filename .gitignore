@@ -149,8 +149,9 @@ build/
 .expo/
 .expo-shared/
 
-# PlatformIO
-.pio/
+# Arduino IDE (WiFi / MQTT credentials for the firmware sketch; exported
+# binaries land in build/, which is covered above)
+secrets.h
 
 # Python (no path prefix, so a venv anywhere in the repo is ignored)
 .venv/
