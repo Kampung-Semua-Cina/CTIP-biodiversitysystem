@@ -14,5 +14,8 @@
     "dev:mobile": "npm run start --workspace mobile",
     "build:web": "npm run build --workspace web",
     "lint:web": "npm run lint --workspace web"
+  },
+  "devDependencies": {
+    "supabase": "^2.120.0"
   }
 }
