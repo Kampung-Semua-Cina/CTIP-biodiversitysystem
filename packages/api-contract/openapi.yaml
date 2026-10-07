@@ -1,0 +1,1465 @@
+openapi: 3.1.0
+
+info:
+  title: Smart Ground-Truthing & Digital Biodiversity API
+  version: 0.1.0
+  description: |
+    API contract skeleton for the Niah National Park biodiversity system.
+
+    **Who uses what**
+    - **Visitors** (not logged in): only the `/public/...` endpoints.
+    - **Botanists**: register specimens, record observations, upload photos, sync offline work.
+    - **Officers**: review observations, manage species, QR tags, sensors and alerts.
+    - **Admins**: everything, plus user management.
+
+    **Auth:** send the Supabase access token as `Authorization: Bearer <token>`.
+    Sensor devices use the `X-Sensor-Key` header instead.
+
+    This is a contract only: endpoints and data shapes are agreed here first,
+    then implemented by the backend and consumed by the web/mobile apps.
+
+servers:
+  - url: http://localhost:8000/v1
+    description: Local development
+  - url: https://api.example.com/v1
+    description: Production (placeholder — replace when deployed)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Public
+    description: Visitor-facing, no login required
+  - name: Profiles
+  - name: QR Tags
+  - name: Species
+  - name: Specimens
+  - name: Observations
+  - name: Photos
+  - name: Reviews
+  - name: Comments
+  - name: Sync
+  - name: Sensors
+  - name: Alerts
+  - name: Notifications
+
+paths:
+
+  # ------------------------------------------------------------------ Public
+  /public/species:
+    get:
+      tags: [Public]
+      operationId: listPublicSpecies
+      summary: List published species (visitor catalogue)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Published species
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicSpecies' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+
+  /public/species/{id}:
+    get:
+      tags: [Public]
+      operationId: getPublicSpecies
+      summary: Get one published species with its gallery
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Species detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicSpecies' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- Profiles
+  /me:
+    get:
+      tags: [Profiles]
+      operationId: getMyProfile
+      summary: Get the logged-in user's profile and role
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /profiles:
+    get:
+      tags: [Profiles]
+      operationId: listProfiles
+      summary: List users (admin)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Profile' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /profiles/{id}:
+    patch:
+      tags: [Profiles]
+      operationId: updateProfile
+      summary: Change a user's role or active status (admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- QR Tags
+  /qr-tags:
+    get:
+      tags: [QR Tags]
+      operationId: listQrTags
+      summary: List QR tags
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/QrTagStatus' }
+        - name: batch_label
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: QR tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/QrTag' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+
+  /qr-tags/batch:
+    post:
+      tags: [QR Tags]
+      operationId: createQrTagBatch
+      summary: Generate a print batch of new QR tags (officer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [count, batch_label]
+              properties:
+                count: { type: integer, minimum: 1, maximum: 500 }
+                batch_label: { type: string, examples: ['2026-10-batch-A'] }
+      responses:
+        '201':
+          description: Tags created
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/QrTag' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /qr-tags/{qrId}:
+    get:
+      tags: [QR Tags]
+      operationId: getQrTag
+      summary: Look up a QR tag (and its specimen, if assigned)
+      parameters:
+        - $ref: '#/components/parameters/QrId'
+      responses:
+        '200':
+          description: QR tag
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrTag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- Species
+  /species:
+    get:
+      tags: [Species]
+      operationId: listSpecies
+      summary: List all species incl. unpublished (staff)
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - name: is_published
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Species
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Species' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      tags: [Species]
+      operationId: createSpecies
+      summary: Create a species (officer/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpeciesInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /species/{id}:
+    get:
+      tags: [Species]
+      operationId: getSpecies
+      summary: Get a species (staff view)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Species
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Species]
+      operationId: updateSpecies
+      summary: Update a species (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpeciesInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Species]
+      operationId: deleteSpecies
+      summary: Soft-delete a species (sets is_deleted)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /species/{id}/publish:
+    post:
+      tags: [Species]
+      operationId: setSpeciesPublished
+      summary: Publish or unpublish a species for visitors
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_published]
+              properties:
+                is_published: { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /species/{id}/media:
+    get:
+      tags: [Species, Photos]
+      operationId: listSpeciesMedia
+      summary: List gallery images for a species
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Media
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SpeciesMedia' }
+    post:
+      tags: [Species, Photos]
+      operationId: createSpeciesMediaUpload
+      summary: Start a species image upload (returns signed upload URL)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UploadRequest'
+                - type: object
+                  properties:
+                    caption: { type: string }
+                    credit: { type: string }
+                    is_primary: { type: boolean }
+                    sort_order: { type: integer }
+      responses:
+        '201':
+          description: Upload slot created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  media: { $ref: '#/components/schemas/SpeciesMedia' }
+                  upload: { $ref: '#/components/schemas/UploadTicket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # --------------------------------------------------------------- Specimens
+  /specimens:
+    get:
+      tags: [Specimens]
+      operationId: listSpecimens
+      summary: List specimens
+      parameters:
+        - name: species_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: unresolved
+          in: query
+          description: Only specimens with no species_id yet
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Specimens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Specimen' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      tags: [Specimens]
+      operationId: registerSpecimen
+      summary: Register a new specimen by scanning a QR tag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpecimenCreate' }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '409':
+          description: QR tag already assigned to another specimen
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /specimens/by-qr/{qrId}:
+    get:
+      tags: [Specimens]
+      operationId: getSpecimenByQr
+      summary: Find the specimen attached to a scanned QR code
+      parameters:
+        - $ref: '#/components/parameters/QrId'
+      responses:
+        '200':
+          description: Specimen
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /specimens/{id}:
+    get:
+      tags: [Specimens]
+      operationId: getSpecimen
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Specimen
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Specimens]
+      operationId: updateSpecimen
+      summary: Update a specimen (e.g. officer links it to a species)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SpecimenUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Specimen' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ------------------------------------------------------------ Observations
+  /observations:
+    get:
+      tags: [Observations]
+      operationId: listObservations
+      summary: List observations (botanists see their own; staff see all)
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ObservationStatus' }
+        - name: specimen_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Observation' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      tags: [Observations]
+      operationId: createObservation
+      summary: Create an observation (id may be generated on the device)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ObservationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Observation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /observations/{id}:
+    get:
+      tags: [Observations]
+      operationId: getObservation
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Observation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Observation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Observations]
+      operationId: updateObservation
+      summary: Edit an observation (send current version; 409 if someone else changed it)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ObservationUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Observation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Observations]
+      operationId: deleteObservation
+      summary: Soft-delete a draft observation
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /observations/{id}/submit:
+    post:
+      tags: [Observations]
+      operationId: submitObservation
+      summary: Submit a draft/returned observation for review
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Submitted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Observation' }
+        '409':
+          description: Observation is not in a submittable state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /observations/{id}/photos:
+    get:
+      tags: [Photos]
+      operationId: listObservationPhotos
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Photos (each includes a short-lived signed view URL)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ObservationPhoto' }
+    post:
+      tags: [Photos]
+      operationId: createObservationPhotoUpload
+      summary: Start a photo upload (returns signed upload URL)
+      description: |
+        1. Call this to get `upload.url`.
+        2. PUT the image bytes to that URL.
+        3. Call `/observations/{id}/photos/{photoId}/confirm`.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UploadRequest' }
+      responses:
+        '201':
+          description: Upload slot created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  photo: { $ref: '#/components/schemas/ObservationPhoto' }
+                  upload: { $ref: '#/components/schemas/UploadTicket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /observations/{id}/photos/{photoId}/confirm:
+    post:
+      tags: [Photos]
+      operationId: confirmObservationPhoto
+      summary: Mark a photo as uploaded after the file transfer finishes
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: photoId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ObservationPhoto' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /observations/{id}/reviews:
+    get:
+      tags: [Reviews]
+      operationId: listObservationReviews
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Review history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+    post:
+      tags: [Reviews]
+      operationId: reviewObservation
+      summary: Approve, return or reject an observation (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCreate' }
+      responses:
+        '201':
+          description: Review recorded; observation status updated; botanist notified
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: observation_version is stale (botanist edited it since)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /observations/{id}/comments:
+    get:
+      tags: [Comments]
+      operationId: listObservationComments
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Comment' }
+    post:
+      tags: [Comments]
+      operationId: addObservationComment
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+
+  # -------------------------------------------------------------------- Sync
+  /sync:
+    post:
+      tags: [Sync]
+      operationId: syncOfflineObservations
+      summary: Upload observations recorded offline in one batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncRequest' }
+      responses:
+        '200':
+          description: Per-item results (some may conflict)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncResponse' }
+
+  # ----------------------------------------------------------------- Sensors
+  /sensor-nodes:
+    get:
+      tags: [Sensors]
+      operationId: listSensorNodes
+      responses:
+        '200':
+          description: Nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SensorNode' }
+    post:
+      tags: [Sensors]
+      operationId: createSensorNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorNodeInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorNode' }
+
+  /sensor-nodes/{id}:
+    get:
+      tags: [Sensors]
+      operationId: getSensorNode
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Node
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorNode' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Sensors]
+      operationId: updateSensorNode
+      summary: Update status or alert thresholds
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorNodeInput' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorNode' }
+
+  /sensor-nodes/{id}/telemetry:
+    get:
+      tags: [Sensors]
+      operationId: getNodeTelemetry
+      summary: Readings for one node over a time range
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Readings, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TelemetryReading' }
+
+  /telemetry:
+    post:
+      tags: [Sensors]
+      operationId: ingestTelemetry
+      summary: Sensor devices push readings (may create alerts)
+      security:
+        - sensorKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [node_id, readings]
+              properties:
+                node_id: { type: string, format: uuid }
+                readings:
+                  type: array
+                  items:
+                    type: object
+                    required: [ts]
+                    properties:
+                      ts: { type: string, format: date-time }
+                      temperature: { type: number }
+                      soil_moisture: { type: number }
+      responses:
+        '202': { description: Accepted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ------------------------------------------------------------------ Alerts
+  /alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlerts
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AlertStatus' }
+        - name: severity
+          in: query
+          schema: { $ref: '#/components/schemas/Severity' }
+        - name: assigned_to_me
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Alert' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+
+  /alerts/{id}:
+    get:
+      tags: [Alerts]
+      operationId: getAlert
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Alert
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /alerts/{id}/assign:
+    post:
+      tags: [Alerts]
+      operationId: assignAlert
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigned_to]
+              properties:
+                assigned_to: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Assigned; assignee notified
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+
+  /alerts/{id}/acknowledge:
+    post:
+      tags: [Alerts]
+      operationId: acknowledgeAlert
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Acknowledged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      operationId: resolveAlert
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, examples: ['Watered plant; soil moisture recovered'] }
+      responses:
+        '200':
+          description: Resolved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+
+  /alerts/{id}/notes:
+    get:
+      tags: [Alerts]
+      operationId: listAlertNotes
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AlertNote' }
+    post:
+      tags: [Alerts]
+      operationId: addAlertNote
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AlertNote' }
+
+  # ----------------------------------------------------------- Notifications
+  /notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      parameters:
+        - name: unread_only
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The user's notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: Marked read }
+
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      operationId: markAllNotificationsRead
+      responses:
+        '204': { description: All marked read }
+
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth access token
+    sensorKey:
+      type: apiKey
+      in: header
+      name: X-Sensor-Key
+      description: Per-device key for sensor nodes
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    QrId:
+      name: qrId
+      in: path
+      required: true
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Search:
+      name: q
+      in: query
+      description: Search scientific or common name
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Logged in but your role is not allowed to do this
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found (or not visible to you)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflicts with the current state (duplicate, stale version, wrong status)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+
+    # ---------- shared
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: ['VERSION_CONFLICT'] }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    UploadRequest:
+      type: object
+      required: [content_type, size_bytes]
+      properties:
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, image/heic]
+        size_bytes: { type: integer, maximum: 10485760 }
+
+    UploadTicket:
+      type: object
+      description: Signed URL the client PUTs the file to
+      properties:
+        url: { type: string, format: uri }
+        method: { type: string, const: PUT }
+        expires_at: { type: string, format: date-time }
+
+    # ---------- enums
+    Role:
+      type: string
+      enum: [botanist, officer, admin]
+    QrTagStatus:
+      type: string
+      enum: [unassigned, assigned, damaged, retired]
+    ObservationStatus:
+      type: string
+      enum: [draft, queued, synced, returned, approved, rejected]
+    ReviewDecision:
+      type: string
+      enum: [approve, return, reject]
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
+    AlertStatus:
+      type: string
+      enum: [open, acknowledged, resolved]
+    NotificationType:
+      type: string
+      enum: [review_returned, review_approved, review_rejected, comment_reply, alert_assigned, alert_created]
+
+    # ---------- profiles
+    Profile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: [string, 'null'] }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProfileUpdate:
+      type: object
+      properties:
+        full_name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        is_active: { type: boolean }
+
+    # ---------- qr tags
+    QrTag:
+      type: object
+      properties:
+        qr_id: { type: string }
+        status: { $ref: '#/components/schemas/QrTagStatus' }
+        batch_label: { type: [string, 'null'] }
+        specimen_id:
+          type: [string, 'null']
+          format: uuid
+          description: Filled when the tag is attached to a specimen
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+
+    # ---------- species
+    SpeciesInput:
+      type: object
+      required: [scientific_name]
+      properties:
+        scientific_name: { type: string }
+        common_name: { type: string }
+        family: { type: string }
+        genus: { type: string }
+        description: { type: string }
+        conservation_status: { type: string }
+        cultural_significance: { type: string }
+
+    Species:
+      allOf:
+        - $ref: '#/components/schemas/SpeciesInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            is_published: { type: boolean }
+            is_deleted: { type: boolean }
+            created_by: { type: string, format: uuid }
+            updated_by: { type: [string, 'null'], format: uuid }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    PublicSpecies:
+      type: object
+      description: Visitor view — no internal or location fields
+      properties:
+        id: { type: string, format: uuid }
+        scientific_name: { type: string }
+        common_name: { type: [string, 'null'] }
+        family: { type: [string, 'null'] }
+        genus: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        conservation_status: { type: [string, 'null'] }
+        cultural_significance: { type: [string, 'null'] }
+        primary_image_url: { type: [string, 'null'], format: uri }
+        media:
+          type: array
+          items: { $ref: '#/components/schemas/SpeciesMedia' }
+
+    SpeciesMedia:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        species_id: { type: string, format: uuid }
+        url: { type: string, format: uri, description: Public URL from species-media bucket }
+        caption: { type: [string, 'null'] }
+        credit: { type: [string, 'null'] }
+        is_primary: { type: boolean }
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    # ---------- specimens
+    SpecimenCreate:
+      type: object
+      required: [qr_id, lat, lng]
+      properties:
+        qr_id: { type: string }
+        species_id: { type: [string, 'null'], format: uuid }
+        proposed_species_name: { type: string, description: "Botanist's field guess if species unknown" }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        gps_accuracy_m: { type: number, minimum: 0 }
+
+    SpecimenUpdate:
+      type: object
+      properties:
+        species_id: { type: [string, 'null'], format: uuid }
+        proposed_species_name: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        gps_accuracy_m: { type: number }
+        endangered_override: { type: boolean }
+
+    Specimen:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        qr_id: { type: string }
+        species_id: { type: [string, 'null'], format: uuid }
+        proposed_species_name: { type: [string, 'null'] }
+        registered_by: { type: string, format: uuid }
+        lat: { type: number }
+        lng: { type: number }
+        gps_accuracy_m: { type: [number, 'null'] }
+        endangered_override: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # ---------- observations
+    ObservationCreate:
+      type: object
+      required: [specimen_id, observed_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Optional client-generated id (for offline-first creation)
+        specimen_id: { type: string, format: uuid }
+        observed_at: { type: string, format: date-time }
+        height_cm: { type: number, minimum: 0 }
+        morphology: { type: string }
+        notes: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        gps_accuracy_m: { type: number }
+        device_id: { type: string }
+
+    ObservationUpdate:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+          description: The version you last saw; server rejects with 409 if it changed
+        height_cm: { type: number, minimum: 0 }
+        morphology: { type: string }
+        notes: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        gps_accuracy_m: { type: number }
+
+    Observation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        specimen_id: { type: string, format: uuid }
+        recorded_by: { type: string, format: uuid }
+        observed_at: { type: string, format: date-time }
+        height_cm: { type: [number, 'null'] }
+        morphology: { type: [string, 'null'] }
+        notes: { type: [string, 'null'] }
+        lat: { type: [number, 'null'] }
+        lng: { type: [number, 'null'] }
+        gps_accuracy_m: { type: [number, 'null'] }
+        status: { $ref: '#/components/schemas/ObservationStatus' }
+        version: { type: integer }
+        device_id: { type: [string, 'null'] }
+        last_synced_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ObservationPhoto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        observation_id: { type: string, format: uuid }
+        s3_bucket: { type: string, examples: ['observation-photos'] }
+        s3_key: { type: string, examples: ['<observation_id>/<photo_id>.jpg'] }
+        content_type: { type: string }
+        size_bytes: { type: integer }
+        upload_status: { type: string, enum: [pending, uploaded, failed] }
+        view_url:
+          type: [string, 'null']
+          format: uri
+          description: Short-lived signed URL (private bucket)
+        created_at: { type: string, format: date-time }
+
+    # ---------- reviews & comments
+    ReviewCreate:
+      type: object
+      required: [decision, observation_version]
+      properties:
+        decision: { $ref: '#/components/schemas/ReviewDecision' }
+        observation_version: { type: integer, description: Version the reviewer looked at }
+        comment: { type: string, description: Required when decision is return or reject }
+
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        observation_id: { type: string, format: uuid }
+        reviewer_id: { type: string, format: uuid }
+        observation_version: { type: integer }
+        decision: { $ref: '#/components/schemas/ReviewDecision' }
+        comment: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        observation_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+
+    # ---------- sync
+    SyncRequest:
+      type: object
+      required: [device_id, observations]
+      properties:
+        device_id: { type: string }
+        observations:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/ObservationCreate'
+              - type: object
+                properties:
+                  base_version:
+                    type: [integer, 'null']
+                    description: Version the device edited from (null if new)
+
+    SyncResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              result: { type: string, enum: [created, updated, conflict, error] }
+              server_version: { type: integer }
+              error: { $ref: '#/components/schemas/Error' }
+
+    # ---------- sensors
+    SensorNodeInput:
+      type: object
+      properties:
+        specimen_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, offline, maintenance, retired] }
+        thresholds:
+          type: object
+          description: Readings outside these limits create an alert
+          properties:
+            temperature_min: { type: number }
+            temperature_max: { type: number }
+            soil_moisture_min: { type: number }
+            soil_moisture_max: { type: number }
+
+    SensorNode:
+      allOf:
+        - $ref: '#/components/schemas/SensorNodeInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            last_seen: { type: [string, 'null'], format: date-time }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    TelemetryReading:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        ts: { type: string, format: date-time }
+        temperature: { type: [number, 'null'] }
+        soil_moisture: { type: [number, 'null'] }
+
+    # ---------- alerts
+    Alert:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        type: { type: string, examples: ['soil_moisture_low'] }
+        reading: { type: object, additionalProperties: true }
+        severity: { $ref: '#/components/schemas/Severity' }
+        status: { $ref: '#/components/schemas/AlertStatus' }
+        assigned_to: { type: [string, 'null'], format: uuid }
+        acknowledged_by: { type: [string, 'null'], format: uuid }
+        acknowledged_at: { type: [string, 'null'], format: date-time }
+        resolved_by: { type: [string, 'null'], format: uuid }
+        resolved_at: { type: [string, 'null'], format: date-time }
+        outcome: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+
+    AlertNote:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        alert_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    # ---------- notifications
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        title: { type: [string, 'null'] }
+        body: { type: [string, 'null'] }
+        related_table: { type: [string, 'null'], examples: ['observations'] }
+        related_id: { type: [string, 'null'] }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }
