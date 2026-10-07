@@ -449,6 +449,7 @@ paths:
     get:
       tags: [Specimens]
       operationId: getSpecimen
+      summary: Get one specimen
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -526,6 +527,7 @@ paths:
     get:
       tags: [Observations]
       operationId: getObservation
+      summary: Get one observation
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -587,6 +589,7 @@ paths:
     get:
       tags: [Photos]
       operationId: listObservationPhotos
+      summary: List photos attached to an observation
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -647,6 +650,7 @@ paths:
     get:
       tags: [Reviews]
       operationId: listObservationReviews
+      summary: List review decisions for an observation
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -685,6 +689,7 @@ paths:
     get:
       tags: [Comments]
       operationId: listObservationComments
+      summary: List comments on an observation
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -698,6 +703,7 @@ paths:
     post:
       tags: [Comments]
       operationId: addObservationComment
+      summary: Add a comment to an observation
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -739,6 +745,7 @@ paths:
     get:
       tags: [Sensors]
       operationId: listSensorNodes
+      summary: List sensor nodes (officer/admin)
       responses:
         '200':
           description: Nodes
@@ -750,6 +757,7 @@ paths:
     post:
       tags: [Sensors]
       operationId: createSensorNode
+      summary: Register a sensor node (officer/admin)
       requestBody:
         required: true
         content:
@@ -766,6 +774,7 @@ paths:
     get:
       tags: [Sensors]
       operationId: getSensorNode
+      summary: Get one sensor node (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -912,6 +921,7 @@ paths:
     get:
       tags: [Alerts]
       operationId: listAlerts
+      summary: List alerts, filtered by status or severity (officer/admin)
       parameters:
         - name: status
           in: query
@@ -941,6 +951,7 @@ paths:
     get:
       tags: [Alerts]
       operationId: getAlert
+      summary: Get one alert (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -955,6 +966,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: assignAlert
+      summary: Assign an alert to a staff member
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -977,6 +989,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: acknowledgeAlert
+      summary: Acknowledge an alert
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -991,6 +1004,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: resolveAlert
+      summary: Resolve an alert and record the outcome
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1013,6 +1027,7 @@ paths:
     get:
       tags: [Alerts]
       operationId: listAlertNotes
+      summary: List notes on an alert
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -1026,6 +1041,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: addAlertNote
+      summary: Add a note to an alert
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1049,6 +1065,7 @@ paths:
     get:
       tags: [Notifications]
       operationId: listNotifications
+      summary: List the logged-in user's notifications
       parameters:
         - name: unread_only
           in: query
@@ -1072,6 +1089,7 @@ paths:
     post:
       tags: [Notifications]
       operationId: markNotificationRead
+      summary: Mark one notification as read
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -1081,6 +1099,7 @@ paths:
     post:
       tags: [Notifications]
       operationId: markAllNotificationsRead
+      summary: Mark all notifications as read
       responses:
         '204': { description: All marked read }
 
