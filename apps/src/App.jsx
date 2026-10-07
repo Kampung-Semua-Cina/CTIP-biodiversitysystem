@@ -2,7 +2,7 @@
 // Needs one extra package:  npm i qrcode.react
 // Styles are in App.css. Sample data is in data.js. Who-can-do-what is in permissions.js.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 import StoreProvider from "./StoreProvider.jsx";
@@ -12,6 +12,7 @@ import { can } from "./permissions.js";
 
 import { Navbar, Drawer, BottomBar, Footer } from "./components/Chrome.jsx";
 import RoleSwitch from "./components/RoleSwitch.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 import { Home, About, Contact, StaffPage, NoAccess, NotFound } from "./pages/Public.jsx";
 import Login from "./pages/Login.jsx";
@@ -62,6 +63,8 @@ function Site() {
   const [light, setLight] = useState(false);
   const [menuAt, setMenuAt] = useState(null); // the page the menu was opened on, so it closes when you move on
 
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [seg, arg]); // every page opens at the top
+
   const unread = me ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length : 0;
   const menuOpen = menuAt === seg + arg;
   const toggleTheme = () => setLight(!light);
@@ -77,7 +80,11 @@ function Site() {
         onMenu={() => setMenuAt(seg + arg)} onLogout={() => { logout(); window.location.hash = "/"; }} />
       {menuOpen && <Drawer role={role} light={light} onTheme={toggleTheme} onClose={() => setMenuAt(null)} />}
 
-      <main>{page}</main>
+      <main>
+        <ErrorBoundary key={seg + arg + role}>
+          <div className="pagefade">{page}</div>
+        </ErrorBoundary>
+      </main>
 
       <BottomBar role={role} seg={seg} unread={unread} />
       <Footer light={light} onTheme={toggleTheme} />
@@ -87,10 +94,10 @@ function Site() {
   );
 }
 
-export default function App() {
-  return (
-    <StoreProvider>
-      <Site />
-    </StoreProvider>
-  );
-}
+   export default function App() {
+     return (
+       <StoreProvider>
+         <Site />
+       </StoreProvider>
+     );
+   }

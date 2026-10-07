@@ -13,6 +13,7 @@
     "@ctip/hooks": "*",
     "@ctip/types": "*",
     "@ctip/ui": "*",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

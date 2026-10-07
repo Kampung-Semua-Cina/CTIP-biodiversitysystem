@@ -342,6 +342,7 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .site td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .site td.actions { text-align: right; white-space: nowrap; }
 .site td.code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; word-break: break-word; }
+.site pre.code { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; padding: 10px; border-radius: 10px; background: var(--bg2); }
 
 .record { margin-bottom: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); }
 .record > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
@@ -450,3 +451,9 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
   body:has(.printsheet) .printsheet, body:has(.printsheet) .printsheet * { visibility: visible; }
   body:has(.printsheet) .printsheet { position: absolute; left: 0; top: 0; width: 100%; margin: 0; }
 }
+
+/* ---------- smooth page change ---------- */
+html { scroll-behavior: smooth; }
+.pagefade { animation: pagefade .25s ease-out; }
+@keyframes pagefade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .pagefade { animation: none; } }
