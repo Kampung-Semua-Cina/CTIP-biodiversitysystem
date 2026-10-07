@@ -13,7 +13,7 @@ an IoT node that protects endangered specimens.
 |---|---|
 | `apps/mobile` | Botanist Field App (React Native + Expo SDK 57, Android only) |
 | `apps/web` | Officer, Admin and Visitor web interfaces (React + Vite) |
-| `apps/firmware` | ESP32 sensor node (PlatformIO) |
+| `apps/firmware` | ESP32 sensor node (Arduino IDE sketch) |
 | `services/api` | REST API (Node + Express) |
 | `services/anomaly-detection` | Sensor anomaly detection (Python) |
 | `packages/api-contract` | OpenAPI spec, the single source of truth for the API |
@@ -28,7 +28,7 @@ what is out of scope.
 - Node.js 24 and npm
 - Python 3 (for anomaly detection). Use `python`, not `python3`, on Windows
 - Expo Go on an Android device or emulator, matching SDK 57
-- PlatformIO (for firmware only)
+- Arduino IDE with the ESP32 board package (for firmware only)
 
 ## Getting started
 
