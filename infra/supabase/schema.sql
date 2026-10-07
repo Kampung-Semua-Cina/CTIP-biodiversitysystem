@@ -466,7 +466,13 @@ create policy "obs: staff edit"        on public.observations for update to auth
 create policy "photos: read"   on public.observation_photos for select to authenticated
   using (exists (select 1 from public.observations o where o.id = observation_id));
 create policy "photos: insert" on public.observation_photos for insert to authenticated
-  with check (exists (select 1 from public.observations o where o.id = observation_id));
+with check (
+  exists (
+    select 1 from public.observations o 
+    where o.id = observation_id 
+    and (o.recorded_by = auth.uid() or public.my_role() in ('officer', 'admin'))
+  )
+);
 create policy "photos: update own or staff" on public.observation_photos for update to authenticated
   using (exists (
     select 1 from public.observations o
