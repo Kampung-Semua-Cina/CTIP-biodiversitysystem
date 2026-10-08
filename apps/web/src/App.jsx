@@ -1,122 +1,98 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+// web/src/App.jsx
+// Needs one extra package:  npm i qrcode.react
+// Styles are in App.css. Sample data is in data.js. Who-can-do-what is in permissions.js.
 
-function App() {
-  const [count, setCount] = useState(0)
+import { useState } from "react";
+import "./App.css";
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+import StoreProvider from "./StoreProvider.jsx";
+import { useStore } from "./store.js";
+import { useRoute } from "./useRoute.js";
+import { can } from "./permissions.js";
 
-      <div className="ticks"></div>
+import { Navbar, Drawer, BottomBar, Footer } from "./components/Chrome.jsx";
+import RoleSwitch from "./components/RoleSwitch.jsx";
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+import { Home, About, Contact, StaffPage, NoAccess, NotFound } from "./pages/Public.jsx";
+import Login from "./pages/Login.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import MapPage from "./pages/MapPage.jsx";
+import AddPlant from "./pages/AddPlant.jsx";
+import Records from "./pages/Records.jsx";
+import Review from "./pages/Review.jsx";
+import Reports from "./pages/Reports.jsx";
+import Species from "./pages/Species.jsx";
+import Monitoring from "./pages/Monitoring.jsx";
+import { Users, Audit } from "./pages/Admin.jsx";
+import Tags from "./pages/Tags.jsx";
+import Notifications from "./pages/Notifications.jsx";
+import Discussion from "./pages/Discussion.jsx";
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+// Which permission (see permissions.js) a staff page needs.
+const NEEDS = {
+  add: "add", records: "records", review: "review", reports: "reports", species: "species",
+  monitoring: "monitor", users: "users", audit: "audit", tags: "tags", notifications: "bell", discussion: "discuss",
+};
+
+function renderPage(seg, arg) {
+  switch (seg) {
+    case "": return <Home />;
+    case "about": return <About />;
+    case "contact": return <Contact />;
+    case "staff": return <StaffPage />;
+    case "login": return <Login />;
+    case "dashboard": return <Dashboard arg={arg} />;
+    case "map": return <MapPage arg={arg} />;
+    case "add": return <AddPlant />;
+    case "records": return <Records />;
+    case "review": return <Review />;
+    case "reports": return <Reports />;
+    case "species": return <Species />;
+    case "monitoring": return <Monitoring />;
+    case "users": return <Users />;
+    case "audit": return <Audit />;
+    case "tags": return <Tags />;
+    case "notifications": return <Notifications />;
+    case "discussion": return <Discussion arg={arg} />;
+    default: return <NotFound />;
+  }
 }
 
-export default App
+function Site() {
+  const { seg, arg } = useRoute();
+  const { role, me, db, toast, setRole, logout } = useStore();
+  const [light, setLight] = useState(false);
+  const [menuAt, setMenuAt] = useState(null); // the page the menu was opened on, so it closes when you move on
+
+  const unread = me ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length : 0;
+  const menuOpen = menuAt === seg + arg;
+  const toggleTheme = () => setLight(!light);
+
+  // Light/dark colours are switched with data-theme (see App.css).
+  const needs = NEEDS[seg];
+  const page = needs && !can(role, needs) ? <NoAccess /> : renderPage(seg, arg);
+
+  return (
+    <div className="site" data-theme={light ? "light" : "dark"}>
+      <div className="bg" />
+      <Navbar seg={seg} role={role} me={me} unread={unread} light={light} onTheme={toggleTheme}
+        onMenu={() => setMenuAt(seg + arg)} onLogout={() => { logout(); window.location.hash = "/"; }} />
+      {menuOpen && <Drawer role={role} light={light} onTheme={toggleTheme} onClose={() => setMenuAt(null)} />}
+
+      <main>{page}</main>
+
+      <BottomBar role={role} seg={seg} unread={unread} />
+      <Footer light={light} onTheme={toggleTheme} />
+      <RoleSwitch role={role} setRole={setRole} />
+      {toast && <div className="glass toast" role="status">{toast}</div>}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <Site />
+    </StoreProvider>
+  );
+}
