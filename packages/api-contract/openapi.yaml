@@ -24,13 +24,18 @@ info:
       place. The sensor simulator may call `POST /telemetry` directly.
     - **The prototype node** is an ESP32 with a DHT11 (temperature and
       humidity), a YL-69 (soil moisture) and an HC-SR04 (ultrasonic distance).
-      It has no camera and no GPS module, so its location is recorded when the
-      node is registered (`SensorNodeInput.lat` / `lng`). Readings may still
-      carry `lat` / `lng` for nodes that do have GPS.
+      It has no camera (images come from a laptop webcam, below) and no GPS
+      module, so its location is recorded when the node is registered
+      (`SensorNodeInput.lat` / `lng`). Readings may still carry `lat` / `lng`
+      for nodes that do have GPS.
     - **Motion** is detected with the HC-SR04. The node samples distance often
       between readings and sets `motion_detected` when the distance changes by
       more than its threshold, which suggests someone is near or touching the
       plant. `distance_cm` is sent as well, so the server can check it.
+    - **Images come from a laptop webcam**, not the ESP32. A capture script on
+      the laptop takes a photo when the node reports motion and sends the JPEG
+      to `POST /sensor-nodes/{id}/images` over HTTP, because MQTT is unsuited
+      to large payloads.
 
     This is a contract only: endpoints and data shapes are agreed here first,
     then implemented by the backend and consumed by the web/mobile apps.
@@ -859,6 +864,71 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /sensor-nodes/{id}/images:
+    get:
+      tags: [Sensors]
+      operationId: listNodeImages
+      summary: Images captured by one node, newest first (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Images
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SensorImage' }
+                  meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Sensors]
+      operationId: uploadNodeImage
+      summary: Upload one JPEG for a node (e.g. when motion is detected)
+      description: |
+        Sent by the laptop webcam capture script that acts as the node's camera
+        (the ESP32 node has no camera). The request body is the raw JPEG bytes,
+        not JSON or multipart. The API stores the file in the private
+        `sensor-images` bucket.
+      security:
+        - sensorKey: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: captured_at
+          in: query
+          description: When the image was taken. Defaults to the time of upload.
+          schema: { type: string, format: date-time }
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+              maxLength: 2097152
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SensorImage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Image is larger than 2 MB }
+        '415': { description: Body is not image/jpeg }
+
   # ------------------------------------------------------------------ Alerts
   /alerts:
     get:
@@ -1554,6 +1624,25 @@ components:
         motion_detected: { type: [boolean, 'null'] }
         lat: { type: [number, 'null'] }
         lng: { type: [number, 'null'] }
+
+    SensorImage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        alert_id:
+          type: [string, 'null']
+          format: uuid
+          description: Set when the image was captured as evidence for an alert
+        captured_at: { type: string, format: date-time }
+        s3_bucket: { type: string, examples: ['sensor-images'] }
+        s3_key: { type: string, examples: ['<node_id>/<image_id>.jpg'] }
+        size_bytes: { type: integer }
+        view_url:
+          type: [string, 'null']
+          format: uri
+          description: Short-lived signed URL (private bucket)
+        created_at: { type: string, format: date-time }
 
     # ---------- alerts
     Alert:
