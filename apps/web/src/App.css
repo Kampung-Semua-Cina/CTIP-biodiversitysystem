@@ -59,6 +59,9 @@ body { margin: 0; display: block; background: #0e2217; }
 
 .site {
   min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
   font-family: Nunito, system-ui, sans-serif;
   color: var(--ink);
   line-height: 1.5;
@@ -140,11 +143,13 @@ body { margin: 0; display: block; background: #0e2217; }
   background: var(--acc); color: var(--btnink); font-weight: 700; font-size: 0.85rem;
 }
 
-main { max-width: 1180px; margin: 22px auto; padding: 0 18px 100px; min-height: 66vh; }
+/* main grows to fill the space, so the footer always sits at the bottom of the screen on short pages */
+main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; padding: 0 18px 100px; }
 
 .foot {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px;
   padding: 24px 28px; color: var(--mute); border-radius: 0; border-width: 1px 0 0;
+  flex-shrink: 0;
 }
 .footlinks { display: flex; gap: 18px; }
 .foot a:hover { color: var(--ink); }
@@ -396,12 +401,28 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .contour { fill: none; stroke: rgba(255, 255, 255, 0.28); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .north { position: absolute; top: 10px; right: 14px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: rgba(0, 0, 0, 0.4); color: #fff; font-weight: 700; font-size: 0.8rem; }
 .pin { position: absolute; transform: translate(-50%, -100%); padding: 0; border: 0; background: none; color: var(--ok); cursor: pointer; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)); }
-.pin .icon { fill: currentColor; fill-opacity: 0.35; }
-.pin.synced, .pin.queued, .pin.draft { color: var(--warn); }
-.pin.returned, .pin.rejected { color: var(--bad); }
+.pin .icon { fill: currentColor; fill-opacity: 0.6; stroke: #fff; stroke-width: 1.4; }
 .pin.on { transform: translate(-50%, -100%) scale(1.3); z-index: 2; }
-.area { position: absolute; width: 96px; height: 96px; transform: translate(-50%, -50%); border-radius: 50%; border: 1px dashed rgba(239, 138, 115, 0.8); background: radial-gradient(circle, rgba(239, 138, 115, 0.45), transparent 70%); }
+.plantdot { position: absolute; width: 16px; height: 16px; padding: 0; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55); }
+.plantdot:hover { transform: translate(-50%, -50%) scale(1.25); }
+.plantdot.on { transform: translate(-50%, -50%) scale(1.5); z-index: 2; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45); }
+.maplegend { margin-top: 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); }
+.maplegend h3 { margin: 0 0 4px; font-size: 1rem; }
+.maplegend p { margin: 0; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.fam { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg2); color: var(--ink); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.fam.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.fam i, .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.7); vertical-align: -1px; }
+
+/* Discussion board (observation_comments) */
+.topic { display: block; width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.topic:hover { border-color: var(--acc); }
+.topic .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--mute); font-size: 0.85rem; }
+.posts { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
+.post { padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); }
+.post.mine { border-left: 4px solid var(--acc); }
+.post header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; }
+.post p { margin: 0; white-space: pre-wrap; }
 
 /* ---------- 8. Phone layout and print ---------- */
 @media (max-width: 900px) {

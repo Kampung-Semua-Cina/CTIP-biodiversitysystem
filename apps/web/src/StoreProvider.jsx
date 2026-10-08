@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, DEMO_USER, DEFAULT_PW } from "./data.js";
-import { DB_TO_ROLE, ROLE_TO_DB } from "./permissions.js";
+import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { uid, nowIso } from "./utils.js";
 
@@ -9,12 +8,13 @@ import { uid, nowIso } from "./utils.js";
 // one of the actions below, so it is easy to swap each one for a Supabase call.
 export default function StoreProvider({ children }) {
   const [db, setDb] = useState(seed);
+  const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
   const [userId, setUserId] = useState(null);
   const [toast, setToast] = useState("");
   const timer = useRef(null);
 
   const me = db.profiles.find((p) => p.id === userId) || null;
-  const role = me ? DB_TO_ROLE[me.role] : "visitor";
+  const role = me ? me.role : "visitor";
 
   const notify = (message) => {
     clearTimeout(timer.current);
@@ -30,18 +30,31 @@ export default function StoreProvider({ children }) {
     id: uid(), user_id, type, title, body, related_table, related_id, is_read: false, created_at: nowIso(),
   });
 
-  const officerIds = () => db.profiles.filter((p) => p.role === "conservation_officer" && p.is_active).map((p) => p.id);
+  const officerIds = () => db.profiles.filter((p) => p.role === "officer" && p.is_active).map((p) => p.id);
 
   /* ---------- session ---------- */
   const setRole = (key) => setUserId(key === "visitor" ? null : DEMO_USER[key]);
   const logout = () => setUserId(null);
+  // Supabase: supabase.auth.signInWithPassword({ email, password }), then read profiles.is_active.
   const login = (email, password) => {
     const user = db.profiles.find((p) => p.email.toLowerCase() === email.trim().toLowerCase());
-    if (!user || password.length < 4) return { ok: false, message: "Email or password is incorrect" };
+    if (!user || passwords[user.id] !== password) return { ok: false, message: "Email or password is incorrect" };
     if (!user.is_active) return { ok: false, message: "This account is turned off. Ask an admin to turn it on." };
     return { ok: true, id: user.id, first: password === DEFAULT_PW };
   };
   const signIn = (id) => setUserId(id);
+
+  // Supabase: check the current password with signInWithPassword, then supabase.auth.updateUser({ password }).
+  // Only the email and the new password are asked for (no current password).
+  const changePassword = (email, next) => {
+    const user = db.profiles.find((p) => p.email.toLowerCase() === email.trim().toLowerCase());
+    if (!user) return { ok: false, message: "No staff account uses this email" };
+    if (!user.is_active) return { ok: false, message: "This account is turned off. Ask an admin to turn it on." };
+    if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
+    setPasswords((pw) => ({ ...pw, [user.id]: next }));
+    setDb((d) => ({ ...d, audit: [{ ...auditRow("profiles", user.id, "update", null, { password: "changed" }), changed_by: user.id }, ...d.audit] }));
+    return { ok: true, id: user.id };
+  };
 
   /* ---------- plants and photos ---------- */
   const setPlantPhotos = (plantId, photos) => {
@@ -131,8 +144,16 @@ export default function StoreProvider({ children }) {
     }));
   };
 
-  const addComment = (id, body) =>
-    setDb((d) => ({ ...d, comments: [...d.comments, { id: uid(), observation_id: id, author_id: userId, body, created_at: nowIso() }] }));
+  // observation_comments insert. Like the notify_on_comment trigger in the database,
+  // the botanist who recorded the observation is notified when someone else posts.
+  const addComment = (id, body) => {
+    const obs = db.observations.find((o) => o.id === id);
+    const comment = { id: uid(), observation_id: id, author_id: userId, body, created_at: nowIso() };
+    const notes_ = obs && obs.recorded_by !== userId
+      ? [noteRow(obs.recorded_by, "comment_reply", "New comment on your observation", body, "observations", id)]
+      : [];
+    setDb((d) => ({ ...d, comments: [...d.comments, comment], notifications: [...notes_, ...d.notifications] }));
+  };
 
   /* ---------- species ---------- */
   const saveSpecies = (sp) => {
@@ -160,14 +181,15 @@ export default function StoreProvider({ children }) {
   };
 
   /* ---------- users ---------- */
-  const addUser = ({ full_name, email, roleKey }) => {
+  const addUser = ({ full_name, email, role: newRole }) => {
     if (db.profiles.some((p) => p.email.toLowerCase() === email.trim().toLowerCase())) return false;
     const id = uid();
     const now = nowIso();
-    const row = auditRow("profiles", id, "insert", null, { email, role: ROLE_TO_DB[roleKey] });
+    const row = auditRow("profiles", id, "insert", null, { email, role: newRole });
+    setPasswords((pw) => ({ ...pw, [id]: DEFAULT_PW }));
     setDb((d) => ({
       ...d,
-      profiles: [...d.profiles, { id, full_name, email: email.trim(), role: ROLE_TO_DB[roleKey], is_active: true, created_at: now }],
+      profiles: [...d.profiles, { id, full_name, email: email.trim(), role: newRole, is_active: true, created_at: now }],
       audit: [row, ...d.audit],
     }));
     return true;
@@ -222,7 +244,7 @@ export default function StoreProvider({ children }) {
 
   const value = {
     db, me, role, toast, notify,
-    setRole, logout, login, signIn,
+    setRole, logout, login, signIn, changePassword,
     setPlantPhotos, addPlant, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
     saveSpecies, togglePublish, deleteSpecies,

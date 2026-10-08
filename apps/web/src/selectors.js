@@ -50,12 +50,25 @@ export function visiblePlants(db, role) {
     .filter((p) => can(role, "pending") || p.isPublic);
 }
 
-// Visitors never get the exact spot of an endangered plant (about 1 km of blur).
+// Visitors never get any location for an endangered plant (returns null). Staff get the exact spot.
 export function shownCoords(p, role) {
-  if (p.endangered && !can(role, "pending")) {
-    return { lat: +p.lat.toFixed(2), lng: +p.lng.toFixed(2), exact: false };
-  }
-  return { lat: p.lat, lng: p.lng, exact: true };
+  if (p.endangered && !can(role, "pending")) return null;
+  return { lat: p.lat, lng: p.lng };
+}
+
+// One colour per plant family, for the map. Plants with no confirmed species are grey.
+const FAMILY_PALETTE = ["#2f9e44", "#e8590c", "#1c7ed6", "#c2255c", "#f2b705", "#7048e8", "#0ca678", "#a0522d", "#e64980", "#3bc9db"];
+export const UNKNOWN_FAMILY = "Not confirmed";
+export const familyOf = (p) => p.species?.family || UNKNOWN_FAMILY;
+
+// Colours come from every family in the species table, not from the plants this role can see,
+// so a family keeps the same colour for visitors and all staff. Only families in `plants` are returned (for the legend).
+export function familyColors(species, plants) {
+  const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
+  const colorOf = Object.fromEntries(families.map((f, i) => [f, FAMILY_PALETTE[i % FAMILY_PALETTE.length]]));
+  colorOf[UNKNOWN_FAMILY] = "#868e96";
+  const shown = [...new Set(plants.map(familyOf))].sort((a, b) => (a === UNKNOWN_FAMILY) - (b === UNKNOWN_FAMILY) || a.localeCompare(b));
+  return Object.fromEntries(shown.map((f) => [f, colorOf[f] || colorOf[UNKNOWN_FAMILY]]));
 }
 
 export function nextTagIds(tags, count) {

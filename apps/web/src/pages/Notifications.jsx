@@ -14,6 +14,7 @@ export default function Notifications() {
   const open = (n) => {
     markRead(n.id);
     if (n.related_table === "alerts") go("/monitoring");
+    else if (n.type === "comment_reply") go("/discussion/" + n.related_id);
     else if (role === "botanist") go("/records");
     else if (role === "officer") go("/review");
   };

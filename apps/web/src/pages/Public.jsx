@@ -24,9 +24,9 @@ export function Home() {
 
       <section className="grid g3 gap">
         {[
-          ["leaf", "Plant library", "Search plant profiles with photos, names, conservation status and where they grow."],
+          ["leaf", "Plant library", "Search plant profiles with photos, names, families and where they grow."],
           ["qr", "One tag, one plant", "Every tagged plant keeps the same identity, so staff can follow it from visit to visit."],
-          ["shield", "Protected species", "Exact locations of endangered plants stay hidden from the public."],
+          ["shield", "Protected species", "Locations of endangered plants stay hidden from the public."],
         ].map(([icon, title, text]) => (
           <article className="glass pad" key={title}>
             <Icon name={icon} size={26} />

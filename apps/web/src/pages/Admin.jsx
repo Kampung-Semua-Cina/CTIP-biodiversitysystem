@@ -3,7 +3,7 @@ import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip } from "../components/Bits.jsx";
 import { useStore } from "../store.js";
-import { DB_TO_ROLE, ROLE_LABEL, ROLE_TO_DB } from "../permissions.js";
+import { ROLE_LABEL } from "../permissions.js";
 import { DEFAULT_PW } from "../data.js";
 import { fmtDate, fmtDateTime } from "../utils.js";
 
@@ -12,11 +12,11 @@ export function Users() {
   const { db, me, addUser, updateUser, notify } = useStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [roleKey, setRoleKey] = useState("botanist");
+  const [newRole, setNewRole] = useState("botanist");
 
   const add = (e) => {
     e.preventDefault();
-    if (!addUser({ full_name: name.trim(), email, roleKey })) return notify("This email already has an account");
+    if (!addUser({ full_name: name.trim(), email, role: newRole })) return notify("This email already has an account");
     setName("");
     setEmail("");
     notify("Account added");
@@ -32,15 +32,13 @@ export function Users() {
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label>Role
-            <select value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
-              <option value="botanist">Botanist</option>
-              <option value="officer">Conservation officer</option>
-              <option value="admin">Administrator</option>
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
             </select>
           </label>
           <button className="btn" type="submit">Add account</button>
         </div>
-        <p className="mute small">Default password: <b>{DEFAULT_PW}</b>. They are asked to change it the first time they sign in.</p>
+        <p className="mute small">Default password: <b>{DEFAULT_PW}</b>. Give it to them yourself; they are asked to change it the first time they sign in, and can change it later from the login page.</p>
       </form>
 
       <div className="tablewrap">
@@ -52,8 +50,8 @@ export function Users() {
                 <td><b>{u.full_name}</b>{u.id === me.id && <small className="mute"> (you)</small>}</td>
                 <td>{u.email}</td>
                 <td>
-                  <select value={DB_TO_ROLE[u.role]} disabled={u.id === me.id} onChange={(e) => updateUser(u.id, { role: ROLE_TO_DB[e.target.value] })} aria-label={`Role for ${u.full_name}`}>
-                    {Object.entries(ROLE_LABEL).map(([dbRole, text]) => <option key={dbRole} value={DB_TO_ROLE[dbRole]}>{text}</option>)}
+                  <select value={u.role} disabled={u.id === me.id} onChange={(e) => updateUser(u.id, { role: e.target.value })} aria-label={`Role for ${u.full_name}`}>
+                    {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
                   </select>
                 </td>
                 <td>

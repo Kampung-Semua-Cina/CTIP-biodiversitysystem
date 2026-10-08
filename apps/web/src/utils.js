@@ -36,7 +36,7 @@ export function download(name, text, type = "text/csv") {
   URL.revokeObjectURL(url);
 }
 
-// Pretty label for values like "conservation_officer" or "least concern".
+// Pretty label for values like "observation_submitted" or "least concern".
 export const label = (s = "") => {
   const t = String(s).replaceAll("_", " ");
   return t.charAt(0).toUpperCase() + t.slice(1);

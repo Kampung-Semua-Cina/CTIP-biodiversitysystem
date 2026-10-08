@@ -8,7 +8,7 @@ import PhotoEditor from "../components/PhotoEditor.jsx";
 import { Chip, Empty } from "../components/Bits.jsx";
 import { useStore } from "../store.js";
 import { can } from "../permissions.js";
-import { shownCoords, tagUrl, visiblePlants } from "../selectors.js";
+import { familyOf, shownCoords, tagUrl, visiblePlants } from "../selectors.js";
 import { CONSERVATION } from "../data.js";
 import { go } from "../useRoute.js";
 
@@ -21,14 +21,17 @@ export default function Dashboard({ arg }) {
   const [filter, setFilter] = useState("all");
   const [editing, setEditing] = useState(false);
 
+  const staff = can(role, "pending");
   const plants = visiblePlants(db, role);
+  // Staff filter by conservation status. Visitors never see conservation status, so they filter by family.
+  const options = staff ? CONSERVATION : [...new Set(plants.map(familyOf))].sort();
+  const active = options.includes(filter) ? filter : "all"; // the filter list changes when the role changes
   const shown = plants.filter(
     (p) =>
-      (filter === "all" || p.conservation === filter) &&
+      (active === "all" || (staff ? p.conservation : familyOf(p)) === active) &&
       `${p.name} ${p.scientific} ${p.qr_id}`.toLowerCase().includes(q.toLowerCase()),
   );
   const sel = plants.find((p) => p.qr_id === arg) || shown[0] || plants[0];
-  const staff = can(role, "pending");
 
   return (
     <Shell seg="dashboard">
@@ -67,9 +70,9 @@ export default function Dashboard({ arg }) {
                 <Icon name="search" size={18} />
                 <input placeholder="Search plants" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search plants" />
               </label>
-              <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter by conservation status">
-                <option value="all">All status</option>
-                {CONSERVATION.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
+              <select value={active} onChange={(e) => setFilter(e.target.value)} aria-label={staff ? "Filter by conservation status" : "Filter by family"}>
+                <option value="all">{staff ? "All status" : "All families"}</option>
+                {options.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
               </select>
             </div>
             <div className="list">
@@ -104,20 +107,24 @@ export default function Dashboard({ arg }) {
   );
 }
 
+// Conservation status is staff-only. Visitors get no location at all for endangered plants.
 function PlantDetails({ plant, role }) {
   const c = shownCoords(plant, role);
+  const staff = can(role, "pending");
   return (
     <dl>
       <dt>Family</dt><dd>{plant.species ? `${plant.species.family} · ${plant.species.genus}` : "Not confirmed yet"}</dd>
-      <dt>Conservation</dt><dd>{plant.species ? <Chip value={plant.conservation} /> : "-"}</dd>
+      {staff && <><dt>Conservation</dt><dd>{plant.species ? <Chip value={plant.conservation} /> : "-"}</dd></>}
       <dt>Recorded location</dt>
       <dd>
-        <a className="maplink" href={"#/map/" + plant.qr_id}><Icon name="pin" size={15} /> map link</a>
-        <small className="mute block">
-          {c.exact
-            ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} (±${plant.gps_accuracy_m} m)`
-            : "Approximate area only. Exact location is hidden for this protected plant."}
-        </small>
+        {c ? (
+          <>
+            <a className="maplink" href={"#/map/" + plant.qr_id}><Icon name="pin" size={15} /> map link</a>
+            <small className="mute block">{`${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} (±${plant.gps_accuracy_m} m)`}</small>
+          </>
+        ) : (
+          <small className="mute">Hidden to protect this plant.</small>
+        )}
       </dd>
       <dt>ID</dt><dd>{plant.qr_id}</dd>
       <dt>Height</dt><dd>{height(plant.height_cm)}</dd>

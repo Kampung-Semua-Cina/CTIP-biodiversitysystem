@@ -10,7 +10,12 @@ const IMG = [
   "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800&q=70",
 ];
 
+// Password given to every new account. Admins see it on the Users page; the login page does not show it.
 export const DEFAULT_PW = "Niah@1234";
+
+// Sign-in passwords, keyed by profiles.id. In Supabase these live in Supabase Auth
+// (auth.users), never in the profiles table, so they are kept apart here too.
+export const seedPasswords = { u1: DEFAULT_PW, u2: DEFAULT_PW, u3: DEFAULT_PW, u4: DEFAULT_PW, u5: DEFAULT_PW };
 
 // Demo sign-in used by the "View as" switch: role key -> profiles.id
 export const DEMO_USER = { botanist: "u2", officer: "u4", admin: "u1" };
@@ -31,7 +36,7 @@ export const seed = {
     { id: "u1", full_name: "Ahmad Faizal", email: "admin@sfc.my", role: "admin", is_active: true, created_at: "2026-08-01T02:00:00Z" },
     { id: "u2", full_name: "Siti Aminah", email: "botanist@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T02:00:00Z" },
     { id: "u3", full_name: "Jonathan Rajang", email: "jonathan@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T03:00:00Z" },
-    { id: "u4", full_name: "Dayang Norsyafiqah", email: "officer@sfc.my", role: "conservation_officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
+    { id: "u4", full_name: "Dayang Norsyafiqah", email: "officer@sfc.my", role: "officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
     { id: "u5", full_name: "Lim Chee Wei", email: "cheewei@sfc.my", role: "botanist", is_active: false, created_at: "2026-08-10T02:00:00Z" },
   ],
 
@@ -90,6 +95,9 @@ export const seed = {
   comments: [
     { id: "c1", observation_id: "o5", author_id: "u4", body: "Please add a photo of the leaf underside.", created_at: "2026-10-04T02:00:00Z" },
     { id: "c2", observation_id: "o5", author_id: "u2", body: "Will add it on my next visit.", created_at: "2026-10-04T05:00:00Z" },
+    { id: "c3", observation_id: "o6", author_id: "u2", body: "Could someone help confirm this palm? I think it is a Calamus but the leaf sheaths look unusual.", created_at: "2026-10-06T10:30:00Z" },
+    { id: "c4", observation_id: "o6", author_id: "u4", body: "Can you count the spines per whorl on your next visit? That should narrow it down.", created_at: "2026-10-06T13:15:00Z" },
+    { id: "c5", observation_id: "o6", author_id: "u1", body: "Node 2 is close by if you want to check the trail there as well.", created_at: "2026-10-07T02:00:00Z" },
   ],
 
   nodes: [

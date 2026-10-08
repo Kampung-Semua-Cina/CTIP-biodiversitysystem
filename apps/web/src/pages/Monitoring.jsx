@@ -71,7 +71,7 @@ function AlertCard({ alert }) {
   const [note, setNote] = useState("");
   const node = db.nodes.find((n) => n.id === alert.node_id);
   const notes = db.alertNotes.filter((n) => n.alert_id === alert.id);
-  const officers = db.profiles.filter((p) => p.role === "conservation_officer" && p.is_active);
+  const officers = db.profiles.filter((p) => p.role === "officer" && p.is_active);
 
   return (
     <article className={"record sev-" + alert.severity}>
