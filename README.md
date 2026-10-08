@@ -17,7 +17,8 @@ an IoT node that protects endangered specimens.
 | `services/api` | REST API (Node + Express) |
 | `services/anomaly-detection` | Sensor anomaly detection (Python) |
 | `packages/api-contract` | OpenAPI spec, the single source of truth for the API |
-| `infra` | Mosquitto broker config, Supabase migrations and RLS policies |
+| `supabase` | Supabase CLI project: `config.toml`, SQL migrations (tables, RLS policies, storage) |
+| `infra` | Mosquitto broker config |
 | `docs` | Architecture diagrams and testing evidence |
 
 See [CLAUDE.md](CLAUDE.md) for the full project context, decisions already made, and
