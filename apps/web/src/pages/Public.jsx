@@ -1,8 +1,12 @@
+// web/src/pages/Public.jsx
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import { useStore } from "../store.js";
 import { visiblePlants } from "../selectors.js";
 import { SITE, PARK } from "../site.js";
+
+// imported shared pages
+import { getAboutContent } from "../../../shared/aboutContent.js";
 
 export function Home() {
   const { db } = useStore();
@@ -57,19 +61,15 @@ export function Home() {
 }
 
 export function About() {
+  const content = getAboutContent(SITE, PARK);
+  
   return (
-    <section className="glass pad prose">
-      <h2>About {SITE}</h2>
-      <p>
-        {SITE} is a digital plant knowledge system for {PARK}, built with Sarawak Forestry Corporation. Botanists
-        record each plant once with a permanent QR tag. Conservation officers check the records, and approved records
-        are shared here for researchers, park guides and visitors.
-      </p>
-      <p>
-        Field records work without a signal and sync when the phone is back online. Sensors near selected plants send
-        readings to a monitoring page, so staff can respond quickly if something disturbs a protected plant.
-      </p>
-    </section>
+     < section className="glass pad prose">
+       < h2>{content.title} </ h2>
+      {content.paragraphs.map((text, index) => (
+         < p key={index}>{text} </ p>
+      ))}
+     </ section>
   );
 }
 
