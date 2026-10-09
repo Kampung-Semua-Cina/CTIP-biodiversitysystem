@@ -46,6 +46,7 @@ npm run dev
 cd apps/mobile
 npm install
 npm start
+(Or to run it in tunnel: npx expo start --tunnel --clear)
 
 # API
 cd services/api
