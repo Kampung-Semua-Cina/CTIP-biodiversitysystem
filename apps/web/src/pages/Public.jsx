@@ -1,51 +1,60 @@
-// web/src/pages/Public.jsx
+// apps/web/src/pages/Public.jsx
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import { useStore } from "../store.js";
 import { visiblePlants } from "../selectors.js";
 import { SITE, PARK } from "../site.js";
 
-// imported shared pages
-import { getAboutContent } from "../../../shared/aboutContent.js";
+// Single import for all shared copy
+import {
+  getAboutContent,
+  getHomeContent,
+  getContactContent,
+  getStaffPageContent,
+  getAccessContent,
+} from "../../../shared/publicContent.js";
 
 export function Home() {
   const { db } = useStore();
   const latest = visiblePlants(db, "visitor").slice(0, 3);
+  const content = getHomeContent(PARK);
+
   return (
     <>
       <section className="glass hero">
         <img className="hero-logo" src="/logo.svg" alt="" />
-        <h1>Know every plant in Niah</h1>
-        <p>
-          Browse verified plant records from {PARK}, see where each plant grows, and scan the tag on a plant in the
-          forest to open its profile.
-        </p>
+        <h1>{content.heroTitle}</h1>
+        <p>{content.heroSubtitle}</p>
         <div className="row center">
-          <a className="btn" href="#/dashboard">Browse plants</a>
-          <a className="btn ghost" href="#/map">Open map</a>
+          <a className="btn" href="#/dashboard">
+            Browse plants
+          </a>
+          <a className="btn ghost" href="#/map">
+            Open map
+          </a>
         </div>
       </section>
 
       <section className="grid g3 gap">
-        {[
-          ["leaf", "Plant library", "Search plant profiles with photos, names, families and where they grow."],
-          ["qr", "One tag, one plant", "Every tagged plant keeps the same identity, so staff can follow it from visit to visit."],
-          ["shield", "Protected species", "Locations of endangered plants stay hidden from the public."],
-        ].map(([icon, title, text]) => (
-          <article className="glass pad" key={title}>
-            <Icon name={icon} size={26} />
-            <h3>{title}</h3>
-            <p className="mute">{text}</p>
+        {content.features.map((f) => (
+          <article className="glass pad" key={f.title}>
+            <Icon name={f.icon} size={26} />
+            <h3>{f.title}</h3>
+            <p className="mute">{f.text}</p>
           </article>
         ))}
       </section>
 
       {latest.length > 0 && (
         <section className="glass pad gap-top">
-          <h2>Recently published</h2>
+          <h2>{content.recentSectionTitle}</h2>
           <div className="grid g3">
             {latest.map((p) => (
-              <a className="plantcard" key={p.id} href={"#/dashboard/" + p.qr_id}>
+              <a
+                className="plantcard"
+                key={p.id}
+                href={"#/dashboard/" + p.qr_id}
+              >
                 <Img src={p.photos[0]?.url} alt="" />
                 <div>
                   <b>{p.name}</b>
@@ -62,72 +71,86 @@ export function Home() {
 
 export function About() {
   const content = getAboutContent(SITE, PARK);
-  
   return (
-     < section className="glass pad prose">
-       < h2>{content.title} </ h2>
-      {content.paragraphs.map((text, index) => (
-         < p key={index}>{text} </ p>
+    <section className="glass pad prose">
+      <h2>{content.title}</h2>
+      {content.paragraphs.map((text, idx) => (
+        <p key={idx}>{text}</p>
       ))}
-     </ section>
+    </section>
   );
 }
 
 export function Contact() {
+  const content = getContactContent();
   return (
     <section className="glass pad prose">
-      <h2>Contact</h2>
-      <p>Email: info@daunsense.example</p>
-      <p>Sarawak Forestry Corporation, Kuching, Sarawak.</p>
+      <h2>{content.title}</h2>
+      <p>Email: {content.email}</p>
+      <p>
+        {content.organization}, {content.address}
+      </p>
     </section>
   );
 }
 
 export function StaffPage() {
   const { role, me } = useStore();
+  const content = getStaffPageContent(PARK);
+
   return (
     <section className="glass pad prose narrow">
-      <h2>Staff area</h2>
+      <h2>{content.title}</h2>
       {me ? (
         <>
           <p>You are signed in as {me.full_name}.</p>
-          <a className="btn" href="#/dashboard">Go to dashboard</a>
+          <a className="btn" href="#/dashboard">
+            Go to dashboard
+          </a>
         </>
       ) : (
         <>
-          <p>
-            This area is for Sarawak Forestry Corporation botanists, conservation officers and admins who record and
-            review plants in {PARK}. Accounts are created by an admin.
-          </p>
-          <a className="btn" href="#/login">Go to login</a>
+          <p>{content.description}</p>
+          <a className="btn" href="#/login">
+            Go to login
+          </a>
         </>
       )}
-      {role === "visitor" && <p className="mute">Just looking around? The plant library and map are open to everyone.</p>}
+      {role === "visitor" && <p className="mute">{content.visitorHint}</p>}
     </section>
   );
 }
 
 export function NoAccess() {
   const { role } = useStore();
+  const content = getAccessContent();
+
   return (
     <section className="glass pad prose narrow">
-      <h2>You can't open this page</h2>
-      <p>
-        {role === "visitor"
-          ? "This page is for staff. Sign in to continue."
-          : "Your role does not include this page. Use the menu to see what you can open."}
-      </p>
-      {role === "visitor" ? <a className="btn" href="#/login">Go to login</a> : <a className="btn" href="#/dashboard">Back to dashboard</a>}
+      <h2>{content.noAccessTitle}</h2>
+      <p>{role === "visitor" ? content.visitorText : content.staffText}</p>
+      {role === "visitor" ? (
+        <a className="btn" href="#/login">
+          Go to login
+        </a>
+      ) : (
+        <a className="btn" href="#/dashboard">
+          Back to dashboard
+        </a>
+      )}
     </section>
   );
 }
 
 export function NotFound() {
+  const content = getAccessContent();
   return (
     <section className="glass pad prose narrow">
-      <h2>Page not found</h2>
-      <p>This page does not exist. Check the link, or start from the home page.</p>
-      <a className="btn" href="#/">Home</a>
+      <h2>{content.notFoundTitle}</h2>
+      <p>{content.notFoundText}</p>
+      <a className="btn" href="#/">
+        Home
+      </a>
     </section>
   );
 }
