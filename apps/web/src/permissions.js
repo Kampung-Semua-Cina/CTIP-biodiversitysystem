@@ -1,3 +1,4 @@
+// web/src/permissions.js
 // Who can do what. The role keys are the exact profiles.role values in the
 // database (botanist, officer, admin), plus "visitor" for people who are not signed in.
 

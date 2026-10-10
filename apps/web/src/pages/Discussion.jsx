@@ -1,3 +1,4 @@
+// web/src/pages/Discussion.jsx
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";

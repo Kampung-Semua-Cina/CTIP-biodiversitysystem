@@ -1,3 +1,4 @@
+// web/src/pages/AddPlant.jsx
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";

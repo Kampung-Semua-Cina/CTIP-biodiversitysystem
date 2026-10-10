@@ -1,3 +1,4 @@
+// web/src/pages/MapPage.jsx
 import { useState } from "react";
 import Img from "../components/Img.jsx";
 import { useStore } from "../store.js";

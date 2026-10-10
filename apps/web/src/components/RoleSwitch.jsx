@@ -1,3 +1,4 @@
+// web/src/components/RoleSwitch.jsx
 import Icon from "./Icon.jsx";
 import { ROLES } from "../permissions.js";
 

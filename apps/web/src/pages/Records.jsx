@@ -1,3 +1,4 @@
+// web/src/pages/Records.jsx
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import { Chip, Empty } from "../components/Bits.jsx";

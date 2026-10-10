@@ -1,3 +1,4 @@
+// web/src/components/Chrome.jsx
 import Icon from "./Icon.jsx";
 import { SITE, PARK, NAV } from "../site.js";
 import { bottomLinks, staffLinks } from "../permissions.js";

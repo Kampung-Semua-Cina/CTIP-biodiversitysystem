@@ -1,3 +1,4 @@
+// web/src/utils.js
 // Small helpers used by several pages. Only call uid() and nowIso()
 // from event handlers, never while rendering.
 

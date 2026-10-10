@@ -1,3 +1,4 @@
+// web/src/data.js
 // Sample data shaped like the database tables (see database_schema_documentation.pdf).
 // Every key below is a table name or a column name from the schema, so when the
 // Supabase tables are connected each list can be replaced by a query.

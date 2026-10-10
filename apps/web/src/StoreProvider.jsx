@@ -1,3 +1,4 @@
+// web/src/StoreProvider.jsx
 import { useRef, useState } from "react";
 import { StoreContext } from "./store.js";
 import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";

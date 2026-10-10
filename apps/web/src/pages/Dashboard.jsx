@@ -1,3 +1,4 @@
+// web/src/pages/Dashboard.jsx
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Shell from "../components/Shell.jsx";

@@ -1,3 +1,4 @@
+// web/src/components/ErrorBoundary.jsx
 import { Component } from "react";
 
 // If one page crashes, show the reason on screen instead of a blank white page.

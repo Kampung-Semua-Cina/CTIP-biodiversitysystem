@@ -1,3 +1,4 @@
+// web/src/selectors.js
 // Read-only helpers that join the tables together for the pages.
 
 import { can } from "./permissions.js";

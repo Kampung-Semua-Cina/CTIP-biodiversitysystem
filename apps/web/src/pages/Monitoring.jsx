@@ -1,3 +1,4 @@
+// web/src/pages/Monitoring.jsx
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import { Chip, Empty, Sparkline } from "../components/Bits.jsx";
