@@ -1,4 +1,4 @@
-// web/src/components/Shell.jsx
+// apps/web/src/components/Shell.jsx
 import Icon from "./Icon.jsx";
 import { staffLinks } from "../permissions.js";
 import { useStore } from "../store.js";

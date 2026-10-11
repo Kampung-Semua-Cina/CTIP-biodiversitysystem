@@ -1,200 +1,253 @@
 // apps/mobile/pages/Public.js
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 
 import {
-    getAboutContent,
-    getHomeContent,
-    getContactContent,
-    getStaffPageContent,
-    getAccessContent,
+  getAboutContent,
+  getHomeContent,
+  getContactContent,
+  getStaffPageContent,
+  getAccessContent,
 } from "../../shared/publicContent.js";
+import { useStore } from "../../shared/store.js";
+import { visiblePlants } from "../../shared/selectors.js";
+import { COLORS, commonStyles } from "../components/Theme.js";
 
+export function MobileHome({ park = "Niah National Park", onNavigate }) {
+  const store = useStore();
+  const db = store?.db;
+  const content = getHomeContent(park);
+  const latest = db ? visiblePlants(db, "visitor").slice(0, 3) : [];
 
-export function MobileHome({ park = "Niah", onNavigate }) {
-    const content = getHomeContent(park);
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.heroTitle}</Text>
-            <Text style={styles.body}>{content.heroSubtitle}</Text>
+  return (
+    <View>
+      {/* Hero section */}
+      <View style={styles.heroCard}>
+        <Text style={styles.heroBadge}>🌿 DaunSense</Text>
+        <Text style={styles.heroTitle}>{content.heroTitle}</Text>
+        <Text style={styles.heroSubtitle}>{content.heroSubtitle}</Text>
 
-            <View style={styles.btnRow}>
-                <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
-                    <Text style={styles.btnPrimaryText}>Browse plants</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.btnGhost} onPress={() => onNavigate?.('map')}>
-                    <Text style={styles.btnGhostText}>Open map</Text>
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.divider} />
-
-            {content.features.map((item, idx) => (
-                <View key={idx} style={styles.featureItem}>
-                    <Text style={styles.featureTitle}>{item.title}</Text>
-                    <Text style={styles.mute}>{item.text}</Text>
-                </View>
-            ))}
-
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('about')}>
-                <Text style={styles.btnPrimaryText}>Test about</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('contact')}>
-                <Text style={styles.btnPrimaryText}>Test contact</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('staff')}>
-                <Text style={styles.btnPrimaryText}>Test staff</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('access')}>
-                <Text style={styles.btnPrimaryText}>Test access</Text>
-            </TouchableOpacity>
+        <View style={styles.btnRow}>
+          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
+            <Text style={commonStyles.btnPrimaryText}>Browse plants</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={commonStyles.btnGhost} onPress={() => onNavigate?.('map')}>
+            <Text style={commonStyles.btnGhostText}>Open map</Text>
+          </TouchableOpacity>
         </View>
-    );
+      </View>
+
+      {/* Features */}
+      <View style={commonStyles.card}>
+        <Text style={commonStyles.subHeading}>System Features</Text>
+        {content.features.map((item, idx) => (
+          <View key={idx} style={styles.featureItem}>
+            <Text style={styles.featureTitle}>• {item.title}</Text>
+            <Text style={commonStyles.mute}>{item.text}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Recently Published */}
+      {latest.length > 0 && (
+        <View style={commonStyles.card}>
+          <Text style={commonStyles.subHeading}>{content.recentSectionTitle || "Recently published"}</Text>
+          <View style={styles.recentList}>
+            {latest.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={styles.recentCard}
+                onPress={() => onNavigate?.('dashboard', p.qr_id)}
+              >
+                <Image
+                  source={{ uri: p.photos[0]?.url }}
+                  style={styles.recentImg}
+                />
+                <View style={styles.recentInfo}>
+                  <Text style={styles.recentName}>{p.name}</Text>
+                  <Text style={styles.recentSci}>{p.scientific || p.qr_id}</Text>
+                </View>
+                <Text style={styles.arrowIcon}>›</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
 }
 
-export function MobileAbout({ site = "DaunSense", park = "Niah" }) {
-    const content = getAboutContent(site, park);
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.title}</Text>
-            {content.paragraphs.map((para, i) => (
-                <Text key={i} style={styles.body}>{para}</Text>
-            ))}
-        </View>
-    );
+export function MobileAbout({ site = "Daun Sense", park = "Niah National Park" }) {
+  const content = getAboutContent(site, park);
+  return (
+    <View style={commonStyles.card}>
+      <Text style={commonStyles.heading}>{content.title}</Text>
+      {content.paragraphs.map((para, i) => (
+        <Text key={i} style={[commonStyles.body, { marginBottom: 14 }]}>
+          {para}
+        </Text>
+      ))}
+    </View>
+  );
 }
 
 export function MobileContact() {
-    const content = getContactContent();
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.title}</Text>
-            <Text style={styles.body}>Email: {content.email}</Text>
-            <Text style={styles.body}>{content.organization}, {content.address}</Text>
-        </View>
-    );
+  const content = getContactContent();
+  return (
+    <View style={commonStyles.card}>
+      <Text style={commonStyles.heading}>{content.title}</Text>
+      <Text style={[commonStyles.body, { fontWeight: '600' }]}>Email: {content.email}</Text>
+      <Text style={commonStyles.body}>{content.organization}</Text>
+      <Text style={commonStyles.mute}>{content.address}</Text>
+    </View>
+  );
 }
 
-export function MobileStaff({ park = "Niah", me, role = "visitor", onNavigate }) {
-    const content = getStaffPageContent(park);
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.title}</Text>
-            {me ? (
-                <>
-                    <Text style={styles.body}>You are signed in as {me.full_name}.</Text>
-                    <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
-                        <Text style={styles.btnPrimaryText}>Go to dashboard</Text>
-                    </TouchableOpacity>
-                </>
-            ) : (
-                <>
-                    <Text style={styles.body}>{content.description}</Text>
-                    <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('login')}>
-                        <Text style={styles.btnPrimaryText}>Go to login</Text>
-                    </TouchableOpacity>
-                </>
-            )}
-            {role === 'visitor' && <Text style={[styles.mute, { marginTop: 12 }]}>{content.visitorHint}</Text>}
+export function MobileStaff({ park = "Niah National Park", onNavigate }) {
+  const store = useStore();
+  const me = store?.me;
+  const role = store?.role || "visitor";
+  const content = getStaffPageContent(park);
+
+  return (
+    <View style={commonStyles.card}>
+      <Text style={commonStyles.heading}>{content.title}</Text>
+      {me ? (
+        <View style={{ gap: 12 }}>
+          <Text style={commonStyles.body}>
+            You are signed in as <Text style={{ fontWeight: '700', color: COLORS.primary }}>{me.full_name}</Text> ({me.role}).
+          </Text>
+          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
+            <Text style={commonStyles.btnPrimaryText}>Go to dashboard</Text>
+          </TouchableOpacity>
         </View>
-    );
+      ) : (
+        <View style={{ gap: 12 }}>
+          <Text style={commonStyles.body}>{content.description}</Text>
+          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('login')}>
+            <Text style={commonStyles.btnPrimaryText}>Go to login</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {role === 'visitor' && (
+        <Text style={[commonStyles.mute, { marginTop: 14 }]}>{content.visitorHint}</Text>
+      )}
+    </View>
+  );
 }
 
-export function MobileNoAccess({ role = "visitor", onNavigate }) {
-    const content = getAccessContent();
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.noAccessTitle}</Text>
-            <Text style={styles.body}>{role === 'visitor' ? content.visitorText : content.staffText}</Text>
-            <TouchableOpacity
-                style={styles.btnPrimary}
-                onPress={() => onNavigate?.(role === 'visitor' ? 'login' : 'dashboard')}
-            >
-                <Text style={styles.btnPrimaryText}>{role === 'visitor' ? 'Go to login' : 'Back to dashboard'}</Text>
-            </TouchableOpacity>
-        </View>
-    );
+export function MobileNoAccess({ onNavigate }) {
+  const store = useStore();
+  const role = store?.role || "visitor";
+  const content = getAccessContent();
+
+  return (
+    <View style={commonStyles.card}>
+      <Text style={[commonStyles.heading, { color: COLORS.danger }]}>{content.noAccessTitle}</Text>
+      <Text style={[commonStyles.body, { marginBottom: 14 }]}>
+        {role === 'visitor' ? content.visitorText : content.staffText}
+      </Text>
+      <TouchableOpacity
+        style={commonStyles.btnPrimary}
+        onPress={() => onNavigate?.(role === 'visitor' ? 'login' : 'dashboard')}
+      >
+        <Text style={commonStyles.btnPrimaryText}>
+          {role === 'visitor' ? 'Go to login' : 'Back to dashboard'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 export function MobileNotFound({ onNavigate }) {
-    const content = getAccessContent();
-    return (
-        <View style={styles.card}>
-            <Text style={styles.heading}>{content.notFoundTitle}</Text>
-            <Text style={styles.body}>{content.notFoundText}</Text>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => onNavigate?.('home')}>
-                <Text style={styles.btnPrimaryText}>Home</Text>
-            </TouchableOpacity>
-        </View>
-    );
+  const content = getAccessContent();
+  return (
+    <View style={commonStyles.card}>
+      <Text style={commonStyles.heading}>{content.notFoundTitle}</Text>
+      <Text style={[commonStyles.body, { marginBottom: 14 }]}>{content.notFoundText}</Text>
+      <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('home')}>
+        <Text style={commonStyles.btnPrimaryText}>Back to home</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    card: {
-        backgroundColor: '#16301e',
-        borderRadius: 16,
-        padding: 18,
-        marginVertical: 8,
-    },
-    heading: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: '#eef4e4',
-        marginBottom: 10,
-    },
-    body: {
-        fontSize: 15,
-        lineHeight: 22,
-        color: '#eef4e4',
-        marginBottom: 10,
-    },
-    mute: {
-        fontSize: 14,
-        color: '#b9cdb0',
-        lineHeight: 20,
-    },
-    btnRow: {
-        flexDirection: 'row',
-        gap: 10,
-        marginVertical: 12,
-    },
-    btnPrimary: {
-        backgroundColor: '#9bcf6a',
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-    },
-    btnPrimaryText: {
-        color: '#14301d',
-        fontWeight: '700',
-        fontSize: 15,
-    },
-    btnGhost: {
-        borderWidth: 1,
-        borderColor: 'rgba(190, 220, 170, 0.26)',
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-    },
-    btnGhostText: {
-        color: '#eef4e4',
-        fontWeight: '600',
-        fontSize: 15,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: 'rgba(190, 220, 170, 0.26)',
-        marginVertical: 16,
-    },
-    featureItem: {
-        marginBottom: 14,
-    },
-    featureTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#eef4e4',
-        marginBottom: 2,
-    },
+  heroCard: {
+    backgroundColor: '#132c1c',
+    borderRadius: 18,
+    padding: 20,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(155, 207, 106, 0.28)',
+  },
+  heroBadge: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 8,
+    lineHeight: 30,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: COLORS.textMuted,
+    marginBottom: 16,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  featureItem: {
+    marginVertical: 8,
+  },
+  featureTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  recentList: {
+    gap: 8,
+    marginTop: 6,
+  },
+  recentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f2416',
+    borderRadius: 12,
+    padding: 10,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  recentImg: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+  },
+  recentInfo: {
+    flex: 1,
+  },
+  recentName: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recentSci: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  arrowIcon: {
+    color: COLORS.primary,
+    fontSize: 20,
+    fontWeight: '700',
+  },
 });

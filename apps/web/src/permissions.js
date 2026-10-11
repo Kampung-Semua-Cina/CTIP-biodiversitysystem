@@ -1,4 +1,4 @@
-// web/src/permissions.js
+// apps/web/src/permissions.js
 // Who can do what. The role keys are the exact profiles.role values in the
 // database (botanist, officer, admin), plus "visitor" for people who are not signed in.
 
@@ -52,14 +52,11 @@ const STAFF_LINKS = {
 
 export const staffLinks = (role) => STAFF_LINKS[role] || [];
 
-// Bottom bar on phones (5 icons at most). Red items are staff-only.
-export const bottomLinks = (role) => {
-  const base = [
-    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
-    { to: "/map", label: "Map", icon: "map" },
-  ];
-  if (role === "botanist") return [base[0], { to: "/add", label: "Scan", icon: "camera", staff: true }, base[1], { to: "/notifications", label: "Alerts", icon: "bell", staff: true }];
-  if (role === "officer") return [base[0], { to: "/review", label: "Review", icon: "clipboard", staff: true }, base[1], { to: "/notifications", label: "Alerts", icon: "bell", staff: true }];
-  if (role === "admin") return [base[0], { to: "/monitoring", label: "Monitor", icon: "activity", staff: true }, base[1], { to: "/notifications", label: "Alerts", icon: "bell", staff: true }];
-  return [{ to: "/", label: "Home", icon: "home" }, ...base];
-};
+// Bottom bar on phones: always the same 4 buttons no matter the screen or access.
+export const bottomLinks = () => [
+  { to: "/", label: "Home", icon: "home" },
+  { to: "/add", label: "Scan", icon: "camera" },
+  { to: "/dashboard", label: "Plants", icon: "leaf" },
+  { to: "/map", label: "Map", icon: "map" },
+];
+

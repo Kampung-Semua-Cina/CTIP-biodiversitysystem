@@ -1,4 +1,4 @@
-// web/src/components/Chrome.jsx
+// apps/web/src/components/Chrome.jsx
 import Icon from "./Icon.jsx";
 import { SITE, PARK, NAV } from "../site.js";
 import { bottomLinks, staffLinks } from "../permissions.js";
@@ -61,15 +61,19 @@ export function Drawer({ role, light, onTheme, onClose }) {
   );
 }
 
-export function BottomBar({ role, seg, unread }) {
+export function BottomBar({ seg }) {
   return (
     <nav className="glass bottom" aria-label="Quick links">
-      {bottomLinks(role).map((l) => (
-        <a key={l.to} href={"#" + l.to} className={(l.staff ? "staff " : "") + (seg === l.to.slice(1) ? "on" : "")}>
-          <span className="bi"><Icon name={l.icon} size={22} />{l.icon === "bell" && unread > 0 && <b className="badge">{unread}</b>}</span>
-          {l.label}
-        </a>
-      ))}
+      {bottomLinks().map((l) => {
+        const path = l.to === "/" ? "" : l.to.slice(1);
+        const isActive = seg === path;
+        return (
+          <a key={l.to} href={"#" + l.to} className={isActive ? "on" : ""}>
+            <span className="bi"><Icon name={l.icon} size={22} /></span>
+            {l.label}
+          </a>
+        );
+      })}
     </nav>
   );
 }

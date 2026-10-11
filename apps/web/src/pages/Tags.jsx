@@ -1,4 +1,4 @@
-// web/src/pages/Tags.jsx
+// apps/web/src/pages/Tags.jsx
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Shell from "../components/Shell.jsx";
