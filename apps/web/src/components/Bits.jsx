@@ -1,3 +1,4 @@
+// apps/web/src/components/Bits.jsx
 import { useEffect } from "react";
 import Icon from "./Icon.jsx";
 import { label } from "../utils.js";

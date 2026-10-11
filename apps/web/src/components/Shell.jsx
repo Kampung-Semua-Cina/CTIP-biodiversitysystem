@@ -1,3 +1,4 @@
+// apps/web/src/components/Shell.jsx
 import Icon from "./Icon.jsx";
 import { staffLinks, TOOLS_LABEL } from "../permissions.js";
 import { staffCounts } from "../selectors.js";

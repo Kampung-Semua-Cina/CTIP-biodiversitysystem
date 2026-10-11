@@ -1,3 +1,4 @@
+// apps/web/src/components/RoleSwitch.jsx
 import { ROLES } from "../permissions.js";
 
 // Demo bar at the very top of the page: switch which role you are viewing the site as.

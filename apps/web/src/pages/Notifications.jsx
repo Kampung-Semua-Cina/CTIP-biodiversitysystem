@@ -1,3 +1,4 @@
+// apps/web/src/pages/Notifications.jsx
 import { useStore } from "../store.js";
 import { Empty } from "../components/Bits.jsx";
 import { fmtDateTime } from "../utils.js";

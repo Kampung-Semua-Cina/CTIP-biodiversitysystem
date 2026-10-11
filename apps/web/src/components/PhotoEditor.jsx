@@ -1,3 +1,4 @@
+// apps/web/src/components/PhotoEditor.jsx
 import { useEffect, useState } from "react";
 import Icon from "./Icon.jsx";
 import Img from "./Img.jsx";

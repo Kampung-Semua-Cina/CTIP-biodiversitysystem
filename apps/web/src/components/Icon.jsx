@@ -1,3 +1,4 @@
+// apps/web/src/components/Icon.jsx
 // Small line icons (24x24). Use as <Icon name="leaf" />.
 // They take their colour from the surrounding text colour.
 

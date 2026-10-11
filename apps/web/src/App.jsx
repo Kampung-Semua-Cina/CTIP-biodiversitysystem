@@ -1,4 +1,4 @@
-// web/src/App.jsx
+// apps/web/src/App.jsx
 // Needs one extra package:  npm i qrcode.react
 // Styles are in App.css. Sample data is in data.js. Who-can-do-what is in permissions.js.
 

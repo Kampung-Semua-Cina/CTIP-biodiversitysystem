@@ -1,3 +1,4 @@
+// apps/web/src/useRoute.js
 import { useEffect, useState } from "react";
 
 // Tiny hash router: "#/dashboard/NIAH-0001" -> { seg: "dashboard", arg: "NIAH-0001" }
