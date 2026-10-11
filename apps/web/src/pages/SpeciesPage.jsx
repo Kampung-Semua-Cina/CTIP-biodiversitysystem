@@ -1,0 +1,123 @@
+import { useState } from "react";
+import Img from "../components/Img.jsx";
+import MiniMap from "../components/MiniMap.jsx";
+import PhotoGallery from "../components/PhotoGallery.jsx";
+import { Chip, Empty } from "../components/Bits.jsx";
+import { useStore } from "../store.js";
+import { can } from "../permissions.js";
+import { lastVisit, mappable, speciesCatalogue } from "../selectors.js";
+import { fmtDate } from "../utils.js";
+
+const MORE = 12;
+
+// One species: what it is, where it grows, and every tagged plant of it.
+export default function SpeciesPage({ id }) {
+  const { db, role } = useStore();
+  const staff = can(role, "pending");
+  const [limit, setLimit] = useState(MORE);
+
+  const all = speciesCatalogue(db, role);
+  const s = all.find((x) => x.id === id);
+  if (!s) {
+    return (
+      <section className="glass pad prose narrow">
+        <h2>Species not found</h2>
+        <p>This species is not in the catalogue, or it has not been published yet.</p>
+        <a className="btn" href="#/plants">Back to all plants</a>
+      </section>
+    );
+  }
+
+  // Up to 3 photos from each tagged plant, best (primary) photo first.
+  const photos = s.plants.flatMap((p) => p.photos.slice(0, 3)).slice(0, 12);
+  const points = mappable(s.plants, role);
+  const related = all
+    .filter((x) => x.id !== s.id && (x.genus === s.genus || x.family === s.family))
+    .sort((a, b) => (b.genus === s.genus) - (a.genus === s.genus));
+
+  return (
+    <>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <a href="#/plants">Plants</a> <span aria-hidden="true">›</span> <span>{s.family}</span> <span aria-hidden="true">›</span> <span aria-current="page">{s.name}</span>
+      </nav>
+
+      <section className="specieshero">
+        <div className="speciesphotos">
+          {photos.length ? <PhotoGallery key={s.id} photos={photos} /> : <div className="glass pad"><Empty icon="camera">No photos yet.</Empty></div>}
+        </div>
+        <div className="speciesinfo">
+          <p className="eyebrow">{s.family} · {s.genus}</p>
+          <h1>{s.name}</h1>
+          <p className="mute sciname"><i>{s.scientific_name}</i></p>
+          {staff && (
+            <p className="row wrap">
+              <Chip value={s.conservation_status} />
+              {!s.is_published && <Chip value="draft">Not published</Chip>}
+            </p>
+          )}
+          {s.description && <p className="lede-s">{s.description}</p>}
+          <dl className="glass pad">
+            <dt>Family</dt><dd>{s.family}</dd>
+            <dt>Genus</dt><dd>{s.genus}</dd>
+            <dt>Tagged in Niah</dt><dd>{s.plants.length} {s.plants.length === 1 ? "plant" : "plants"}</dd>
+            {s.cultural_significance && <><dt>Cultural note</dt><dd>{s.cultural_significance}</dd></>}
+          </dl>
+          {role === "officer" && <a className="btn ghost gap-top-s" href="#/species">Edit species</a>}
+        </div>
+      </section>
+
+      <section className="glass pad gap-section-s" aria-labelledby="where">
+        <div className="row between wrap">
+          <h2 id="where">Where it grows</h2>
+          {points.length > 0 && <a className="textlink" href={"#/map/" + points[0].p.qr_id}>Open on the full map →</a>}
+        </div>
+        {points.length ? (
+          <MiniMap points={points} label={`Map of tagged ${s.name} plants`} />
+        ) : (
+          <p className="mute">
+            {s.plants.length && s.endangered ? "Locations of this species are hidden to protect it." : "No tagged plants of this species yet."}
+          </p>
+        )}
+      </section>
+
+      <section className="gap-section-s" aria-labelledby="tagged">
+        <h2 id="tagged">Tagged plants of this species <span className="mute">{s.plants.length}</span></h2>
+        {!s.plants.length && <div className="glass pad"><Empty>No plants of this species have been tagged yet.</Empty></div>}
+        <ul className="plain taggrid">
+          {s.plants.slice(0, limit).map((p) => {
+            const seen = lastVisit(db, p.id, role);
+            return (
+              <li key={p.id}>
+                <a className="glass tagcard" href={"#/tag/" + p.qr_id}>
+                  <Img src={p.photos[0]?.url} alt="" />
+                  <span>
+                    <b className="block tagid">{p.qr_id}</b>
+                    <small className="mute block">{seen ? `Last visited ${fmtDate(seen)}` : "Not visited yet"}</small>
+                    {staff && p.status !== "approved" && <Chip value={p.status} />}
+                  </span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+        {s.plants.length > limit && (
+          <p className="row center gap-top-s"><button className="btn ghost" onClick={() => setLimit(limit + MORE)}>Show {Math.min(MORE, s.plants.length - limit)} more</button></p>
+        )}
+      </section>
+
+      {related.length > 0 && (
+        <section className="gap-section-s" aria-labelledby="related">
+          <h2 id="related">Related plants in Niah</h2>
+          <div className="row wrap">
+            {related.slice(0, 6).map((r) => (
+              <a key={r.id} className="glass relpill" href={"#/plants/" + r.id}>
+                <Img src={r.photo} alt="" />
+                <span><b>{r.name}</b> <span className="mute">· {r.plants.length}</span></span>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
