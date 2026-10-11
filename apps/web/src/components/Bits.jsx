@@ -2,10 +2,17 @@ import { useEffect } from "react";
 import Icon from "./Icon.jsx";
 import { label } from "../utils.js";
 
+// Plain-language names for record statuses. The database values stay the same.
+const STATUS_TEXT = {
+  synced: "Needs review",
+  queued: "Waiting to sync",
+  returned: "Returned to botanist",
+};
+
 // Colour-coded label for statuses (approved, open, endangered, ...)
 export function Chip({ value, children }) {
   const key = String(value || "").replaceAll(" ", "-").replaceAll("_", "-");
-  return <span className={`chip chip-${key}`}>{children || label(value)}</span>;
+  return <span className={`chip chip-${key}`}>{children || STATUS_TEXT[value] || label(value)}</span>;
 }
 
 // Centered popup. Closes with the X button, a click outside, or the Escape key.

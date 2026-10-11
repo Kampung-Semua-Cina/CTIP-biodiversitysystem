@@ -16,6 +16,9 @@ import RoleSwitch from "./components/RoleSwitch.jsx";
 import { Home, About, Contact, StaffPage, NoAccess, NotFound } from "./pages/Public.jsx";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import Catalogue from "./pages/Catalogue.jsx";
+import SpeciesPage from "./pages/SpeciesPage.jsx";
+import Specimen from "./pages/Specimen.jsx";
 import MapPage from "./pages/MapPage.jsx";
 import AddPlant from "./pages/AddPlant.jsx";
 import Records from "./pages/Records.jsx";
@@ -42,6 +45,8 @@ function renderPage(seg, arg) {
     case "staff": return <StaffPage />;
     case "login": return <Login />;
     case "dashboard": return <Dashboard arg={arg} />;
+    case "plants": return arg ? <SpeciesPage key={arg} id={arg} /> : <Catalogue />;
+    case "tag": return <Specimen key={arg} qr={arg} />;
     case "map": return <MapPage arg={arg} />;
     case "add": return <AddPlant />;
     case "records": return <Records />;
@@ -75,6 +80,7 @@ function Site() {
   return (
     <div className="site" data-theme={light ? "light" : "dark"}>
       <div className="bg" />
+      <RoleSwitch role={role} setRole={setRole} />
       <Navbar seg={seg} role={role} me={me} unread={unread} light={light} onTheme={toggleTheme}
         onMenu={() => setMenuAt(seg + arg)} onLogout={() => { logout(); window.location.hash = "/"; }} />
       {menuOpen && <Drawer role={role} light={light} onTheme={toggleTheme} onClose={() => setMenuAt(null)} />}
@@ -83,7 +89,6 @@ function Site() {
 
       <BottomBar role={role} seg={seg} unread={unread} />
       <Footer light={light} onTheme={toggleTheme} />
-      <RoleSwitch role={role} setRole={setRole} />
       {toast && <div className="glass toast" role="status">{toast}</div>}
     </div>
   );

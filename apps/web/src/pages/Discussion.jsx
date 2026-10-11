@@ -128,7 +128,7 @@ function Topic({ topic }) {
       <h2>{title}</h2>
       <p className="mute">
         Observation recorded by {nameOf(db, obs.recorded_by)} on {fmtDate(obs.observed_at)} · <Chip value={obs.status} />{" "}
-        <a href={"#/dashboard/" + plant.qr_id}>View plant</a>
+        <a href={"#/tag/" + plant.qr_id}>View plant</a>
       </p>
 
       <ul className="posts">
