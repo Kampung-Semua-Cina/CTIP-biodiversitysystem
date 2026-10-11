@@ -68,7 +68,7 @@ export default function MapPage({ arg }) {
         <h3 id="legend-title">Legend</h3>
         <p className="mute small"><i className="dot" style={{ background: "var(--mute)" }} /> One dot = one plant. Colour = plant family.</p>
         <div className="legend">
-          <button className={"fam" + (!only ? " on" : "")} onClick={() => setOnly(null)} aria-pressed={!only}>All families ({all.length} plants)</button>
+          <button className={"fam" + (!only ? " on" : "")} onClick={() => setOnly(null)} aria-pressed={!only}>All families ({all.length} {all.length === 1 ? "plant" : "plants"})</button>
           {Object.entries(colors).map(([f, color]) => (
             <button key={f} className={"fam" + (only === f ? " on" : "")} onClick={() => setOnly(only === f ? null : f)} aria-pressed={only === f}>
               <i style={{ background: color }} /> {f} ({count(f)} {count(f) === 1 ? "plant" : "plants"})
@@ -87,7 +87,7 @@ export default function MapPage({ arg }) {
               <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · {sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}
             </small>
           </span>
-          <a className="btn" href={"#/dashboard/" + sel.p.qr_id}>View plant</a>
+          <a className="btn" href={"#/tag/" + sel.p.qr_id}>View plant</a>
         </div>
       )}
     </section>

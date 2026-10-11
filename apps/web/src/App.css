@@ -29,6 +29,8 @@
   --shade: 0.45;                       /* background photo brightness */
   --tint: rgba(0, 0, 0, 0);
   --sh: none;
+  --veil: rgba(8, 22, 14, 0.8);        /* frosted sheet the page content sits on */
+  --card: rgba(26, 52, 36, 0.72);      /* panels on top of the sheet */
 }
 
 .site[data-theme="light"] {
@@ -51,6 +53,8 @@
   --shade: 1;
   --tint: rgba(240, 248, 230, 0.62);
   --sh: 0 10px 30px rgba(40, 90, 50, 0.14);
+  --veil: rgba(246, 251, 240, 0.88);
+  --card: rgba(255, 255, 255, 0.86);
 }
 
 /* ---------- 2. Basics ---------- */
@@ -132,20 +136,30 @@ body { margin: 0; display: block; background: #0e2217; }
 .links a { padding: 6px 2px; border-bottom: 2px solid transparent; }
 .links a:hover, .links a.on { border-color: var(--acc); }
 .right { display: flex; align-items: center; gap: 10px; }
-.drawerbtn { display: none; }
+.top .drawerbtn { display: none; }
 .bell { position: relative; display: inline-grid; place-items: center; }
 .badge {
   position: absolute; top: -5px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px;
-  display: grid; place-items: center; border-radius: 99px; font-size: 0.68rem;
-  background: var(--red); color: #fff;
+  display: grid; place-items: center; border-radius: 99px; font-size: 0.68rem; font-weight: 700;
+  background: var(--acc2); color: var(--btnink);
 }
+.who { display: flex; align-items: center; gap: 10px; }
+.whoname { display: flex; flex-direction: column; line-height: 1.2; }
+.whoname b { font-size: 0.88rem; }
+.whoname small { color: var(--mute); font-size: 0.78rem; }
 .avatar {
   width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
   background: var(--acc); color: var(--btnink); font-weight: 700; font-size: 0.85rem;
 }
 
 /* main grows to fill the space, so the footer always sits at the bottom of the screen on short pages */
-main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; padding: 0 18px 100px; }
+/* All page content sits on one frosted sheet, so text never lands straight on the busy forest photo. */
+main {
+  flex: 1 0 auto; width: calc(100% - 36px); max-width: 1240px; margin: 22px auto; padding: 26px 26px 40px;
+  background: var(--veil); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 22px;
+}
+main .glass { background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 .foot {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px;
@@ -157,16 +171,19 @@ main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; paddin
 
 .toast { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); padding: 10px 20px; z-index: 60; }
 
-.roleswitch {
-  position: fixed; right: 14px; bottom: 14px; z-index: 35;
-  display: flex; gap: 4px; padding: 5px; border-radius: 99px;
+/* Prototype-only bar above the navbar: which role the site is shown as. */
+.protobar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 12px;
+  padding: 5px 14px; font-size: 0.85rem; color: var(--mute);
+  background: var(--solid); border-bottom: 1px solid var(--line);
 }
+.roleswitch { display: flex; gap: 2px; padding: 3px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); }
 .roleswitch button {
-  width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%;
-  background: transparent; color: var(--ink); cursor: pointer;
+  min-height: 32px; padding: 3px 14px; border: 0; border-radius: 99px;
+  background: transparent; color: var(--ink); font: 600 0.85rem Nunito, sans-serif; cursor: pointer;
 }
 .roleswitch button:hover { background: var(--bg2); }
-.roleswitch button.on { background: var(--acc); color: var(--btnink); }
+.roleswitch button.on { background: var(--acc); color: var(--btnink); font-weight: 700; }
 
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.45); }
 .drawer {
@@ -175,8 +192,11 @@ main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; paddin
 }
 .drawer a { display: flex; align-items: center; gap: 9px; padding: 10px; border-radius: 10px; }
 .drawer a:hover { background: var(--bg2); }
-.drawer .staff { color: var(--red); }
 .drawer hr { width: 100%; border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+.toolslabel {
+  display: flex; align-items: center; gap: 6px; margin: 14px 10px 4px !important;
+  color: var(--mute); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
 .drawer .ic { align-self: flex-start; margin-bottom: 6px; }
 
 .bottom { display: none; }
@@ -192,7 +212,7 @@ main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; paddin
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn.ghost:hover { background: var(--bg2); filter: none; }
-.btn.staff { background: transparent; color: var(--red); border-color: var(--red); }
+.btn.staff { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn.danger { background: var(--bad); color: #fff; }
 .btn.small-btn { padding: 5px 11px; font-size: 0.85rem; }
 .filebtn { cursor: pointer; }
@@ -212,6 +232,17 @@ main { flex: 1 0 auto; width: 100%; max-width: 1180px; margin: 22px auto; paddin
 .site input::placeholder, .site textarea::placeholder { color: var(--mute); opacity: 0.8; }
 .row > input { flex: 1; }
 label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
+/* A normal form label puts its field on the next line, so the text never runs into the box. */
+.site label:not(.inline):not(.search):not(.check):not(.upl):not(.filebtn) > :is(input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { display: block; margin-top: 6px; }
+.site [hidden] { display: none !important; }
+/* Forms laid out in a row (QR tags, alert limits, add user): buttons line up with the input boxes, not the labels. */
+.site form.row:has(> label:not(.btn)), .site form .row:has(> label:not(.btn)) { align-items: flex-end; }
+.site form.row > label, .site form .row > label { margin: 0; }
+.site form.row .btn, .site form .row .btn { min-height: 44px; }
+.site input[type="number"] { min-width: 90px; }
+.site select { min-height: 44px; }
+/* A label styled as a button (e.g. "Scan or upload QR") looks exactly like the buttons next to it. */
+.site label.btn { display: inline-flex; margin: 0; min-height: 44px; color: var(--ink); font: 700 0.95rem Nunito, sans-serif; }
 
 .switch {
   position: relative; width: 42px; height: 24px; padding: 0; border-radius: 99px;
@@ -250,14 +281,17 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .plantcard img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--bg2); }
 
 .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
-.side { position: sticky; top: 78px; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
-.side h3 { margin-bottom: 6px; }
-.side a { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 9px; }
-.side a:hover, .side a.on { background: var(--bg2); }
-.side a.staff { color: var(--red); }
-.quick { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
-.quick .pill { color: var(--red); border-color: var(--red); background: var(--bg); }
-.quick .pill.on { background: var(--red); color: #fff; }
+.side { position: sticky; top: 16px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.side a { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: 10px; }
+.side a:hover { background: var(--bg2); }
+.side a.on { background: color-mix(in srgb, var(--acc) 16%, transparent); color: var(--acc); font-weight: 700; }
+.count { min-width: 22px; padding: 0 7px; border-radius: 99px; text-align: center; font-size: 0.75rem; background: var(--acc2); color: var(--btnink); }
+.count-alerts { background: var(--bad); }
+/* On desktop the sidebar has these links already, so the pill row only shows on phones. */
+.quick { display: none; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
+.quick .pill { background: var(--card); }
+.quick .pill.on { background: var(--acc); color: var(--btnink); border-color: var(--acc); }
+.content { min-width: 0; }
 
 .split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
 .split.review { grid-template-columns: 250px minmax(0, 1fr); }
@@ -272,7 +306,7 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 }
 .edit {
   position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; display: grid; place-items: center;
-  border: 2px solid var(--red); border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
+  border: 2px solid var(--acc); border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
 }
 .primary-badge {
   position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 4px;
@@ -307,9 +341,11 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .list { display: flex; flex-direction: column; margin-top: 10px; }
 .item {
   display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; text-align: left;
-  border: 0; border-bottom: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink); font: inherit; cursor: pointer;
+  border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--ink); font: inherit; cursor: pointer;
 }
-.item:hover, .item.on { background: var(--bg2); }
+.item:hover { background: var(--bg2); }
+.item.on { background: var(--bg2); border-color: var(--acc); }
+.list li + li { margin-top: 4px; }
 .item img { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; background: var(--bg2); }
 .item > span { flex: 1; min-width: 0; }
 .item b, .item small { display: block; }
@@ -342,7 +378,7 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .editnote { margin: 0 0 14px; color: var(--mute); font-size: 0.88rem; }
 
 /* ---------- 6. Staff pages ---------- */
-.tablewrap { overflow-x: auto; margin-top: 14px; }
+.tablewrap { position: relative; overflow-x: auto; margin-top: 14px; }
 .site table { width: 100%; }
 .site th { text-align: left; padding: 8px 10px; color: var(--mute); font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .site td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -355,11 +391,18 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .record.sev-medium { border-left: 4px solid var(--warn); }
 .record.sev-low { border-left: 4px solid var(--ok); }
 .callout { margin-top: 8px; padding: 10px 14px; border-left: 4px solid var(--warn); border-radius: 8px; background: var(--bg); }
-.thread { margin: 10px 0; }
-.thread li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.thread { margin: 0; }
+.thread:empty { display: none; }
+.thread li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.thread li:first-child { padding-top: 0; }
+.thread li:last-child { border-bottom: 0; padding-bottom: 0; }
+/* Cards like alerts and records: one even gap between every block inside. */
+article.record { display: flex; flex-direction: column; gap: 12px; }
+article.record > * { margin: 0 !important; }
+article.record > header { margin-bottom: 0; }
 .photos-row { display: flex; gap: 8px; margin: 10px 0; overflow-x: auto; }
 .photos-row img { height: 110px; width: auto; border-radius: 10px; }
-.addform { margin-bottom: 18px; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 14px; }
+.addform { margin-top: 14px; margin-bottom: 18px; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 14px; }
 
 .summary { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 6px 0 4px; color: var(--mute); }
 .summary p { margin: 0; }
@@ -373,6 +416,14 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
   border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); color: var(--ink); font: inherit; cursor: pointer;
 }
 .nodecard.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.nodecard.down { border-style: dashed; border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.nodecard .row { gap: 14px; }
+.dotstatus { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; }
+.dotstatus::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+.dotstatus.up { color: var(--ok); }
+.dotstatus.up::before { background: var(--ok); }
+.dotstatus.off { color: var(--warn); }
+.dotstatus.off::before { border: 2px solid var(--warn); width: 5px; height: 5px; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
 .spark { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--bg2); }
 .spark figcaption { margin-bottom: 6px; color: var(--mute); }
@@ -425,34 +476,229 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 .post header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; }
 .post p { margin: 0; white-space: pre-wrap; }
 
+/* ---------- 7b. Page headers, home, library and monitoring layouts ---------- */
+.pagehead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; margin-bottom: 16px; }
+.pagehead h1 { font-size: 1.9rem; margin: 0; }
+.pagehead p { margin: 2px 0 0; }
+.warntext { color: var(--warn); }
+.textlink, .textlinks a { color: var(--acc); font-weight: 700; }
+.textlinks { gap: 18px; margin-top: 14px; }
+.gap-section { margin-top: 48px; }
+.gap-section > h2, .gap-section .row > h2 { font-size: 1.7rem; margin: 0 0 14px; }
+.gap-section-s { margin-top: 24px; }
+.gap-section-s > h2, .gap-section-s .row > h2 { font-size: 1.25rem; margin: 0 0 10px; }
+
+.hero2 { display: flex; flex-wrap: wrap; align-items: center; gap: 32px; padding: 26px 0 8px; }
+.hero2-text { flex: 1.3 1 440px; min-width: 0; }
+.hero2 h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.08; margin: 0; }
+.eyebrow { margin: 0 0 10px !important; color: var(--acc); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.lede { max-width: 520px; color: var(--mute); font-size: 1.1rem; margin: 14px 0 22px !important; }
+.bigsearch { display: flex; gap: 8px; max-width: 540px; }
+.bigsearch .search input { min-height: 50px; font-size: 1rem; }
+.bigsearch .btn { padding-inline: 20px; }
+.scancard { flex: 1 1 300px; min-width: 0; display: flex; align-items: center; gap: 18px; }
+.scancard h2 { font-size: 1.3rem; margin: 0 0 4px; }
+.steps3 { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.steps3 h3 { margin: 12px 0 4px; }
+.stepnum { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--acc); color: var(--btnink); font-weight: 700; }
+.plantcard2 { display: flex; flex-direction: column; overflow: hidden; }
+.plantcard2 img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: var(--bg2); }
+.plantcard2 > div { padding: 12px 16px 16px; }
+
+.banner {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 16px; border-radius: 14px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+}
+.library { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.listpane .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+.listpane .chips .pill { padding: 4px 12px; font-size: 0.85rem; }
+.detailpane { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 12px; }
+.plantmain { display: flex; flex-wrap: wrap; gap: 20px; }
+.plantphotos { flex: 1 1 260px; min-width: 0; }
+.plantintro { flex: 1.2 1 280px; min-width: 0; }
+.plantintro h2 { font-size: 1.8rem; margin: 8px 0 0; }
+.detailcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.detailcards h3 { margin: 0 0 10px; }
+.detailcards .qrbox { margin-top: 0; }
+.detailcards dl { grid-template-columns: 110px 1fr; }
+.tagid { font-size: 1.1rem; letter-spacing: 0.02em; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { padding: 14px 16px; display: flex; flex-direction: column; }
+.tile b { font-family: Fraunces, serif; font-size: 1.9rem; line-height: 1.2; }
+.tile-bad { border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+.tile-bad b { color: var(--bad); }
+.tile-warn b { color: var(--warn); }
+.record.glass { background: var(--card); }
+.progress { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; padding: 0; font-size: 0.85rem; font-weight: 700; }
+.progress li { padding: 3px 12px; border-radius: 99px; border: 1px solid var(--line); color: var(--mute); }
+.progress li.done { border-color: color-mix(in srgb, var(--ok) 50%, transparent); color: var(--ok); }
+.progress li.now { background: var(--acc); border-color: var(--acc); color: var(--btnink); }
+.limits { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.limits summary { cursor: pointer; font-weight: 700; min-height: 32px; }
+
+/* ---------- 7c. Species catalogue, species page, plant page, tagged-plants table ---------- */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
+.toolbar .search { flex: 1 1 280px; }
+.toolbar .search input { min-height: 46px; }
+.toolbar select { min-height: 46px; }
+.seg { display: flex; padding: 3px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+.seg button { width: 44px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--ink); cursor: pointer; }
+.seg button.on { background: var(--acc); color: var(--btnink); }
+.eyebrow.small { font-size: 0.72rem; margin: 0 !important; }
+.nowrap { white-space: nowrap; }
+.crumbs { margin-bottom: 14px; color: var(--mute); font-size: 0.95rem; }
+.crumbs a { color: var(--acc); font-weight: 700; }
+.lede-s { font-size: 1.05rem; margin: 6px 0 !important; }
+
+.catalogue { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+.facets { display: flex; flex-direction: column; gap: 20px; position: sticky; top: 16px; }
+.facets fieldset { margin: 0; padding: 0; border: 0; }
+.facets legend { margin-bottom: 6px; font-weight: 700; }
+.site label.check { display: flex; align-items: center; gap: 10px; min-height: 38px; margin: 0; color: var(--ink); font-size: 0.95rem; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--acc); }
+.results > p { margin-top: 0; }
+.speciesgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+.speciescard { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.speciescard img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--bg2); }
+.speciescard > div { display: flex; flex-direction: column; gap: 3px; flex: 1; padding: 12px 14px 14px; }
+.speciescard .cardfoot { margin-top: auto; padding-top: 6px; }
+.speciescard:hover { border-color: var(--acc); }
+.specieslist { display: flex; flex-direction: column; gap: 8px; }
+.specieslist .speciescard { flex-direction: row; align-items: center; }
+.specieslist .speciescard img { width: 96px; height: 72px; aspect-ratio: auto; flex: none; }
+.pager { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 24px; }
+.pager .btn { min-width: 44px; min-height: 44px; }
+
+.specieshero { display: flex; flex-wrap: wrap; gap: 28px; }
+.speciesphotos { flex: 1 1 400px; min-width: 0; }
+.speciesinfo { flex: 1 1 360px; min-width: 0; }
+.speciesinfo h1 { font-size: clamp(2rem, 4vw, 2.6rem); margin: 0; line-height: 1.1; }
+.sciname { font-size: 1.1rem; margin: 2px 0 10px !important; }
+.speciesinfo dl { margin-top: 14px; }
+.minimap { margin-top: 10px; }
+.minimap .plantdot { display: block; }
+.taggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.tagcard { display: flex; align-items: center; gap: 12px; padding: 10px; }
+.tagcard img { flex: none; width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--bg2); }
+.tagcard:hover, .relpill:hover { border-color: var(--acc); }
+.relpill { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border-radius: 99px; }
+.relpill img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--bg2); }
+
+.tagheader { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; }
+.tagthumb { width: 110px; height: 110px; border-radius: 14px; object-fit: cover; background: var(--bg2); }
+.tagheader h1 { font-size: 2rem; margin: 0; }
+.tagheader p { margin: 2px 0 !important; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 18px 0 16px; border-bottom: 1px solid var(--line); }
+.tabs button { min-height: 44px; padding: 8px 16px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--mute); font: 700 0.95rem Nunito, sans-serif; cursor: pointer; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--acc); }
+.tagbody { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.tagside { display: flex; flex-direction: column; gap: 16px; }
+.tagside h2 { font-size: 1.15rem; margin: 0 0 8px; }
+.tagside p { margin: 2px 0; }
+.dashedcard { border-style: dashed; }
+.photogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.photogrid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--bg2); display: block; margin-bottom: 4px; }
+.heightchart { margin: 0 0 16px; }
+.heightchart svg { width: 100%; height: 110px; display: block; overflow: visible; margin-top: 6px; }
+.hc-dot { fill: var(--acc); }
+.hc-label { fill: var(--mute); font-size: 13px; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { position: relative; padding: 0 0 16px 32px; }
+.timeline li::before { content: ""; position: absolute; left: 0; top: 24px; width: 16px; height: 16px; border-radius: 50%; background: var(--acc); }
+.timeline li::after { content: ""; position: absolute; left: 7px; top: 40px; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child::after { display: none; }
+.timeline li.tl-synced::before, .timeline li.tl-queued::before, .timeline li.tl-draft::before, .timeline li.tl-returned::before { background: var(--solid); border: 3px solid var(--warn); width: 16px; height: 16px; box-sizing: border-box; }
+.timeline article p { margin: 8px 0 0 !important; }
+
+.views { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.views .pill { background: var(--card); }
+.views .pill.on { background: var(--acc); color: var(--btnink); }
+.viewcount { margin-left: 4px; opacity: 0.75; font-weight: 700; }
+.tablecard { margin-top: 0; padding: 0; }
+.tablecard table { min-width: 700px; }
+.tablecard th { padding: 0; }
+.sortbtn { width: 100%; padding: 12px 10px; border: 0; background: none; color: var(--mute); font: 700 0.82rem Nunito, sans-serif; text-align: inherit; cursor: pointer; }
+.sortbtn:hover { color: var(--ink); }
+.tablecard th[aria-sort] .sortbtn { color: var(--ink); }
+.tablecard td:first-child, .tablecard th:first-child .sortbtn { padding-left: 16px; }
+.tablecard .num, .tablecard .num .sortbtn { text-align: right; padding-right: 16px; }
+.tablecard .tagid { white-space: nowrap; }
+.cellplant { display: flex; align-items: center; gap: 10px; }
+.cellplant img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--bg2); flex: none; }
+.tablecard tbody tr:hover { background: var(--bg2); }
+.pagerrow { margin-top: 12px; }
+.pagerrow .btn { min-width: 44px; min-height: 40px; padding: 6px; }
+
 /* ---------- 8. Phone layout and print ---------- */
+/* Tablets and small laptops: fold the staff sidebar into the pill row so tables get the full width. */
+@media (max-width: 1100px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .quick { display: flex; }
+}
+
+.nophoto { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; background: var(--bg2); color: var(--mute); }
+.specieslist .nophoto { width: 96px; height: 72px; aspect-ratio: auto; flex: none; }
+
 @media (max-width: 900px) {
-  .split, .split.review { grid-template-columns: 1fr; }
+  .split, .split.review, .library, .tagbody { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 800px) {
-  .links, .right > .btn, .right .avatar { display: none; }
-  .drawerbtn { display: inline-grid; }
+  .links, .right > .btn, .right .who { display: none; }
+  .top .drawerbtn { display: inline-grid; }
+  .quick { display: flex; }
+  main { width: 100%; margin: 0; padding: 18px 16px 100px; border-radius: 0; border-width: 0; }
+  .views { flex-wrap: nowrap; overflow-x: auto; }
+  .views, .quick { scrollbar-width: none; }
+  .views::-webkit-scrollbar, .quick::-webkit-scrollbar { display: none; }
+  .catalogue { grid-template-columns: 1fr; gap: 12px; }
+  .facets { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px 20px; }
+  .speciesgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tagthumb { width: 72px; height: 72px; }
+  .bigsearch { flex-direction: column; }
+  .scancard { flex-direction: column; align-items: flex-start; }
   .top { padding: 9px 14px; gap: 12px; }
   .right { margin-left: auto; }
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .row > input { min-width: 0; }
   .side { display: none; }
   .charts, .two { grid-template-columns: 1fr; }
   .bars li { grid-template-columns: 100px 1fr 24px; }
   .site dl { grid-template-columns: 110px 1fr; }
   .pad { padding: 16px; }
   .foot { padding-bottom: 90px; }
-  .roleswitch { bottom: 76px; right: 10px; }
   .toast { bottom: 140px; }
   .bottom {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     justify-content: space-around; padding: 6px 0 8px; border-radius: 0; border-width: 1px 0 0;
   }
-  .bottom a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 2px 10px; font-size: 0.72rem; }
-  .bottom a.staff { color: var(--red); }
-  .bottom a.on { color: var(--acc); }
-  .bottom a.staff.on { color: var(--red); font-weight: 700; }
+  .bottom { align-items: flex-end; }
+  .bottom a { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 56px; padding: 2px 6px; font-size: 0.72rem; }
+  .bottom a.on { color: var(--acc); font-weight: 700; }
+  /* The main action for the role (Scan for botanists) is a raised round button. */
+  .bottom a.main { margin-top: -24px; font-weight: 700; }
+  .bottom a.main .bi {
+    display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%;
+    background: var(--acc); color: var(--btnink); border: 4px solid var(--solid); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
   .bi { position: relative; }
+}
+
+/* Phones: each table row becomes a small card (tag + status, species, who + when). */
+@media (max-width: 700px) {
+  .tablecard table { min-width: 0; }
+  .tablecard thead { display: none; }
+  .tablecard tbody, .tablecard td { display: block; }
+  .tablecard tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .tablecard td { padding: 0 !important; border: 0; }
+  .tablecard td:nth-child(1) { grid-area: 1 / 1; }
+  .tablecard td:nth-child(3) { grid-area: 1 / 2; }
+  .tablecard td:nth-child(2) { grid-area: 2 / 1 / 3 / 3; }
+  .tablecard td:nth-child(4) { grid-area: 3 / 1; color: var(--mute); font-size: 0.85rem; }
+  .tablecard td:nth-child(5) { grid-area: 3 / 2; font-size: 0.85rem; }
+  .tablecard td:nth-child(6) { display: none; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -461,7 +707,7 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 }
 
 @media print {
-  .top, .foot, .bottom, .roleswitch, .side, .quick, .toast, .bg, .scrim { display: none !important; }
+  .top, .foot, .bottom, .protobar, .side, .quick, .toast, .bg, .scrim { display: none !important; }
   body { background: #fff; }
   .site { color: #000; }
   .glass { background: #fff !important; border: 0; box-shadow: none; backdrop-filter: none; }

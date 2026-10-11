@@ -8,8 +8,8 @@ export const MAP_BOUNDS = { minLat: 3.79, maxLat: 3.816, minLng: 113.76, maxLng:
 
 // Links in the top navbar (Home is the logo).
 export const NAV = [
-  { to: "/about", label: "About us" },
+  { to: "/plants", label: "Plants" },
   { to: "/map", label: "Map" },
-  { to: "/dashboard", label: "Dashboard" },
+  { to: "/about", label: "About us" },
   { to: "/contact", label: "Contact" },
 ];

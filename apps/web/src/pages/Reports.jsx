@@ -58,7 +58,7 @@ export default function Reports() {
         })}
       </ul>
 
-      <div className="row wrap gap-top-s">
+      <div className="row wrap gap-top">
         <select value={conservation} onChange={(e) => setConservation(e.target.value)} aria-label="Conservation status">
           <option value="all">All conservation status</option>
           {CONSERVATION.map((c) => <option key={c} value={c}>{label(c)}</option>)}
@@ -80,8 +80,8 @@ export default function Reports() {
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.qr_id}</td>
-                  <td><a href={"#/dashboard/" + p.qr_id}>{p.name}</a><small className="sci block">{p.scientific}</small></td>
+                  <td className="nowrap">{p.qr_id}</td>
+                  <td><a href={"#/tag/" + p.qr_id}>{p.name}</a><small className="sci block">{p.scientific}</small></td>
                   <td>{p.species?.family || "-"}</td>
                   <td>{p.species ? <Chip value={p.conservation} /> : "-"}</td>
                   <td><Chip value={p.status} /></td>
