@@ -22,7 +22,7 @@
 | Role | Can do | Trust level |
 |---|---|---|
 | Botanist | Scan QR, register plants, add details/photos/GPS, sync, view own submissions | Logged in (email address + password) |
-| Conservation Officer | Add/edit/delete species, approve or reject observations, search, export reports, view maps | Logged in (email address + password), high privilege on data |
+| Officer | Add/edit/delete species, approve or reject observations, search, export reports, view maps | Logged in (email address + password), high privilege on data |
 | Admin (System Administrator) | Manage users and roles, approve new accounts, register sensor nodes, monitor dashboard and alerts, review audit logs | Highest privilege (email address + password) |
 | Visitor | View the public plant page and search published species on the website. | **Not logged in. Fully untrusted** |
 
