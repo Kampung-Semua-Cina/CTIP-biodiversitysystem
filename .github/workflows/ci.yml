@@ -12,6 +12,23 @@ permissions:
   contents: read
 
 jobs:
+  #API
+  api:
+    name: API (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/api/package-lock.json
+      - run: npm ci
+      - run: npm test
+  #end of API
   web:
     name: Web (lint and build)
     runs-on: ubuntu-latest
