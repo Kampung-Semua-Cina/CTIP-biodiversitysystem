@@ -99,3 +99,32 @@ test('signed-in account with no active role gets 403 ACCOUNT_NOT_ACTIVE', async 
   assert.equal(res.status, 403);
   assert.equal(res.body.code, 'ACCOUNT_NOT_ACTIVE');
 });
+
+test('malformed JSON body gets 400 INVALID_JSON, not an HTML page', async () => {
+  const token = await tokenFor('officer');
+  const res = await request(app)
+    .post('/v1/species')
+    .set('Authorization', `Bearer ${token}`)
+    .set('Content-Type', 'application/json')
+    .send('{"scientific_name": ');
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, 'INVALID_JSON');
+});
+
+test('a crashing handler gets 500 INTERNAL_ERROR as JSON', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const crashing = createApp({
+    verify,
+    handlers: { 'get /public/species': async () => { throw new Error('database exploded'); } },
+  });
+  const res = await request(crashing).get('/v1/public/species');
+  assert.equal(res.status, 500);
+  assert.equal(res.body.code, 'INTERNAL_ERROR');
+  assert.ok(!JSON.stringify(res.body).includes('database exploded'), 'no internal details leak');
+});
+
+test('unknown paths outside /v1 get a JSON 404', async () => {
+  const res = await request(app).get('/nope');
+  assert.equal(res.status, 404);
+  assert.equal(res.body.code, 'NOT_FOUND');
+});

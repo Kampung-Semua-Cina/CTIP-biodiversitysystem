@@ -23,8 +23,23 @@ export function createApp({ verify, handlers = defaultHandlers, corsOrigins = []
       v1[method](path, requireAuth(verify), allow(...roles), handler);
     }
   }
-  v1.use((req, res) => res.status(404).json({ code: 'NOT_FOUND', message: 'No such endpoint' }));
-
   app.use('/v1', v1);
+  app.use((req, res) => res.status(404).json({ code: 'NOT_FOUND', message: 'No such endpoint' }));
+  app.use(errorHandler);
   return app;
-}   
+}
+
+// Last stop for errors. Answers in the same { code, message } shape as every
+// other response, never Express's default HTML page or a stack trace.
+// Express 5 also routes rejected promises from async handlers here.
+export function errorHandler(err, req, res, next) {
+  if (res.headersSent) return next(err);
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ code: 'INVALID_JSON', message: 'Request body is not valid JSON' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large' });
+  }
+  console.error(err);
+  res.status(500).json({ code: 'INTERNAL_ERROR', message: 'Something went wrong on the server' });
+}
