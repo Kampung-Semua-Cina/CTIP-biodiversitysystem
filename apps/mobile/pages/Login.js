@@ -1,8 +1,36 @@
 // apps/mobile/pages/Login.js
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../shared/store.js';
 import { COLORS, commonStyles } from '../components/Theme.js';
+
+function PasswordInput({ value, onChangeText, placeholder }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <View style={styles.pwWrap}>
+      <TextInput
+        style={[commonStyles.input, styles.pwInput]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#688065"
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <TouchableOpacity
+        style={styles.eyeBtn}
+        onPress={() => setVisible((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={visible ? 'Hide password' : 'Show password'}
+        hitSlop={8}
+      >
+        <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function MobileLogin({ onNavigate }) {
   const { login, signIn, changePassword, notify } = useStore();
@@ -72,14 +100,7 @@ export default function MobileLogin({ onNavigate }) {
           />
 
           <Text style={commonStyles.label}>Password</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={pw}
-            onChangeText={setPw}
-            placeholder="Enter password"
-            placeholderTextColor="#688065"
-            secureTextEntry
-          />
+          <PasswordInput value={pw} onChangeText={setPw} placeholder="Enter password" />
 
           <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
             <TouchableOpacity style={commonStyles.btnPrimary} onPress={submit}>
@@ -109,14 +130,7 @@ export default function MobileLogin({ onNavigate }) {
           />
 
           <Text style={commonStyles.label}>New password (min 8 characters)</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={newPw}
-            onChangeText={setNewPw}
-            placeholder="New password"
-            placeholderTextColor="#688065"
-            secureTextEntry
-          />
+          <PasswordInput value={newPw} onChangeText={setNewPw} placeholder="New password" />
 
           <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
             <TouchableOpacity style={commonStyles.btnPrimary} onPress={change}>
@@ -137,14 +151,7 @@ export default function MobileLogin({ onNavigate }) {
           </Text>
 
           <Text style={commonStyles.label}>New password</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={newPw}
-            onChangeText={setNewPw}
-            placeholder="New password"
-            placeholderTextColor="#688065"
-            secureTextEntry
-          />
+          <PasswordInput value={newPw} onChangeText={setNewPw} placeholder="New password" />
 
           <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
             <TouchableOpacity style={commonStyles.btnPrimary} onPress={change}>
@@ -159,3 +166,17 @@ export default function MobileLogin({ onNavigate }) {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  pwWrap: {
+    justifyContent: 'center',
+  },
+  pwInput: {
+    paddingRight: 44,
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 10,
+    padding: 4,
+  },
+});

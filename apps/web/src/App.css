@@ -235,6 +235,10 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
 /* A normal form label puts its field on the next line, so the text never runs into the box. */
 .site label:not(.inline):not(.search):not(.check):not(.upl):not(.filebtn) > :is(input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { display: block; margin-top: 6px; }
 .site [hidden] { display: none !important; }
+/* Password box with a show/hide eye button sitting inside its right edge. */
+.pwfield { position: relative; display: block; margin-top: 6px; }
+.site .pwfield input { padding-right: 42px; }
+.pwfield .ic { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: var(--mute); }
 /* Forms laid out in a row (QR tags, alert limits, add user): buttons line up with the input boxes, not the labels. */
 .site form.row:has(> label:not(.btn)), .site form .row:has(> label:not(.btn)) { align-items: flex-end; }
 .site form.row > label, .site form .row > label { margin: 0; }

@@ -2,6 +2,21 @@
 import { useState } from "react";
 import { useStore } from "../store.js";
 import { go } from "../useRoute.js";
+import Icon from "../components/Icon.jsx";
+
+// Password box with an eye button that shows or hides what was typed.
+function PasswordInput(props) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="pwfield">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button type="button" className="ic" onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible}>
+        <Icon name={visible ? "eyeOff" : "eye"} size={18} />
+      </button>
+    </span>
+  );
+}
 
 // Staff login with email and password. There is no register button: an admin creates each account.
 // The same page lets staff change their password with just their email and a new password.
@@ -52,7 +67,7 @@ export default function Login() {
 
   const newFields = (
     <>
-      <label>New password<input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
+      <label>New password<PasswordInput value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
       <p className="mute small">At least 8 characters.</p>
     </>
   );
@@ -66,7 +81,7 @@ export default function Login() {
             For botanists, conservation officers and admins. Sign in with the email your admin registered for you.
           </p>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
-          <label>Password<input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
+          <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
           <div className="row wrap">
             <button className="btn" type="submit">Sign in</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("change")}>Change password</button>
