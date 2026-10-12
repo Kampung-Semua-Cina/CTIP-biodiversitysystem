@@ -27,4 +27,4 @@ export function createApp({ verify, handlers = defaultHandlers, corsOrigins = []
 
   app.use('/v1', v1);
   return app;
-}
+}   
