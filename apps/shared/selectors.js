@@ -2,6 +2,7 @@
 // Read-only helpers that join the tables together for the pages.
 
 import { can } from "./permissions.js";
+import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -59,7 +60,6 @@ export function shownCoords(p, role) {
 }
 
 // One colour per plant family, for the map. Plants with no confirmed species are grey.
-const FAMILY_PALETTE = ["#2f9e44", "#e8590c", "#1c7ed6", "#c2255c", "#f2b705", "#7048e8", "#0ca678", "#a0522d", "#e64980", "#3bc9db"];
 export const UNKNOWN_FAMILY = "Not confirmed";
 export const familyOf = (p) => p.species?.family || UNKNOWN_FAMILY;
 
@@ -68,7 +68,7 @@ export const familyOf = (p) => p.species?.family || UNKNOWN_FAMILY;
 export function familyColors(species = [], plants = []) {
   const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
   const colorOf = Object.fromEntries(families.map((f, i) => [f, FAMILY_PALETTE[i % FAMILY_PALETTE.length]]));
-  colorOf[UNKNOWN_FAMILY] = "#868e96";
+  colorOf[UNKNOWN_FAMILY] = UNKNOWN_FAMILY_COLOR;
   const shown = [...new Set(plants.map(familyOf))].sort((a, b) => (a === UNKNOWN_FAMILY) - (b === UNKNOWN_FAMILY) || a.localeCompare(b));
   return Object.fromEntries(shown.map((f) => [f, colorOf[f] || colorOf[UNKNOWN_FAMILY]]));
 }

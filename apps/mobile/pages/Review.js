@@ -1,346 +1,145 @@
 // apps/mobile/pages/Review.js
+// Officer review queue and the decision screen (CTIP-29, CTIP-69 on the web side).
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Image, Pressable, useWindowDimensions } from 'react-native';
+
 import { useStore } from '../../shared/store.js';
-import { nameOf, plantView } from '../../shared/selectors.js';
-import { fmtDateTime } from '../../shared/utils.js';
-import { Chip, Empty } from '../components/Bits.js';
-import { COLORS, commonStyles } from '../components/Theme.js';
+import { plantView, nameOf } from '../../shared/selectors.js';
+import { useTheme, font } from '../components/Theme.js';
+import {
+  Screen, Bar, TitleBlock, Pills, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field,
+} from '../components/Bits.js';
+import { shortDate, dateTime, coords } from '../components/format.js';
 
-export default function MobileReview() {
+const FILTERS = [
+  { key: 'synced', label: 'Needs review' },
+  { key: 'returned', label: 'Returned' },
+  { key: 'all', label: 'All' },
+];
+
+export function ReviewQueue({ nav }) {
   const { db } = useStore();
-  const [picked, setPicked] = useState(null);
-
-  const queue = db.observations
-    .filter((o) => o.status === 'synced')
-    .sort((a, b) => (a.last_synced_at || '').localeCompare(b.last_synced_at || ''));
-  const obs = queue.find((o) => o.id === picked) || queue[0];
+  const { c } = useTheme();
+  const [filter, setFilter] = useState('synced');
+  const all = db.observations
+    .filter((o) => ['synced', 'returned', 'approved', 'rejected'].includes(o.status))
+    .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
+    .filter((o) => o.plant)
+    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  const rows = all.filter((o) => filter === 'all' || o.status === filter);
+  const waiting = all.filter((o) => o.status === 'synced').length;
+  const n = (k) => all.filter((o) => o.status === k).length;
 
   return (
-    <View>
-      <View style={commonStyles.card}>
-        <Text style={commonStyles.heading}>Review queue</Text>
-        <Text style={commonStyles.mute}>
-          Review incoming observations from botanists in the field. Confirm the species and approve or return for changes.
-        </Text>
-
-        {queue.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.queueScroll}>
-            {queue.map((o) => {
-              const p = plantView(db, db.plants.find((x) => x.id === o.specimen_id));
-              const isSelected = o.id === obs?.id;
-              return (
-                <TouchableOpacity
-                  key={o.id}
-                  style={[styles.queueItem, isSelected && styles.queueItemActive]}
-                  onPress={() => setPicked(o.id)}
-                >
-                  <Image source={{ uri: p?.photos[0]?.url }} style={styles.queueThumb} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.queueName, isSelected && styles.queueNameActive]} numberOfLines={1}>
-                      {p?.name}
-                    </Text>
-                    <Text style={commonStyles.mute}>{p?.qr_id} · v{o.version}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
+    <Screen gap={16}>
+      <TitleBlock title="Review" sub={waiting ? `${waiting} record${waiting === 1 ? '' : 's'} waiting for a decision` : 'Nothing is waiting'} />
+      <Pills value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ key: f.key, label: f.key === 'all' ? f.label : `${f.label} ${n(f.key)}` }))} />
+      <View>
+        {rows.length === 0 ? <Empty icon="clipboard">No records here.</Empty> : null}
+        {rows.map((o, i) => (
+          <Row
+            key={o.id}
+            left={<Thumb uri={o.plant.photos[0]?.url} size={64} />}
+            title={o.plant.name}
+            sub={
+              <>
+                <Mono size={13}>{o.plant.qr_id}</Mono>
+                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>· {nameOf(db, o.recorded_by)} · {shortDate(o.observed_at)}</Txt>
+                {filter === 'all' ? <DotLabel status={o.status} /> : !o.plant.species ? <DotLabel tone="info" label="Species not confirmed" /> : null}
+              </>
+            }
+            onPress={() => nav.go('reviewItem', { id: o.id })}
+            last={i === rows.length - 1}
+          />
+        ))}
       </View>
+    </Screen>
+  );
+}
 
-      {!obs ? (
-        <View style={commonStyles.card}>
-          <Empty icon="clipboard">No records are waiting for review.</Empty>
+function Photos({ photos }) {
+  const { c } = useTheme();
+  const { width } = useWindowDimensions();
+  const [index, setIndex] = useState(0);
+  if (!photos.length) return null;
+  return (
+    <View style={{ marginHorizontal: -20, marginTop: -20 }}>
+      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
+        {photos.map((p, i) => <Image key={p.id} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height: 220, backgroundColor: c.accentSoft }} />)}
+      </ScrollView>
+      {photos.length > 1 ? (
+        <View style={{ position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>
+          <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink }}>{index + 1} / {photos.length}</Text>
         </View>
-      ) : (
-        <ReviewDetailCard key={obs.id} obs={obs} />
-      )}
+      ) : null}
     </View>
   );
 }
 
-function ReviewDetailCard({ obs }) {
-  const { db, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
-  const [comment, setComment] = useState('');
+export function ReviewRecord({ nav, params = {} }) {
+  const { db, reviewObservation, setPlantSpecies, notify } = useStore();
+  const { c } = useTheme();
+  const o = db.observations.find((x) => x.id === params.id);
+  const plant = o ? plantView(db, db.plants.find((p) => p.id === o.specimen_id)) : null;
+  const [spText, setSpText] = useState(plant?.species?.scientific_name || plant?.proposed_species || '');
   const [note, setNote] = useState('');
+  const [needNote, setNeedNote] = useState(false);
+  if (!o || !plant) return <Screen header={<Bar title="Review" onBack={nav.back} />}><Empty>This record no longer exists.</Empty></Screen>;
 
-  const rawPlant = db.plants.find((p) => p.id === obs.specimen_id);
-  const plant = plantView(db, rawPlant);
-  const photos = rawPlant ? rawPlant.photos.filter((p) => p.observation_id === obs.id) : [];
-  const thread = db.comments.filter((c) => c.observation_id === obs.id);
-  const history = db.reviews.filter((r) => r.observation_id === obs.id);
-  const speciesList = db.species.filter((s) => !s.is_deleted);
+  const species = db.species.filter((s) => !s.is_deleted);
+  const match = species.find((s) => s.scientific_name.toLowerCase() === spText.trim().toLowerCase());
+  const suggestions = !match && spText.trim().length > 1 ? species.filter((s) => `${s.common_name} ${s.scientific_name}`.toLowerCase().includes(spText.trim().toLowerCase())).slice(0, 3) : [];
+  const open = o.status === 'synced';
 
   const decide = (decision) => {
-    if (decision !== 'approve' && !comment.trim()) {
-      return notify('Add a comment so the botanist knows why');
-    }
-    if (decision === 'approve' && !plant?.species) {
-      return notify('Confirm the species before approving');
-    }
-    reviewObservation(obs.id, decision, comment.trim());
-    notify(decision === 'approve' ? 'Record approved' : decision === 'return' ? 'Record returned' : 'Record rejected');
+    if (decision !== 'approve' && !note.trim()) return setNeedNote(true);
+    if (decision === 'approve' && match && match.id !== plant.species_id) setPlantSpecies(plant.id, match.id);
+    reviewObservation(o.id, decision, note.trim());
+    notify({ approve: `${plant.qr_id} approved and published`, return: `${plant.qr_id} returned to ${nameOf(db, o.recorded_by)}`, reject: `${plant.qr_id} rejected` }[decision]);
+    nav.back();
   };
 
   return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>{plant?.name}</Text>
-      <Text style={styles.sciText}>{plant?.scientific}</Text>
-
-      {/* Observation photos preview */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photosRow}>
-        {photos.map((p) => (
-          <Image key={p.id} source={{ uri: p.url }} style={styles.photoPreview} />
-        ))}
-      </ScrollView>
-
-      {/* Confirm Species */}
-      <Text style={commonStyles.label}>Confirm Species Assignment</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.speciesSelectRow}>
-        {speciesList.map((s) => {
-          const isSelected = rawPlant?.species_id === s.id;
-          return (
-            <TouchableOpacity
-              key={s.id}
-              style={[styles.speciesChip, isSelected && styles.speciesChipSelected]}
-              onPress={() => setPlantSpecies(rawPlant.id, s.id)}
-            >
-              <Text style={[styles.speciesChipText, isSelected && styles.speciesChipTextSelected]}>
-                {s.scientific_name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-      {rawPlant?.proposed_species ? (
-        <Text style={[commonStyles.mute, { marginTop: 4 }]}>
-          Botanist's guess: <Text style={{ color: COLORS.text }}>{rawPlant.proposed_species}</Text>
-        </Text>
+    <Screen
+      header={<Bar title={plant.name} sub={`${plant.qr_id} · version ${o.version}`} onBack={nav.back} />}
+      top={20}
+      gap={18}
+      footer={open ? (
+        <>
+          <Button label="Reject" kind="dangerText" flex={1} size={15} onPress={() => decide('reject')} />
+          <Button label="Return" kind="secondary" flex={1.2} size={15} onPress={() => decide('return')} />
+          <Button label="Approve" icon="check" flex={1.6} size={15} disabled={!match} onPress={() => decide('approve')} />
+        </>
       ) : null}
-
-      <View style={commonStyles.divider} />
-
-      {/* Observation Specs */}
-      <View style={styles.dl}>
-        <DetailItem label="Tag ID" value={plant?.qr_id} />
-        <DetailItem label="Recorded by" value={nameOf(db, obs.recorded_by)} />
-        <DetailItem label="Seen" value={fmtDateTime(obs.observed_at)} />
-        <DetailItem label="Height" value={obs.height_cm != null ? `${obs.height_cm} cm` : '-'} />
-        <DetailItem label="Appearance" value={obs.morphology || '-'} />
-        <DetailItem label="Notes" value={obs.notes || '-'} />
-        <DetailItem
-          label="GPS"
-          value={rawPlant ? `${rawPlant.lat.toFixed(5)}, ${rawPlant.lng.toFixed(5)} (±${obs.gps_accuracy_m} m)` : '-'}
-        />
-        <DetailItem label="Version" value={`v${obs.version} · ${obs.device_id}`} />
-      </View>
-
-      {/* Previous decisions */}
-      {history.length > 0 && (
-        <View style={{ marginTop: 12 }}>
-          <Text style={commonStyles.subHeading}>Earlier decisions</Text>
-          {history.map((r) => (
-            <View key={r.id} style={styles.historyRow}>
-              <Chip value={r.decision} />
-              <Text style={commonStyles.mute}>
-                v{r.observation_ver} by {nameOf(db, r.reviewer_id)} · {fmtDateTime(r.created_at)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Comments Thread */}
-      <View style={{ marginTop: 12 }}>
-        <Text style={commonStyles.subHeading}>Comments ({thread.length})</Text>
-        {thread.map((c) => (
-          <View key={c.id} style={styles.commentItem}>
-            <Text style={styles.commentAuthor}>{nameOf(db, c.author_id)}</Text>
-            <Text style={styles.commentBody}>{c.body}</Text>
-            <Text style={styles.commentDate}>{fmtDateTime(c.created_at)}</Text>
+    >
+      <Photos photos={plant.photos.filter((p) => p.observation_id === o.id).length ? plant.photos.filter((p) => p.observation_id === o.id) : plant.photos} />
+      {plant.scientific ? <Sci size={16}>{plant.scientific}{plant.species?.family ? ` · ${plant.species.family}` : ''}</Sci> : null}
+      {!open ? <DotLabel status={o.status} /> : null}
+      <KV rows={[
+        ['Recorded by', `${nameOf(db, o.recorded_by)} · ${dateTime(o.observed_at)}`],
+        ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
+        ['Appearance', o.morphology || '-'],
+        ['Notes', o.notes || '-'],
+        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>±{Math.round(o.gps_accuracy_m || plant.gps_accuracy_m)} m</Text></Text>],
+      ]} />
+      {open ? (
+        <>
+          <View style={{ gap: 6 }}>
+            <Field label="Confirm species" value={spText} onChangeText={setSpText} italic
+              hint={match ? `${match.common_name} · ${match.family}` : 'Pick a species from the list to approve.'} />
+            {suggestions.map((s) => (
+              <Pressable key={s.id} accessibilityRole="button" onPress={() => setSpText(s.scientific_name)} style={{ paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.bg }}>
+                <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: c.ink }}>{s.common_name}</Text>
+                <Sci size={14}>{s.scientific_name}</Sci>
+              </Pressable>
+            ))}
           </View>
-        ))}
-
-        <View style={[commonStyles.row, { marginTop: 8 }]}>
-          <TextInput
-            style={[commonStyles.input, { flex: 1, marginVertical: 0 }]}
-            value={note}
-            onChangeText={setNote}
-            placeholder="Write a comment..."
-            placeholderTextColor="#688065"
-          />
-          <TouchableOpacity
-            style={commonStyles.btnGhost}
-            onPress={() => {
-              if (note.trim()) {
-                addComment(obs.id, note.trim());
-                setNote('');
-              }
-            }}
-          >
-            <Text style={commonStyles.btnGhostText}>Post</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={commonStyles.divider} />
-
-      {/* Decision Section */}
-      <Text style={commonStyles.subHeading}>Officer Decision</Text>
-      <TextInput
-        style={[commonStyles.input, { height: 60, textAlignVertical: 'top' }]}
-        value={comment}
-        onChangeText={setComment}
-        placeholder="Comment for botanist (required to return or reject)"
-        placeholderTextColor="#688065"
-        multiline
-      />
-
-      <View style={[commonStyles.rowWrap, { marginTop: 12 }]}>
-        <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => decide('approve')}>
-          <Text style={commonStyles.btnPrimaryText}>✓ Approve</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={commonStyles.btnGhost} onPress={() => decide('return')}>
-          <Text style={commonStyles.btnGhostText}>↺ Return for changes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={commonStyles.btnDanger} onPress={() => decide('reject')}>
-          <Text style={commonStyles.btnDangerText}>✕ Reject</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <View style={{ gap: 6 }}>
+            <Area label="Note to the botanist" value={note} onChangeText={(t) => { setNote(t); setNeedNote(false); }} placeholder="Needed to return or reject" />
+            {needNote ? <Txt v="caption" color={c.danger}>Add a note so the botanist knows what to change.</Txt> : null}
+          </View>
+        </>
+      ) : null}
+    </Screen>
   );
 }
-
-function DetailItem({ label: dt, value: dd }) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.dt}>{dt}</Text>
-      <Text style={[styles.dd, commonStyles.body, { marginBottom: 0 }]}>{dd}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  queueScroll: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 10,
-  },
-  queueItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0a1a11',
-    borderRadius: 10,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    width: 170,
-    gap: 8,
-  },
-  queueItemActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: 'rgba(155, 207, 106, 0.15)',
-  },
-  queueThumb: {
-    width: 38,
-    height: 38,
-    borderRadius: 6,
-  },
-  queueName: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  queueNameActive: {
-    color: COLORS.primary,
-  },
-  sciText: {
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  photosRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: 10,
-  },
-  photoPreview: {
-    width: 120,
-    height: 90,
-    borderRadius: 8,
-  },
-  speciesSelectRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingVertical: 6,
-  },
-  speciesChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#0a1a11',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  speciesChipSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: 'rgba(155, 207, 106, 0.2)',
-  },
-  speciesChipText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  speciesChipTextSelected: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  dl: {
-    gap: 6,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    paddingVertical: 5,
-  },
-  dt: {
-    width: 100,
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  dd: {
-    flex: 1,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginVertical: 4,
-  },
-  commentItem: {
-    backgroundColor: '#0a1a11',
-    borderRadius: 8,
-    padding: 10,
-    marginVertical: 4,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  commentAuthor: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  commentBody: {
-    color: COLORS.text,
-    fontSize: 13,
-    marginVertical: 2,
-  },
-  commentDate: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-  },
-});

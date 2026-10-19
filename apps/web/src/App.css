@@ -9,57 +9,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Nunito:wght@400;600;700&display=swap");
 
 /* ---------- 1. Colours ---------- */
-.site {
-  --bg: rgba(16, 38, 27, 0.66);        /* glass panels */
-  --bg2: rgba(36, 66, 46, 0.55);       /* inputs, hover rows */
-  --solid: #16301e;                    /* popups, dropdown lists */
-  --pop: rgba(18, 42, 29, 0.96);
-  --ink: #eef4e4;
-  --mute: #b9cdb0;
-  --line: rgba(190, 220, 170, 0.26);
-  --acc: #9bcf6a;                      /* leaf green */
-  --acc2: #e3b95a;                     /* amber */
-  --red: #ef8a73;                      /* staff-only items */
-  --btnink: #14301d;
-  --ok: #9bcf6a;
-  --warn: #e3b95a;
-  --bad: #ef8a73;
-  --info: #7cc4d8;
-  --neutral: #a9bba5;
-  --shade: 0.45;                       /* background photo brightness */
-  --tint: rgba(0, 0, 0, 0);
-  --sh: none;
-  --veil: rgba(8, 22, 14, 0.8);        /* frosted sheet the page content sits on */
-  --card: rgba(26, 52, 36, 0.72);      /* panels on top of the sheet */
-}
-
-.site[data-theme="light"] {
-  --bg: rgba(255, 255, 255, 0.76);
-  --bg2: rgba(226, 240, 212, 0.72);
-  --solid: #fbfdf7;
-  --pop: rgba(251, 253, 247, 0.97);
-  --ink: #1b3a26;
-  --mute: #52705a;
-  --line: rgba(47, 122, 60, 0.22);
-  --acc: #2f7a3c;
-  --acc2: #a8700f;
-  --red: #c2472f;
-  --btnink: #ffffff;
-  --ok: #2c7a3a;
-  --warn: #946408;
-  --bad: #b73d28;
-  --info: #1f7a92;
-  --neutral: #587060;
-  --shade: 1;
-  --tint: rgba(240, 248, 230, 0.62);
-  --sh: 0 10px 30px rgba(40, 90, 50, 0.14);
-  --veil: rgba(246, 251, 240, 0.88);
-  --card: rgba(255, 255, 255, 0.86);
-}
+/* Colour values are NOT set here. They come from apps/shared/tokens.js (shared with the
+   mobile app) and are applied as CSS variables on .site by src/theme.js:
+   --bg --bg2 --solid --pop --ink --mute --line --acc --acc2 --red --btnink
+   --ok --warn --bad --ondanger --info --neutral --veil --card --tint --sh --shade */
 
 /* ---------- 2. Basics ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; display: block; background: #0e2217; }
+body { margin: 0; display: block; } /* background is set from the tokens in App.jsx */
 #root { max-width: none; margin: 0; padding: 0; text-align: left; display: block; }
 
 .site {
@@ -213,7 +170,7 @@ main .glass { background: var(--card); backdrop-filter: none; -webkit-backdrop-f
 .btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn.ghost:hover { background: var(--bg2); filter: none; }
 .btn.staff { background: transparent; color: var(--ink); border-color: var(--line); }
-.btn.danger { background: var(--bad); color: #fff; }
+.btn.danger { background: var(--bad); color: var(--ondanger); }
 .btn.small-btn { padding: 5px 11px; font-size: 0.85rem; }
 .filebtn { cursor: pointer; }
 
@@ -264,10 +221,12 @@ label.inline { display: flex; align-items: center; gap: 8px; margin: 0; }
   background: color-mix(in srgb, var(--c) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
 }
-.chip-approved, .chip-approve, .chip-least-concern, .chip-active, .chip-resolved, .chip-low, .chip-insert { --c: var(--ok); }
-.chip-synced, .chip-near-threatened, .chip-vulnerable, .chip-medium, .chip-acknowledged, .chip-returned, .chip-return, .chip-unused, .chip-update { --c: var(--warn); }
-.chip-rejected, .chip-reject, .chip-endangered, .chip-high, .chip-open, .chip-faulty, .chip-delete { --c: var(--bad); }
-.chip-queued, .chip-assigned { --c: var(--info); }
+/* One meaning per colour, the same as STATUS_TONE in apps/shared/tokens.js */
+.chip-approved, .chip-approve, .chip-least-concern, .chip-active, .chip-resolved, .chip-insert { --c: var(--ok); }
+.chip-synced, .chip-assigned { --c: var(--info); }
+.chip-near-threatened, .chip-vulnerable, .chip-medium, .chip-acknowledged, .chip-returned, .chip-return, .chip-update { --c: var(--warn); }
+.chip-rejected, .chip-reject, .chip-endangered, .chip-high, .chip-open, .chip-faulty, .chip-delete, .chip-retired { --c: var(--bad); }
+/* draft, queued, unused, offline and low use the default --neutral */
 
 .pill {
   padding: 6px 14px; border-radius: 99px; white-space: nowrap;

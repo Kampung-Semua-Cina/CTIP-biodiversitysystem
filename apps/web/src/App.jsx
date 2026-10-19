@@ -2,13 +2,14 @@
 // Needs one extra package:  npm i qrcode.react
 // Styles are in App.css. Sample data is in data.js. Who-can-do-what is in permissions.js.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 import StoreProvider from "./StoreProvider.jsx";
 import { useStore } from "./store.js";
 import { useRoute } from "./useRoute.js";
 import { can } from "./permissions.js";
+import { themeVars, pageBackground } from "./theme.js";
 
 import { Navbar, Drawer, BottomBar, Footer } from "./components/Chrome.jsx";
 import RoleSwitch from "./components/RoleSwitch.jsx";
@@ -72,13 +73,19 @@ function Site() {
   const unread = me ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length : 0;
   const menuOpen = menuAt === seg + arg;
   const toggleTheme = () => setLight(!light);
+  const theme = light ? "light" : "dark";
 
-  // Light/dark colours are switched with data-theme (see App.css).
+  // The page behind .site (overscroll, print margins) uses the same ground colour.
+  useEffect(() => {
+    document.body.style.background = pageBackground(theme);
+  }, [theme]);
+
+  // Light/dark colours come from apps/shared/tokens.js as CSS variables (see theme.js).
   const needs = NEEDS[seg];
   const page = needs && !can(role, needs) ? <NoAccess /> : renderPage(seg, arg);
 
   return (
-    <div className="site" data-theme={light ? "light" : "dark"}>
+    <div className="site" data-theme={theme} style={themeVars(theme)}>
       <div className="bg" />
       <RoleSwitch role={role} setRole={setRole} />
       <Navbar seg={seg} role={role} me={me} unread={unread} light={light} onTheme={toggleTheme}

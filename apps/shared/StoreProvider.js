@@ -93,6 +93,28 @@ export default function StoreProvider({ children }) {
     }));
   };
 
+  // A return visit to a plant that is already tagged: a new observation of the same specimen.
+  // Supabase: insert into observations (and observation_photos) with a client idempotency key.
+  const addRevisit = ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
+    const obsId = uid();
+    const now = nowIso();
+    const plant = db.plants.find((p) => p.id === specimen_id);
+    const obs = {
+      id: obsId, specimen_id, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: "mobile", last_synced_at: now,
+    };
+    const added = (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false }));
+    const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${plant?.qr_id || "A plant"} was revisited.`, "observations", obsId));
+    setDb((d) => ({
+      ...d,
+      plants: d.plants.map((p) => (p.id === specimen_id ? { ...p, photos: [...(p.photos || []), ...added] } : p)),
+      observations: [...d.observations, obs],
+      notifications: [...notes_, ...d.notifications],
+      audit: [auditRow("observations", obsId, "insert", null, { specimen_id, status: "synced" }), ...d.audit],
+    }));
+    return obsId;
+  };
+
   // The officer confirms which species a tagged plant is (specimens.species_id).
   const setPlantSpecies = (plantId, speciesId) => {
     const plant = db.plants.find((p) => p.id === plantId);
@@ -245,7 +267,7 @@ export default function StoreProvider({ children }) {
   const value = {
     db, me, role, toast, notify,
     setRole, logout, login, signIn, changePassword,
-    setPlantPhotos, addPlant, setPlantSpecies,
+    setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
     saveSpecies, togglePublish, deleteSpecies,
     addUser, updateUser,
