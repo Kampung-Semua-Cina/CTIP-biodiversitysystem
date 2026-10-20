@@ -16,15 +16,19 @@ export const ROLE_LABEL = {
   admin: "Administrator",
 };
 
+// "allPlants": the dashboard lists everyone's records. Botanists only get their own.
 // "pending" doubles as "is staff": unpublished plants, exact endangered locations, conservation status.
 const PERMS = {
   visitor: [],
   botanist: ["bell", "add", "editPhotos", "pending", "records", "discuss"],
-  officer: ["bell", "editPhotos", "pending", "review", "reports", "species", "monitor", "tags", "discuss"],
-  admin: ["bell", "pending", "monitor", "users", "audit", "tags", "discuss"],
+  officer: ["bell", "editPhotos", "pending", "allPlants", "review", "reports", "species", "monitor", "tags", "discuss"],
+  admin: ["bell", "pending", "allPlants", "species", "monitor", "users", "audit", "tags", "discuss"],
 };
 
 export const can = (role, perm) => (PERMS[role] || []).includes(perm);
+
+// Each staff role has its own dashboard at #/dashboard. Visitors have none.
+export const DASHBOARD_LABEL = { botanist: "Botanist dashboard", officer: "Officer dashboard", admin: "Admin dashboard" };
 
 // Heading above the staff links in the sidebar.
 export const TOOLS_LABEL = { botanist: "Botanist tools", officer: "Officer tools", admin: "Admin tools" };
@@ -47,6 +51,7 @@ const STAFF_LINKS = {
   ],
   admin: [
     { to: "/users", label: "Users", icon: "users" },
+    { to: "/species", label: "Species", icon: "leaf" },
     { to: "/monitoring", label: "Monitoring", icon: "activity", badge: "alerts" },
     { to: "/discussion", label: "Discussion", icon: "chat" },
     { to: "/tags", label: "QR tags", icon: "qr" },

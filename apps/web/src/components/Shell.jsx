@@ -1,6 +1,6 @@
 // apps/web/src/components/Shell.jsx
 import Icon from "./Icon.jsx";
-import { staffLinks, TOOLS_LABEL } from "../permissions.js";
+import { can, staffLinks, TOOLS_LABEL } from "../permissions.js";
 import { staffCounts } from "../selectors.js";
 import { useStore } from "../store.js";
 
@@ -17,7 +17,7 @@ export default function Shell({ seg, children, plain }) {
     <div className="shell">
       <aside className="glass side" aria-label="Dashboard menu">
         <a href="#/dashboard" className={isOn("/dashboard") ? "on" : ""} aria-current={isOn("/dashboard") ? "page" : undefined}>
-          <Icon name="file" size={18} /> Tagged plants
+          <Icon name="file" size={18} /> {can(role, "allPlants") ? "Tagged plants" : "My plants"}
         </a>
         <a href="#/plants">
           <Icon name="leaf" size={18} /> Species catalogue

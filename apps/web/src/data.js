@@ -34,11 +34,11 @@ const readings = (base, amp, spikeAt, spike, moist) =>
 
 export const seed = {
   profiles: [
-    { id: "u1", full_name: "Ahmad Faizal", email: "admin@sfc.my", role: "admin", is_active: true, created_at: "2026-08-01T02:00:00Z" },
-    { id: "u2", full_name: "Siti Aminah", email: "botanist@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T02:00:00Z" },
-    { id: "u3", full_name: "Jonathan Rajang", email: "jonathan@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T03:00:00Z" },
-    { id: "u4", full_name: "Dayang Norsyafiqah", email: "officer@sfc.my", role: "officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
-    { id: "u5", full_name: "Lim Chee Wei", email: "cheewei@sfc.my", role: "botanist", is_active: false, created_at: "2026-08-10T02:00:00Z" },
+    { id: "u1", full_name: "Ahmad Faizal", username: "ahmad.faizal", phone: "", avatar_url: null, email: "admin@sfc.my", role: "admin", is_active: true, created_at: "2026-08-01T02:00:00Z" },
+    { id: "u2", full_name: "Siti Aminah", username: "siti.aminah", phone: "", avatar_url: null, email: "botanist@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T02:00:00Z" },
+    { id: "u3", full_name: "Jonathan Rajang", username: "jonathan", phone: "", avatar_url: null, email: "jonathan@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T03:00:00Z" },
+    { id: "u4", full_name: "Dayang Norsyafiqah", username: "dayang", phone: "", avatar_url: null, email: "officer@sfc.my", role: "officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
+    { id: "u5", full_name: "Lim Chee Wei", username: "cheewei", phone: "", avatar_url: null, email: "cheewei@sfc.my", role: "botanist", is_active: false, created_at: "2026-08-10T02:00:00Z" },
   ],
 
   species: [

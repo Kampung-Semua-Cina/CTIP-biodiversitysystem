@@ -12,9 +12,9 @@ const BLANK = {
   conservation_status: "least concern", cultural_significance: "",
 };
 
-// Officer page for the species encyclopedia: add, edit, publish, delete.
+// Officer and admin page for the species encyclopedia: add, edit, publish, delete, restore.
 export default function Species() {
-  const { db, saveSpecies, togglePublish, deleteSpecies, notify } = useStore();
+  const { db, saveSpecies, togglePublish, deleteSpecies, restoreSpecies, notify } = useStore();
   const [q, setQ] = useState("");
   const [form, setForm] = useState(null); // species being edited, or BLANK for a new one
   const [removing, setRemoving] = useState(null);
@@ -22,6 +22,19 @@ export default function Species() {
   const list = db.species
     .filter((s) => !s.is_deleted)
     .filter((s) => `${s.scientific_name} ${s.common_name} ${s.family}`.toLowerCase().includes(q.toLowerCase()));
+
+  const deleted = db.species.filter((s) => s.is_deleted);
+
+  const remove = () => {
+    notify(deleteSpecies(removing.id) ? "Species deleted. You can restore it below." : "Only officers and admins can delete species");
+    setRemoving(null);
+  };
+  const restore = (s) => {
+    if (db.species.some((x) => !x.is_deleted && x.scientific_name.toLowerCase() === s.scientific_name.toLowerCase())) {
+      return notify("A species with this name already exists");
+    }
+    notify(restoreSpecies(s.id) ? "Species restored" : "Only officers and admins can restore species");
+  };
 
   const save = (e) => {
     e.preventDefault();
@@ -75,6 +88,27 @@ export default function Species() {
         </div>
       )}
 
+      {deleted.length > 0 && (
+        <>
+          <h3 className="sub"><Icon name="trash" size={18} /> Recently deleted</h3>
+          <p className="mute small">Hidden from every list and the public pages. Restore one to bring it back as it was.</p>
+          <div className="tablewrap">
+            <table>
+              <thead><tr><th>Species</th><th>Family</th><th><span className="sr">Actions</span></th></tr></thead>
+              <tbody>
+                {deleted.map((s) => (
+                  <tr key={s.id}>
+                    <td><b>{s.common_name || s.scientific_name}</b><small className="sci block">{s.scientific_name}</small></td>
+                    <td>{s.family}</td>
+                    <td className="actions"><button className="btn ghost" onClick={() => restore(s)}>Restore</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       {form && (
         <Modal title={form.id ? "Edit species" : "Add species"} onClose={() => setForm(null)}>
           <form onSubmit={save}>
@@ -98,9 +132,9 @@ export default function Species() {
 
       {removing && (
         <Modal title="Delete species" onClose={() => setRemoving(null)}>
-          <p>Delete <b>{removing.scientific_name}</b>?{inUse > 0 && ` ${inUse} tagged plant${inUse > 1 ? "s use" : " uses"} it and will show as unconfirmed.`} Past records are kept.</p>
+          <p>Delete <b>{removing.scientific_name}</b>?{inUse > 0 && ` ${inUse} tagged plant${inUse > 1 ? "s use" : " uses"} it and will show as unconfirmed.`} Past records are kept, and you can restore it later.</p>
           <div className="row">
-            <button className="btn danger" onClick={() => { deleteSpecies(removing.id); setRemoving(null); notify("Species deleted"); }}>Delete</button>
+            <button className="btn danger" onClick={remove}>Delete</button>
             <button className="btn ghost" onClick={() => setRemoving(null)}>Cancel</button>
           </div>
         </Modal>
