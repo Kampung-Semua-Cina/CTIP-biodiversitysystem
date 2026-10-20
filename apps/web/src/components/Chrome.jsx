@@ -8,6 +8,10 @@ import { initials } from "../../../shared/utils.js";
 // "Plants" stays highlighted on species, plant and table pages too.
 const navOn = (to, seg) => seg === to.slice(1) || (to === "/plants" && ["tag", "dashboard"].includes(seg));
 
+// Signed-in staff get the staff dashboard from "Plants" (the same as the phone bottom bar);
+// visitors get the public species catalogue. Staff reach the catalogue from the sidebar.
+const navTo = (to, role) => (to === "/plants" && role !== "visitor" ? "/dashboard" : to);
+
 // The parts of the page that stay the same everywhere:
 // top navbar, phone side menu, phone bottom bar, footer, and the theme switch.
 
@@ -70,7 +74,7 @@ export function Navbar({ seg, role, me, unread, mode, theme, onMode, onMenu, onL
         </a>
         <nav className="links" aria-label="Main">
           {NAV.map((l) => (
-            <a key={l.to} href={"#" + l.to} className={navOn(l.to, seg) ? "on" : ""} aria-current={navOn(l.to, seg) ? "page" : undefined}>{l.label}</a>
+            <a key={l.to} href={"#" + navTo(l.to, role)} className={navOn(l.to, seg) ? "on" : ""} aria-current={navOn(l.to, seg) ? "page" : undefined}>{l.label}</a>
           ))}
         </nav>
         <div className="right">
@@ -97,7 +101,15 @@ export function Navbar({ seg, role, me, unread, mode, theme, onMode, onMenu, onL
 }
 
 export function Drawer({ role, mode, onMode, onClose }) {
-  const links = [{ to: "/", label: "Home", icon: "home" }, { to: "/plants", label: "Plants", icon: "leaf" }, { to: "/map", label: "Map", icon: "map" }, { to: "/about", label: "About us", icon: "info" }, { to: "/contact", label: "Contact", icon: "chat" }];
+  const staff = role !== "visitor";
+  const links = [
+    { to: "/", label: "Home", icon: "home" },
+    staff && { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/plants", label: staff ? "Species catalogue" : "Plants", icon: "leaf" },
+    { to: "/map", label: "Map", icon: "map" },
+    { to: "/about", label: "About us", icon: "info" },
+    { to: "/contact", label: "Contact", icon: "chat" },
+  ].filter(Boolean);
   return (
     <div className="scrim" onClick={onClose}>
       <aside className="drawer" onClick={(e) => e.stopPropagation()} aria-label="Menu">
@@ -130,7 +142,7 @@ export function BottomBar({ role, seg, unread }) {
   );
 }
 
-export function Footer({ mode, onMode }) {
+export function Footer({ role, mode, onMode }) {
   return (
     <footer className="foot">
       <div className="footinner">
@@ -138,7 +150,7 @@ export function Footer({ mode, onMode }) {
         <span className="footlinks">
           <a href="#/about">About us</a>
           <a href="#/contact">Contact</a>
-          <a href="#/staff">Staff sign in</a>
+          {role === "visitor" ? <a href="#/staff">Staff sign in</a> : <a href="#/dashboard">Dashboard</a>}
         </span>
         <ThemeSwitch mode={mode} onMode={onMode} />
       </div>
