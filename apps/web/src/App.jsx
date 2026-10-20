@@ -2,7 +2,7 @@
 // Needs one extra package:  npm i qrcode.react
 // Styles are in App.css and theme.js. Sample data, the store and who-can-do-what live in apps/shared.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 import StoreProvider from "../../shared/StoreProvider.js";
@@ -73,6 +73,11 @@ function Site() {
   const unread = me ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length : 0;
   const menuOpen = menuAt === seg + arg;
   // Light/dark colours come from apps/shared/tokens.js as CSS variables (see theme.js).
+  // A new page starts at the top (the hash router does not do this by itself).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [seg, arg]);
+
   const needs = NEEDS[seg];
   const page = needs && !can(role, needs) ? <NoAccess /> : renderPage(seg, arg);
 
@@ -83,10 +88,11 @@ function Site() {
         onMenu={() => setMenuAt(seg + arg)} onLogout={() => { logout(); window.location.hash = "/"; }} />
       {menuOpen && <Drawer role={role} mode={mode} onMode={setMode} onClose={() => setMenuAt(null)} />}
 
-      <main id="main">{page}</main>
+      {/* key: each page change remounts <main>, which replays its entrance animation */}
+      <main id="main" key={seg + "/" + arg}>{page}</main>
 
       <BottomBar role={role} seg={seg} unread={unread} />
-      <Footer mode={mode} onMode={setMode} />
+      <Footer role={role} mode={mode} onMode={setMode} />
       {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );

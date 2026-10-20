@@ -3,7 +3,8 @@
 // and keeps track of which theme to show (Light, Dark, or follow the device).
 // Colour, type, spacing and radius values live only in tokens.js. Never put a hex value here.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { colors, alpha, typeScale, space, radius, fonts } from "../../shared/tokens.js";
+import { flushSync } from "react-dom";
+import { colors, alpha, typeScale, space, radius, fonts, motion } from "../../shared/tokens.js";
 
 // ---------- CSS variables ----------
 export function themeVars(theme) {
@@ -35,6 +36,8 @@ export function themeVars(theme) {
     "--map-line": c.mapLine,
     // Depth: dark mode steps surfaces up in lightness; light mode adds one soft shadow.
     "--shadow": light ? `0 1px 2px ${alpha(c.ink, 0.06)}, 0 8px 24px ${alpha(c.ink, 0.07)}` : "none",
+    // A hovered card lifts a little: a deeper shadow in light mode, a brighter border in dark mode.
+    "--shadow-lift": light ? `0 2px 4px ${alpha(c.ink, 0.06)}, 0 14px 32px ${alpha(c.ink, 0.11)}` : "none",
     // Behind popups and the phone menu: the near-black camera colour, so it dims both themes alike.
     "--scrim": alpha(c.camera, light ? 0.4 : 0.6),
   };
@@ -50,6 +53,10 @@ export function themeVars(theme) {
   }
   for (const [k, v] of Object.entries(space)) vars[`--s-${k}`] = v + "px";
   for (const [k, v] of Object.entries(radius)) vars[`--r-${k}`] = v + "px";
+  // Motion: --m-fast, --m-base, --m-slow durations and the two easing curves.
+  for (const k of ["fast", "base", "slow"]) vars[`--m-${k}`] = motion[k] + "ms";
+  vars["--ease"] = motion.ease;
+  vars["--ease-io"] = motion.easeInOut;
   vars["--f-display"] = `${fonts.display}, Georgia, serif`;
   vars["--f-text"] = `${fonts.text}, system-ui, sans-serif`;
   vars["--f-mono"] = `"${fonts.mono}", ui-monospace, Menlo, Consolas, monospace`;
@@ -88,7 +95,18 @@ export function useThemeMode() {
   const theme = mode === "device" ? device : mode;
 
   const setMode = (next) => {
-    setModeState(next);
+    // The whole page crossfades from the old theme to the new one in one smooth step
+    // (View Transitions API). Browsers without it, or with reduced motion on, switch at once.
+    // .theme-switching pauses the per-element colour transitions so they don't fade twice.
+    const apply = () => flushSync(() => setModeState(next));
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!document.startViewTransition || calm) {
+      apply();
+    } else {
+      const root = document.documentElement;
+      root.classList.add("theme-switching");
+      document.startViewTransition(apply).finished.finally(() => root.classList.remove("theme-switching"));
+    }
     try {
       window.localStorage.setItem(KEY, next);
     } catch {

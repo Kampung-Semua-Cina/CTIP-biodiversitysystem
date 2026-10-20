@@ -721,9 +721,82 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
   .speciesgrid, .plantgrid { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ---------- 12. Motion ----------
+   Short and calm: things fade and settle into place, nothing bounces.
+   Durations and curves come from `motion` in tokens.js (--m-fast 120ms, --m-base 200ms,
+   --m-slow 320ms, --ease, --ease-io). Everything here is switched off when the device asks
+   for reduced motion. Entrances use fill-mode `backwards`: once finished they stop
+   applying, so a hover lift still works and a popup (position: fixed) is never trapped
+   inside a transformed parent. */
 @media (prefers-reduced-motion: no-preference) {
-  .drawer { animation: slide-in 0.22s ease-out; }
-  @keyframes slide-in { from { transform: translateX(-100%); } }
+  /* Colour, border and shadow changes: hover, selection, and switching theme */
+  .site, .top, .foot, .protobar, .bottom, .glass, .side a, .links a, .drawer a,
+  .btn, .pill, .ic, .fam, .chip, .tabs button, .seg button, .themeswitch button, .roleswitch button,
+  .item, .rqcard, .note, .thumbnail, .switch, .tagpill, .record, .post,
+  .site input, .site select, .site textarea {
+    transition:
+      background-color var(--m-base) var(--ease-io), border-color var(--m-base) var(--ease-io),
+      color var(--m-base) var(--ease-io), box-shadow var(--m-base) var(--ease-io),
+      opacity var(--m-base) var(--ease-io), transform var(--m-fast) var(--ease);
+  }
+  .switch i { transition: transform var(--m-base) var(--ease), background-color var(--m-base) var(--ease-io); }
+
+  /* Clickable cards lift a little on hover */
+  a.glass:hover, .rqcard:hover, button.nodecard:hover, .topic:hover, .note:hover {
+    transform: translateY(-2px); box-shadow: var(--shadow-lift);
+  }
+  /* Buttons and pills press in */
+  .btn:active:not(:disabled), .pill:active, .ic:active, .themeswitch button:active, .rqcard:active { transform: scale(0.97); }
+  a.glass:active { transform: translateY(0); }
+
+  /* A new page rises into place, its sections one after another */
+  main > * { animation: rise var(--m-slow) var(--ease) backwards; }
+  main > :nth-child(2) { animation-delay: 40ms; }
+  main > :nth-child(3) { animation-delay: 80ms; }
+  main > :nth-child(4) { animation-delay: 120ms; }
+  main > :nth-child(n + 5) { animation-delay: 160ms; }
+
+  /* Cards in a grid or list come in one after another */
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .views, .grid.g3) > * {
+    animation: rise var(--m-slow) var(--ease) backwards;
+  }
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .grid.g3) > :nth-child(2) { animation-delay: 50ms; }
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .grid.g3) > :nth-child(3) { animation-delay: 100ms; }
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .grid.g3) > :nth-child(4) { animation-delay: 150ms; }
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .grid.g3) > :nth-child(5) { animation-delay: 200ms; }
+  :is(.plantgrid, .speciesgrid, .specieslist, .steps3, .tiles, .reviewlist, .taggrid, .notes, .grid.g3) > :nth-child(n + 6) { animation-delay: 240ms; }
+  .views > * { animation-name: fade-in; }
+
+  /* Panels that swap in place: the picked review record, plant tabs, the map's picked plant */
+  .rdetail, .tabpanel > *, .card-row, .shellcard > * { animation: fade-in var(--m-base) var(--ease-io) backwards; }
+
+  /* Popovers, popups, menus and messages */
+  .popover { transform-origin: top right; animation: pop-in var(--m-base) var(--ease) backwards; }
+  .modal, .scrim { animation: fade-in var(--m-base) var(--ease-io) backwards; }
+  .modal .pop { animation: pop-in var(--m-slow) var(--ease) backwards; }
+  .drawer { animation: slide-in var(--m-slow) var(--ease) backwards; }
+  .toast { animation: toast-in var(--m-slow) var(--ease) backwards; }
+  .badge, .count { animation: pop-in var(--m-base) var(--ease) backwards; }
+
+  /* Report bars grow from the left */
+  .bars .bar { transform-origin: left center; animation: grow var(--m-slow) var(--ease) 120ms backwards; }
+
+  /* Photo slideshow: the new photo fades in */
+  .slide img { animation: fade-in var(--m-slow) var(--ease-io) backwards; }
+
+  /* Theme switch: one crossfade of the whole page (see setMode in theme.js) */
+  .theme-switching *, .theme-switching *::before, .theme-switching *::after { transition: none !important; }
+  /* The old page stays fully visible underneath and the new theme fades in on top of it,
+     so the page never dims halfway through. 320ms + easeInOut = motion.slow / motion.easeInOut. */
+  ::view-transition-old(root) { animation: none; }
+  ::view-transition-new(root) { animation: fade-in 320ms cubic-bezier(0.4, 0, 0.2, 1); mix-blend-mode: normal; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pop-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+  @keyframes slide-in { from { transform: translateX(-100%); } to { transform: none; } }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: none; } }
 }
 
 @media print {

@@ -133,3 +133,14 @@ export const typeScale = {
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 56 };
 export const radius = { tag: 6, control: 10, card: 14, sheet: 20, pill: 999 };
 export const touch = { phone: 48, web: 44 };
+
+// ---------- motion ----------
+// Short and calm: things fade and settle into place, nothing bounces. Durations in ms.
+// Anything that moves must respect the device's "reduce motion" setting.
+export const motion = {
+  fast: 120, // hover, press, colour changes
+  base: 200, // popovers, menus, chips, theme change
+  slow: 320, // page and panel entrances
+  ease: "cubic-bezier(0.2, 0, 0, 1)", // settle into place (entrances)
+  easeInOut: "cubic-bezier(0.4, 0, 0.2, 1)", // colour and size changes
+};
