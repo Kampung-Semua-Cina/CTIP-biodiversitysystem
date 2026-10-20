@@ -1,6 +1,6 @@
 // apps/web/src/pages/Login.jsx
 import { useState } from "react";
-import { useStore } from "../store.js";
+import { useStore } from "../../../shared/store.js";
 import { go } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
 
@@ -76,39 +76,39 @@ export default function Login() {
     <section className="glass pad narrow">
       {mode === "signin" && (
         <form onSubmit={submit}>
-          <h2>Staff login</h2>
+          <h1>Staff sign in</h1>
           <p className="mute">
             For botanists, conservation officers and admins. Sign in with the email your admin registered for you.
           </p>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
           <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
-          <div className="row wrap">
-            <button className="btn" type="submit">Sign in</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("change")}>Change password</button>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Change password</button>
           </div>
         </form>
       )}
 
       {mode === "change" && (
         <form onSubmit={change}>
-          <h2>Change password</h2>
+          <h1>Change password</h1>
           <p className="mute">Enter your email and choose a new password.</p>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
           {newFields}
-          <div className="row wrap">
-            <button className="btn" type="submit">Save new password</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>Back to sign in</button>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit"><Icon name="check" size={18} /> Save new password</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}><Icon name="chevL" size={18} /> Back to sign in</button>
           </div>
         </form>
       )}
 
       {mode === "first" && (
         <form onSubmit={change}>
-          <h2>Set a new password</h2>
+          <h1>Set a new password</h1>
           <p className="mute">You signed in with the default password. Choose a new one now, or keep it for later.</p>
           {newFields}
-          <div className="row wrap">
-            <button className="btn" type="submit">Change password</button>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit"><Icon name="check" size={18} /> Change password</button>
             <button className="btn ghost" type="button" onClick={skip}>Not now</button>
           </div>
         </form>

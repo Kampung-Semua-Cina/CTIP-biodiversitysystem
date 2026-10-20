@@ -2,11 +2,11 @@
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { nameOf, plantView } from "../selectors.js";
-import { ROLE_LABEL } from "../permissions.js";
-import { fmtDate, fmtDateTime } from "../utils.js";
+import { Chip, Empty, Mono } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { nameOf, plantView } from "../../../shared/selectors.js";
+import { ROLE_LABEL } from "../../../shared/permissions.js";
+import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
 import { go } from "../useRoute.js";
 
 // Discussion board for botanists, officers and admins, built on observation_comments.
@@ -56,7 +56,7 @@ export default function Discussion({ arg }) {
           return (
             <li key={t.obs.id}>
               <button className="record topic" onClick={() => go("/discussion/" + t.obs.id)}>
-                <b>{t.title}</b>
+                <b>{t.plant.name}</b> <Mono className="mute">{t.plant.qr_id}</Mono>
                 <span className="block">{t.posts[0].body}</span>
                 <span className="meta">
                   <span>Started by {nameOf(db, t.posts[0].author_id)}</span>
@@ -91,7 +91,7 @@ function NewTopic({ observations }) {
 
   return (
     <form className="addform" onSubmit={post}>
-      <h3 className="sub"><Icon name="plus" size={18} /> New post</h3>
+      <h3><Icon name="plus" size={18} /> New post</h3>
       <label>
         Observation
         <select value={obsId} onChange={(e) => setObsId(e.target.value)}>
@@ -104,7 +104,7 @@ function NewTopic({ observations }) {
         </select>
       </label>
       <label>Message<textarea rows="3" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Ask a question or share an update" /></label>
-      <p><button className="btn" type="submit">Post</button></p>
+      <p><button className="btn" type="submit"><Icon name="send" size={18} /> Post</button></p>
     </form>
   );
 }
@@ -113,7 +113,7 @@ function NewTopic({ observations }) {
 function Topic({ topic }) {
   const { db, me, addComment, notify } = useStore();
   const [reply, setReply] = useState("");
-  const { obs, plant, title, posts } = topic;
+  const { obs, plant, posts } = topic;
 
   const send = (e) => {
     e.preventDefault();
@@ -125,11 +125,11 @@ function Topic({ topic }) {
 
   return (
     <>
-      <a href="#/discussion" className="small"><Icon name="chevL" size={14} /> All topics</a>
-      <h2>{title}</h2>
+      <a href="#/discussion" className="backlink"><Icon name="chevL" size={16} /> All topics</a>
+      <h2>{plant.name} <Mono className="mute">{plant.qr_id}</Mono></h2>
       <p className="mute">
         Observation recorded by {nameOf(db, obs.recorded_by)} on {fmtDate(obs.observed_at)} · <Chip value={obs.status} />{" "}
-        <a href={"#/tag/" + plant.qr_id}>View plant</a>
+        <a className="textlink" href={"#/tag/" + plant.qr_id}>View plant <Icon name="arrowR" size={16} /></a>
       </p>
 
       <ul className="posts">
@@ -151,7 +151,7 @@ function Topic({ topic }) {
 
       <form onSubmit={send}>
         <label>{posts.length ? "Reply" : "Message"}<textarea rows="3" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Write a reply" /></label>
-        <p><button className="btn" type="submit">{posts.length ? "Reply" : "Post"}</button></p>
+        <p><button className="btn" type="submit"><Icon name="send" size={18} /> {posts.length ? "Reply" : "Post"}</button></p>
       </form>
     </>
   );

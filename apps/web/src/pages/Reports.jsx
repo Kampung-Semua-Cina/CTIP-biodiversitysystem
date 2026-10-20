@@ -2,11 +2,12 @@
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { visiblePlants } from "../selectors.js";
-import { CONSERVATION } from "../data.js";
-import { download, label, toCsv } from "../utils.js";
+import { Chip, Empty, Mono, Pills } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { visiblePlants } from "../../../shared/selectors.js";
+import { CONSERVATION } from "../../../shared/data.js";
+import { download, label, toCsv } from "../../../shared/utils.js";
+import { STATUS_TEXT } from "../../../shared/tokens.js";
 
 // Officer reports: counts, a filterable table, and a CSV export of what is on screen.
 export default function Reports() {
@@ -58,15 +59,17 @@ export default function Reports() {
         })}
       </ul>
 
-      <div className="row wrap gap-top">
-        <select value={conservation} onChange={(e) => setConservation(e.target.value)} aria-label="Conservation status">
-          <option value="all">All conservation status</option>
-          {CONSERVATION.map((c) => <option key={c} value={c}>{label(c)}</option>)}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Record status">
-          <option value="all">All record status</option>
-          {["approved", "synced", "returned", "rejected", "draft", "queued"].map((s) => <option key={s} value={s}>{label(s)}</option>)}
-        </select>
+      <div className="filters gap-top">
+        <div>
+          <p className="overline">Conservation status</p>
+          <Pills label="Conservation status" value={conservation} onChange={setConservation}
+            items={[{ key: "all", label: "Any" }, ...CONSERVATION.map((c) => ({ key: c, label: label(c) }))]} />
+        </div>
+        <div>
+          <p className="overline">Record status</p>
+          <Pills label="Record status" value={status} onChange={setStatus}
+            items={[{ key: "all", label: "Any" }, ...["approved", "synced", "returned", "rejected", "draft", "queued"].map((s) => ({ key: s, label: STATUS_TEXT[s] || label(s) }))]} />
+        </div>
       </div>
 
       {rows.length === 0 ? (
@@ -75,18 +78,17 @@ export default function Reports() {
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>Tag</th><th>Plant</th><th>Family</th><th>Conservation</th><th>Record</th><th>Height</th><th>Location</th></tr>
+              <tr><th>Tag</th><th>Plant and family</th><th>Conservation</th><th>Record</th><th>Height</th><th>Location</th></tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td className="nowrap">{p.qr_id}</td>
-                  <td><a href={"#/tag/" + p.qr_id}>{p.name}</a><small className="sci block">{p.scientific}</small></td>
-                  <td>{p.species?.family || "-"}</td>
+                  <td className="nowrap"><Mono>{p.qr_id}</Mono></td>
+                  <td><a href={"#/tag/" + p.qr_id}>{p.name}</a><small className="mute block">{p.scientific && <i className="sci">{p.scientific}</i>}{p.species?.family ? `${p.scientific ? " · " : ""}${p.species.family}` : ""}</small></td>
                   <td>{p.species ? <Chip value={p.conservation} /> : "-"}</td>
                   <td><Chip value={p.status} /></td>
-                  <td>{p.height_cm != null ? `${p.height_cm} cm` : "-"}</td>
-                  <td>{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</td>
+                  <td className="nowrap">{p.height_cm != null ? `${p.height_cm} cm` : "-"}</td>
+                  <td className="nowrap"><Mono>{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</Mono></td>
                 </tr>
               ))}
             </tbody>

@@ -3,8 +3,9 @@ import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Shell from "../components/Shell.jsx";
-import { useStore } from "../store.js";
-import { tagUrl } from "../selectors.js";
+import { Mono } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { tagUrl } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
 
 // Botanist form. Step 1 binds a QR tag to the plant (scan, pick an unused tag, or generate a new one).
@@ -81,7 +82,7 @@ export default function AddPlant() {
           <div className="qrbox">
             <div className="qrwhite"><QRCodeSVG value={tagUrl(qr)} size={96} /></div>
             <div>
-              <b>{qr}</b>
+              <b className="tagid">{qr}</b>
               <p className="mute small">This tag will be bound to the plant when you save.</p>
               <button type="button" className="btn ghost small-btn" onClick={() => window.print()}><Icon name="printer" size={16} /> Print tag</button>
             </div>
@@ -108,10 +109,10 @@ export default function AddPlant() {
         <label>Location</label>
         <div className="row wrap">
           <button type="button" className="btn ghost" onClick={locate}><Icon name="pin" size={18} /> Use my location</button>
-          <span className="mute">{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}{spot.acc ? ` (±${spot.acc} m)` : ""}</span>
+          <span className="mute"><Mono>{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}</Mono>{spot.acc ? ` ±${spot.acc} m` : ""}</span>
         </div>
 
-        <p><button className="btn" type="submit">Save plant</button></p>
+        <p className="gap-top"><button className="btn" type="submit"><Icon name="send" size={18} /> Send for review</button></p>
       </form>
     </Shell>
   );

@@ -1,7 +1,8 @@
 // apps/web/src/pages/Notifications.jsx
-import { useStore } from "../store.js";
+import { useStore } from "../../../shared/store.js";
 import { Empty } from "../components/Bits.jsx";
-import { fmtDateTime } from "../utils.js";
+import Icon from "../components/Icon.jsx";
+import { fmtDateTime } from "../../../shared/utils.js";
 import { go } from "../useRoute.js";
 
 // The bell: notifications for the signed-in person (notifications table).
@@ -23,8 +24,8 @@ export default function Notifications() {
   return (
     <section className="glass pad narrow wide-form">
       <div className="row between wrap">
-        <h2>Notifications</h2>
-        {unread > 0 && <button className="btn ghost" onClick={markAllRead}>Mark all as read</button>}
+        <h1>Notifications</h1>
+        {unread > 0 && <button className="btn ghost" onClick={markAllRead}><Icon name="check" size={18} /> Mark all as read</button>}
       </div>
       {mine.length === 0 && <Empty icon="bell">You have no notifications.</Empty>}
       <ul className="plain notes">

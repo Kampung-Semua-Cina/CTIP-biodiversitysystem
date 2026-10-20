@@ -83,3 +83,44 @@ export const tagUrl = (qr) =>
   typeof window !== "undefined" && window.location
     ? `${window.location.origin}${window.location.pathname}#/dashboard/${qr}`
     : `https://daunsense.example/#/dashboard/${qr}`;
+
+export function staffCounts(db, me) {
+  return {
+    review: db.observations.filter((o) => o.status === "synced").length,
+    alerts: db.alerts.filter((a) => a.status === "open").length,
+    returned: me ? db.observations.filter((o) => o.recorded_by === me.id && o.status === "returned").length : 0,
+  };
+}
+
+// ---------- Species catalogue, species page and plant page ----------
+
+// Visits to one tagged plant (observations), newest first. Visitors only see approved visits.
+export function plantVisits(db, plantId, role) {
+  return db.observations
+    .filter((o) => o.specimen_id === plantId && (can(role, "pending") || o.status === "approved"))
+    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+}
+
+// Date of the newest visit, or null.
+export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0]?.observed_at || null;
+
+// One entry per species for the catalogue, with the tagged plants this role can see.
+// Visitors only get published species. Staff also see unpublished ones.
+export function speciesCatalogue(db, role) {
+  const plants = visiblePlants(db, role);
+  return db.species
+    .filter((s) => !s.is_deleted && (can(role, "pending") || s.is_published))
+    .map((s) => {
+      const mine = plants.filter((p) => p.species_id === s.id);
+      return {
+        ...s,
+        name: s.common_name || s.scientific_name,
+        plants: mine,
+        photo: mine.find((p) => p.photos.length)?.photos[0]?.url || null,
+        endangered: s.conservation_status === "endangered",
+      };
+    });
+}
+
+// Plants that are not on the map for this role (endangered for visitors) still count, but have no coords.
+export const mappable = (plants, role) => plants.map((p) => ({ p, c: shownCoords(p, role) })).filter((x) => x.c);

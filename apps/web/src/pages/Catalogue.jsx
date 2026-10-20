@@ -1,24 +1,25 @@
 import { useState } from "react";
 import Icon from "../components/Icon.jsx";
-import Img from "../components/Img.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { can } from "../permissions.js";
-import { speciesCatalogue } from "../selectors.js";
-import { CONSERVATION } from "../data.js";
-import { label } from "../utils.js";
+import PlantCard from "../components/PlantCard.jsx";
+import { Chip, Empty, Pills } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { can } from "../../../shared/permissions.js";
+import { speciesCatalogue } from "../../../shared/selectors.js";
+import { CONSERVATION } from "../../../shared/data.js";
+import { label } from "../../../shared/utils.js";
 
 const PAGE = 12;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // Species catalogue: one card per species (not one per tagged plant), with filters and pages.
-// Everyone can open it. Visitors only get published species and never see conservation status.
+// Everyone can open it. Visitors only get published species. Conservation status shows on every
+// card (Daun design language); only staff get the conservation filter.
 export default function Catalogue() {
   const { db, role } = useStore();
   const staff = can(role, "pending");
   const [q, setQ] = useState("");
-  const [families, setFamilies] = useState([]);
-  const [statuses, setStatuses] = useState([]);
+  const [family, setFamily] = useState("all");
+  const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("name");
   const [view, setView] = useState("grid");
   const [page, setPage] = useState(1);
@@ -28,8 +29,8 @@ export default function Catalogue() {
   const text = (s) => `${s.name} ${s.scientific_name} ${s.family} ${s.genus}`.toLowerCase();
   const searched = all.filter((s) => text(s).includes(q.trim().toLowerCase()));
   const shown = searched
-    .filter((s) => !families.length || families.includes(s.family))
-    .filter((s) => !statuses.length || statuses.includes(s.conservation_status))
+    .filter((s) => family === "all" || s.family === family)
+    .filter((s) => status === "all" || s.conservation_status === status)
     .sort((a, b) => (sort === "tagged" ? b.plants.length - a.plants.length : 0) || a.name.localeCompare(b.name));
 
   // Counts next to each filter come from the searched list, so they match what you'd get.
@@ -41,8 +42,7 @@ export default function Catalogue() {
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages); // filters can shrink the page count
   const slice = shown.slice((cur - 1) * PAGE, cur * PAGE);
-  const toggle = (list, set, v) => { set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]); setPage(1); };
-  const clear = () => { setFamilies([]); setStatuses([]); setQ(""); setPage(1); };
+  const pick = (set) => (v) => { set(v); setPage(1); };
 
   return (
     <>
@@ -71,51 +71,34 @@ export default function Catalogue() {
         </div>
       </div>
 
-      <div className="catalogue">
-        <aside className="facets" aria-label="Filters">
-          <fieldset>
-            <legend>Family</legend>
-            {familyCounts.map(([f, n]) => (
-              <label key={f} className="check"><input type="checkbox" checked={families.includes(f)} onChange={() => toggle(families, setFamilies, f)} /><span className="grow">{f}</span><small className="mute">{n}</small></label>
-            ))}
-          </fieldset>
-          {staff && (
-            <fieldset>
-              <legend>Conservation status</legend>
-              {statusCounts.map(([c, n]) => (
-                <label key={c} className="check"><input type="checkbox" checked={statuses.includes(c)} onChange={() => toggle(statuses, setStatuses, c)} /><span className="grow">{label(c)}</span><small className="mute">{n}</small></label>
-              ))}
-            </fieldset>
-          )}
-          {(families.length > 0 || statuses.length > 0 || q) && <button className="btn ghost small-btn" onClick={clear}>Clear filters</button>}
-        </aside>
+      <div className="filters">
+        <div>
+          <p className="overline">Family</p>
+          <Pills label="Family" value={family} onChange={pick(setFamily)}
+            items={[{ key: "all", label: "All families", count: searched.length }, ...familyCounts.map(([f, n]) => ({ key: f, label: f, count: n }))]} />
+        </div>
+        {staff && (
+          <div>
+            <p className="overline">Conservation status</p>
+            <Pills label="Conservation status" value={status} onChange={pick(setStatus)}
+              items={[{ key: "all", label: "Any status" }, ...statusCounts.map(([c, n]) => ({ key: c, label: label(c), count: n }))]} />
+          </div>
+        )}
+      </div>
 
-        <section className="results">
+      <section className="results">
           <p className="mute small" aria-live="polite">
             {shown.length ? `Showing ${(cur - 1) * PAGE + 1}–${(cur - 1) * PAGE + slice.length} of ${plural(shown.length, "species", "species")}` : "No species match these filters."}
           </p>
-          {!shown.length && <Empty icon="search">Try a different name, or clear the filters.</Empty>}
+          {!shown.length && <Empty icon="search">Try a different name, or pick another family.</Empty>}
           <ul className={"plain " + (view === "grid" ? "speciesgrid" : "specieslist")}>
             {slice.map((s) => (
               <li key={s.id}>
-                <a className="glass speciescard" href={"#/plants/" + s.id}>
-                  {s.photo ? <Img src={s.photo} alt="" /> : <span className="nophoto" aria-hidden="true"><Icon name="leaf" size={32} /></span>}
-                  <div>
-                    <span className="eyebrow small">{s.family}</span>
-                    <b className="block">{s.name}</b>
-                    <i className="mute small">{s.scientific_name}</i>
-                    <span className="cardfoot mute small">
-                      {plural(s.plants.length, "tagged plant", "tagged plants")}
-                      {!staff && s.endangered && s.plants.length > 0 && " · locations hidden"}
-                    </span>
-                    {staff && (
-                      <span className="row wrap">
-                        <Chip value={s.conservation_status} />
-                        {!s.is_published && <Chip value="draft">Not published</Chip>}
-                      </span>
-                    )}
-                  </div>
-                </a>
+                <PlantCard href={"#/plants/" + s.id} photo={s.photo} family={s.family} name={s.name} scientific={s.scientific_name}
+                  conservation={s.conservation_status}
+                  foot={plural(s.plants.length, "tagged plant", "tagged plants") + (!staff && s.endangered && s.plants.length > 0 ? " · locations hidden" : "")}>
+                  {staff && !s.is_published && <Chip value="draft">Not published</Chip>}
+                </PlantCard>
               </li>
             ))}
           </ul>
@@ -129,8 +112,7 @@ export default function Catalogue() {
               <button className="btn ghost" disabled={cur === pages} onClick={() => setPage(cur + 1)} aria-label="Next page"><Icon name="chevR" size={18} /></button>
             </nav>
           )}
-        </section>
-      </div>
+      </section>
     </>
   );
 }

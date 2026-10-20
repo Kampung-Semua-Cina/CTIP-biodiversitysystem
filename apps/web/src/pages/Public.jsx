@@ -1,12 +1,12 @@
 // apps/web/src/pages/Public.jsx
 import { useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
-import { useStore } from "../store.js";
-import { tagUrl, visiblePlants } from "../selectors.js";
+import PlantCard from "../components/PlantCard.jsx";
+import { useStore } from "../../../shared/store.js";
+import { visiblePlants } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
-import { SITE, PARK } from "../site.js";
+import { SITE, PARK } from "../../../shared/site.js";
 
 // Single import for all shared copy
 import {
@@ -16,6 +16,9 @@ import {
   getStaffPageContent,
   getAccessContent,
 } from "../../../shared/publicContent.js";
+
+// Forest photo for the home page hero. Swap for a park photo from Supabase Storage later.
+const HERO_PHOTO = "https://images.unsplash.com/photo-1470058869958-2a77ade41c02?auto=format&fit=crop&w=1400&q=70";
 
 export function Home() {
   const { db, notify } = useStore();
@@ -38,30 +41,34 @@ export function Home() {
 
   return (
     <>
-      <section className="hero2">
-        <div className="hero2-text">
+      <section className="homehero">
+        <div className="homehero-text">
           <p className="eyebrow">{PARK} · Plant records</p>
           <h1>{content.heroTitle}</h1>
           <p className="lede">{content.heroSubtitle}</p>
           <form className="bigsearch" onSubmit={search} role="search">
             <label className="search">
               <Icon name="search" size={20} />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a plant name or tag ID, e.g. NIAH-0001" aria-label="Search plants or tag ID" />
+              <span className="sr">Search plants</span>
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Plant name or tag ID, e.g. NIAH-0001" />
             </label>
             <button className="btn" type="submit">Search</button>
           </form>
-          <p className="row wrap textlinks">
-            <a href="#/plants">Browse all plants →</a>
-            <a href="#/map">Open the plant map →</a>
+          <p className="textlinks">
+            <a href="#/plants">Browse all plants <Icon name="arrowR" size={16} /></a>
+            <a href="#/map">Open the plant map <Icon name="arrowR" size={16} /></a>
           </p>
         </div>
-        <aside className="glass pad scancard">
-          <div className="qrwhite"><QRCodeSVG value={tagUrl("NIAH-0001")} size={92} aria-label="Example plant tag" /></div>
-          <div>
-            <h2>In the forest?</h2>
-            <p className="mute">Every tagged plant carries a QR code. Scan it with your phone camera to open that plant's page here.</p>
+        <div className="homehero-photo">
+          <Img src={HERO_PHOTO} alt="Rainforest canopy" />
+          <div className="scanbadge">
+            <span className="scanicon"><Icon name="qr" size={32} /></span>
+            <span>
+              <b>In the forest?</b>
+              <span>Scan the QR tag on any plant with your phone camera to open its page here.</span>
+            </span>
           </div>
-        </aside>
+        </div>
       </section>
 
       <section className="gap-section" aria-labelledby="how">
@@ -73,7 +80,7 @@ export function Home() {
             ["Published for everyone", "Approved plants appear in the library and on the map. Endangered plants never show an exact location."],
           ].map(([title, text], i) => (
             <li className="glass pad" key={title}>
-              <span className="stepnum">{i + 1}</span>
+              <span className="stepnum" aria-hidden="true">{i + 1}</span>
               <h3>{title}</h3>
               <p className="mute">{text}</p>
             </li>
@@ -85,17 +92,12 @@ export function Home() {
         <section className="gap-section" aria-labelledby="recent">
           <div className="row between wrap">
             <h2 id="recent">{content.recentSectionTitle}</h2>
-            <a className="textlink" href="#/plants">See all plants →</a>
+            <a className="textlink" href="#/plants">See all plants</a>
           </div>
-          <div className="grid g3 gap-top-s">
+          <div className="plantgrid">
             {latest.map((p) => (
-              <a className="glass plantcard2" key={p.id} href={"#/tag/" + p.qr_id}>
-                <Img src={p.photos[0]?.url} alt="" />
-                <div>
-                  <b>{p.name}</b>
-                  <small className="mute block"><i>{p.scientific}</i>{p.species?.family ? ` · ${p.species.family}` : ""}</small>
-                </div>
-              </a>
+              <PlantCard key={p.id} href={"#/tag/" + p.qr_id} photo={p.photos[0]?.url} family={p.species?.family}
+                name={p.name} scientific={p.scientific} conservation={p.conservation} />
             ))}
           </div>
         </section>
@@ -108,7 +110,7 @@ export function About() {
   const content = getAboutContent(SITE, PARK);
   return (
     <section className="glass pad prose">
-      <h2>{content.title}</h2>
+      <h1>{content.title}</h1>
       {content.paragraphs.map((text, idx) => (
         <p key={idx}>{text}</p>
       ))}
@@ -120,7 +122,7 @@ export function Contact() {
   const content = getContactContent();
   return (
     <section className="glass pad prose">
-      <h2>{content.title}</h2>
+      <h1>{content.title}</h1>
       <p>Email: {content.email}</p>
       <p>
         {content.organization}, {content.address}
@@ -135,20 +137,16 @@ export function StaffPage() {
 
   return (
     <section className="glass pad prose narrow">
-      <h2>{content.title}</h2>
+      <h1>{content.title}</h1>
       {me ? (
         <>
           <p>You are signed in as {me.full_name}.</p>
-          <a className="btn" href="#/dashboard">
-            Go to dashboard
-          </a>
+          <a className="btn" href="#/dashboard"><Icon name="dashboard" size={18} /> Go to dashboard</a>
         </>
       ) : (
         <>
           <p>{content.description}</p>
-          <a className="btn" href="#/login">
-            Go to login
-          </a>
+          <a className="btn" href="#/login"><Icon name="user" size={18} /> Go to login</a>
         </>
       )}
       {role === "visitor" && <p className="mute">{content.visitorHint}</p>}
@@ -162,16 +160,12 @@ export function NoAccess() {
 
   return (
     <section className="glass pad prose narrow">
-      <h2>{content.noAccessTitle}</h2>
+      <h1>{content.noAccessTitle}</h1>
       <p>{role === "visitor" ? content.visitorText : content.staffText}</p>
       {role === "visitor" ? (
-        <a className="btn" href="#/login">
-          Go to login
-        </a>
+        <a className="btn" href="#/login"><Icon name="user" size={18} /> Go to login</a>
       ) : (
-        <a className="btn" href="#/dashboard">
-          Back to dashboard
-        </a>
+        <a className="btn" href="#/dashboard"><Icon name="chevL" size={18} /> Back to dashboard</a>
       )}
     </section>
   );
@@ -181,11 +175,9 @@ export function NotFound() {
   const content = getAccessContent();
   return (
     <section className="glass pad prose narrow">
-      <h2>{content.notFoundTitle}</h2>
+      <h1>{content.notFoundTitle}</h1>
       <p>{content.notFoundText}</p>
-      <a className="btn" href="#/">
-        Home
-      </a>
+      <a className="btn" href="#/"><Icon name="home" size={18} /> Home</a>
     </section>
   );
 }

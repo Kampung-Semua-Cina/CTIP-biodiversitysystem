@@ -1,10 +1,11 @@
 // apps/web/src/pages/Monitoring.jsx
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
-import { Chip, Empty, Sparkline } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { nameOf, plantView } from "../selectors.js";
-import { fmtDateTime, label } from "../utils.js";
+import Icon from "../components/Icon.jsx";
+import { Chip, Empty, Mono, Pills, Sparkline } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { nameOf, plantView } from "../../../shared/selectors.js";
+import { fmtDateTime, label } from "../../../shared/utils.js";
 
 const latest = (rows) => rows[rows.length - 1];
 
@@ -63,9 +64,9 @@ export default function Monitoring() {
             return (
               <button key={n.id} className={"glass nodecard" + (n.id === node.id ? " on" : "") + (up ? "" : " down")} aria-pressed={n.id === node.id} onClick={() => setNodeId(n.id)}>
                 <span className="row between"><b>{n.name}</b><span className={"dotstatus " + (up ? "up" : "off")}>{up ? "Online" : label(n.status)}</span></span>
-                <small className="mute">{plantOf(n).name} · {plantOf(n).qr_id}</small>
+                <small className="mute">{plantOf(n).name} · <Mono>{plantOf(n).qr_id}</Mono></small>
                 {up && last ? (
-                  <span className="row"><span><b>{last.temperature}°C</b> temp</span><span><b>{last.soil_moisture}%</b> soil</span></span>
+                  <span className="row"><span><Mono>{last.temperature}°C</Mono> temp</span><span><Mono>{last.soil_moisture}%</Mono> soil</span></span>
                 ) : (
                   <span className="warntext"><b>No data since {fmtDateTime(n.last_seen)}</b></span>
                 )}
@@ -91,7 +92,7 @@ export default function Monitoring() {
           <form key={node.id} className="row wrap" onSubmit={saveLimits}>
             <label>Temperature max (°C)<input name="temp_max" type="number" step="0.5" defaultValue={node.thresholds.temp_max} /></label>
             <label>Soil moisture min (%)<input name="moisture_min" type="number" step="1" defaultValue={node.thresholds.moisture_min} /></label>
-            <button className="btn ghost" type="submit">Save limits</button>
+            <button className="btn ghost" type="submit"><Icon name="check" size={18} /> Save limits</button>
           </form>
         </details>
       </section>
@@ -99,9 +100,7 @@ export default function Monitoring() {
       <section className="gap-section-s" aria-labelledby="history">
         <h2 id="history">Alert history</h2>
         <div className="row wrap gap-bottom">
-          {["acknowledged", "resolved", "all"].map((t) => (
-            <button key={t} className={"pill" + (tab === t ? " on" : "")} aria-pressed={tab === t} onClick={() => setTab(t)}>{label(t)}</button>
-          ))}
+          <Pills label="Alert history" value={tab} onChange={setTab} items={["acknowledged", "resolved", "all"].map((t) => ({ key: t, label: label(t) }))} />
         </div>
         {history.length === 0 && <div className="glass pad"><Empty icon="shield">No {tab === "all" ? "" : tab} alerts.</Empty></div>}
         {history.map((a) => <AlertCard key={a.id} alert={a} />)}
@@ -137,7 +136,7 @@ function AlertCard({ alert }) {
       </header>
 
       <p className="mute small">
-        {node.name}'s reading: {Object.entries(alert.reading).map(([k, v]) => `${label(k)} ${v}`).join(" · ")}
+        {node.name}'s reading: {Object.entries(alert.reading).map(([k, v], i) => <span key={k}>{i > 0 && " · "}{label(k)} <Mono>{v}</Mono></span>)}
       </p>
 
       <ol className="progress" aria-label="Alert progress">
@@ -152,7 +151,7 @@ function AlertCard({ alert }) {
             {officers.map((o) => <option key={o.id} value={o.id}>{o.full_name}</option>)}
           </select>
         </label>
-        {alert.status === "open" && <button className="btn" onClick={() => { ackAlert(alert.id); notify("Alert acknowledged"); }}>Acknowledge</button>}
+        {alert.status === "open" && <button className="btn" onClick={() => { ackAlert(alert.id); notify("Alert acknowledged"); }}><Icon name="check" size={18} /> Acknowledge</button>}
       </div>
       {alert.acknowledged_by && <p className="mute small">Acknowledged by {nameOf(db, alert.acknowledged_by)} · {fmtDateTime(alert.acknowledged_at)}</p>}
 
@@ -166,11 +165,11 @@ function AlertCard({ alert }) {
         <>
           <div className="row">
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add an investigation note" aria-label="Investigation note" />
-            <button className="btn ghost" onClick={() => { if (note.trim()) { addAlertNote(alert.id, note.trim()); setNote(""); } }}>Add note</button>
+            <button className="btn ghost" onClick={() => { if (note.trim()) { addAlertNote(alert.id, note.trim()); setNote(""); } }}><Icon name="plus" size={18} /> Add note</button>
           </div>
           <div className="row gap-top-s">
             <input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="What was found? (needed to resolve)" aria-label="Outcome" />
-            <button className="btn" onClick={() => { if (!outcome.trim()) return notify("Write what was found first"); resolveAlert(alert.id, outcome.trim()); notify("Alert resolved"); }}>Resolve</button>
+            <button className="btn" onClick={() => { if (!outcome.trim()) return notify("Write what was found first"); resolveAlert(alert.id, outcome.trim()); notify("Alert resolved"); }}><Icon name="shield" size={18} /> Resolve</button>
           </div>
         </>
       )}

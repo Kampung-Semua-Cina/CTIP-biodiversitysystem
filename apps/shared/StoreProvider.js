@@ -7,7 +7,8 @@ import { uid, nowIso } from "./utils.js";
 
 // Holds the sample database in memory. Every change a page makes goes through
 // one of the actions below, so it is easy to swap each one for a Supabase call.
-export default function StoreProvider({ children }) {
+// deviceId is written on new records ("web" or "mobile").
+export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
   const [userId, setUserId] = useState(null);
@@ -78,7 +79,7 @@ export default function StoreProvider({ children }) {
     };
     const obs = {
       id: obsId, specimen_id: specimenId, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: "mobile", last_synced_at: now,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
     };
     const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${qr_id} was added.`, "observations", obsId));
     setDb((d) => ({
@@ -101,7 +102,7 @@ export default function StoreProvider({ children }) {
     const plant = db.plants.find((p) => p.id === specimen_id);
     const obs = {
       id: obsId, specimen_id, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: "mobile", last_synced_at: now,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
     };
     const added = (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false }));
     const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${plant?.qr_id || "A plant"} was revisited.`, "observations", obsId));
@@ -275,5 +276,6 @@ export default function StoreProvider({ children }) {
     markRead, markAllRead, generateTags, retireTag,
   };
 
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+  // Written without JSX so the web (Vite) and mobile (Metro) can both load this .js file.
+  return React.createElement(StoreContext.Provider, { value }, children);
 }
