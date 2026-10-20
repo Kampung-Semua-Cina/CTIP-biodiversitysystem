@@ -49,6 +49,13 @@ export const seed = {
     { id: "sp5", scientific_name: "Cratoxylum arborescens", common_name: "Geronggang", family: "Hypericaceae", genus: "Cratoxylum", description: "A medium-sized tree of swamp forest with reddish young leaves.", conservation_status: "vulnerable", cultural_significance: "", is_published: false, is_deleted: false },
   ],
 
+  // Captioned catalogue photos for each species (species_media table). sort_order 0 is the cover photo.
+  species_media: [
+    { id: "m1", species_id: "sp1", url: IMG[0], caption: "Cluster of rounded ground pitchers on the peat floor", credit: null, is_primary: true, sort_order: 0, uploaded_by: "u4", created_at: "2026-09-10T02:00:00Z" },
+    { id: "m2", species_id: "sp1", url: IMG[1], caption: "Leaves and climbing stem", credit: null, is_primary: false, sort_order: 1, uploaded_by: "u4", created_at: "2026-09-10T02:01:00Z" },
+    { id: "m3", species_id: "sp3", url: IMG[3], caption: "Open flower on the host vine root", credit: null, is_primary: true, sort_order: 0, uploaded_by: "u4", created_at: "2026-09-12T02:00:00Z" },
+  ],
+
   // One row per tagged plant (specimens table) joined with its photos (observation_photos table).
   plants: [
     { id: "s1", qr_id: "NIAH-0001", species_id: "sp1", proposed_species: "", registered_by: "u2", lat: 3.8052, lng: 113.7731, gps_accuracy_m: 6.5, endangered_override: false, is_deleted: false,

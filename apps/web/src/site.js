@@ -1,6 +1,8 @@
 // apps/web/src/site.js
 export const SITE = "Daun Sense";
 export const PARK = "Niah National Park";
+export const PARK_MAP = "https://maps.app.goo.gl/H8QrxBi3oWgya7Tk7";
+export const FORESTRY = "https://sarawakforestry.com/";
 
 // Fixed area drawn by the plant map. Dots are placed inside it, so a plant sits in the
 // same spot for every role, whichever plants that role is allowed to see.

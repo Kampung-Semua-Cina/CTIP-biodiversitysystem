@@ -2,22 +2,25 @@
 import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
+import PhotoEditor from "../components/PhotoEditor.jsx";
 import { Chip, Empty, Modal } from "../components/Bits.jsx";
 import { useStore } from "../store.js";
 import { CONSERVATION } from "../data.js";
 import { label } from "../utils.js";
+import { speciesMedia } from "../selectors.js";
 
 const BLANK = {
   scientific_name: "", common_name: "", family: "", genus: "", description: "",
   conservation_status: "least concern", cultural_significance: "",
 };
 
-// Officer and admin page for the species encyclopedia: add, edit, publish, delete, restore.
+// Officer and admin page for the species encyclopedia: add, edit, photos, publish, delete, restore.
 export default function Species() {
-  const { db, saveSpecies, togglePublish, deleteSpecies, restoreSpecies, notify } = useStore();
+  const { db, saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia, notify } = useStore();
   const [q, setQ] = useState("");
   const [form, setForm] = useState(null); // species being edited, or BLANK for a new one
   const [removing, setRemoving] = useState(null);
+  const [photosOf, setPhotosOf] = useState(null); // species whose photos are open in the editor
 
   const list = db.species
     .filter((s) => !s.is_deleted)
@@ -46,6 +49,12 @@ export default function Species() {
     saveSpecies({ ...form, scientific_name: name });
     setForm(null);
     notify("Species saved");
+  };
+
+  const savePhotos = (list) => {
+    const r = setSpeciesMedia(photosOf.id, list);
+    notify(r.ok ? "Photos saved" : r.message);
+    if (r.ok) setPhotosOf(null);
   };
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -79,6 +88,7 @@ export default function Species() {
                   </td>
                   <td className="actions">
                     <button className="ic" onClick={() => setForm(s)} aria-label={`Edit ${s.scientific_name}`}><Icon name="pencil" size={18} /></button>
+                    <button className="ic" onClick={() => setPhotosOf(s)} aria-label={`Photos of ${s.scientific_name}`} title={`${speciesMedia(db, s.id).length} photos`}><Icon name="camera" size={18} /></button>
                     <button className="ic" onClick={() => setRemoving(s)} aria-label={`Delete ${s.scientific_name}`}><Icon name="trash" size={18} /></button>
                   </td>
                 </tr>
@@ -128,6 +138,10 @@ export default function Species() {
             <p><button className="btn" type="submit">Save species</button></p>
           </form>
         </Modal>
+      )}
+
+      {photosOf && (
+        <PhotoEditor photos={speciesMedia(db, photosOf.id)} captions min={0} onClose={() => setPhotosOf(null)} onSave={savePhotos} />
       )}
 
       {removing && (

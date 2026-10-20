@@ -201,13 +201,43 @@ main {
 }
 main .glass { background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; }
 
-.foot {
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px;
-  padding: 24px 28px; color: var(--mute); border-radius: 0; border-width: 1px 0 0;
-  flex-shrink: 0;
+/* Footer: a leafy wave edge, then brand + link columns, then a thin bottom bar. */
+.foot { flex-shrink: 0; margin-top: 12px; color: var(--mute); }
+.footwave { display: block; width: 100%; height: 40px; margin-bottom: -1px; }
+.footwave .fill { fill: var(--veil); }
+.footwave .edge { fill: none; stroke: var(--acc); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.footbody { background: var(--veil); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.footgrid, .footbar { max-width: 1240px; margin-inline: auto; padding-inline: 28px; }
+.footgrid { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 32px; padding-block: 18px 30px; }
+.footbrand .logo { color: var(--ink); }
+.footbrand > p { max-width: 34ch; }
+.footmeta { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.footmeta .icon { color: var(--acc); }
+.footmeta:hover { color: var(--acc); }
+.footstats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px !important; }
+.footstats li { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg2); font-size: 0.86rem; }
+.footstats b { color: var(--acc); }
+.footstats li.todo { border-color: var(--acc2); }
+.footstats li.todo b { color: var(--acc2); }
+.footcol summary {
+  display: flex; align-items: center; justify-content: space-between; list-style: none; cursor: default;
+  margin-bottom: 10px; color: var(--ink); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
 }
-.footlinks { display: flex; gap: 18px; }
-.foot a:hover { color: var(--ink); }
+.footcol summary::-webkit-details-marker { display: none; }
+.footcol summary .icon { display: none; }
+.footcol li { margin: 7px 0; }
+.foot .footcol a, .footstats a { transition: color 0.15s, padding 0.15s; }
+.foot .footcol a:hover { color: var(--acc); padding-left: 4px; }
+.footstats a:hover { color: var(--ink); }
+.footbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  padding-block: 14px 18px; border-top: 1px solid var(--line);
+}
+.footbar b { color: var(--ink); }
+.themetoggle { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg2); color: var(--mute); cursor: pointer; }
+.themetoggle span { display: grid; place-items: center; width: 30px; height: 26px; border-radius: 999px; transition: background 0.2s, color 0.2s; }
+.themetoggle span.on { background: var(--acc); color: var(--btnink); }
+.totop .icon { transform: rotate(180deg); }
 
 .toast { position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%); padding: 10px 20px; z-index: 60; }
 
@@ -423,6 +453,12 @@ main .glass.pop { background: var(--solid); }
 .pcard .acts button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: #fff; cursor: pointer; }
 .pcard .acts button:disabled { opacity: 0.3; cursor: default; }
 .editnote { margin: 0 0 14px; color: var(--mute); font-size: 0.88rem; }
+.editerr { margin: 0 0 10px; color: var(--bad); font-size: 0.88rem; font-weight: 700; }
+/* Captioned card (species photos): the caption box sits under the card, outside the drag area. */
+.pslot { display: flex; flex-direction: column; gap: 6px; width: 140px; }
+.pslot .pcard { width: 100%; aspect-ratio: 4 / 3; }
+.pcaption { width: 100%; resize: vertical; font-size: 0.85rem; }
+.caption { margin: 8px 2px 0; color: var(--mute); font-size: 0.9rem; }
 
 /* ---------- 6. Staff pages ---------- */
 .tablewrap { position: relative; overflow-x: auto; margin-top: 14px; }
@@ -488,10 +524,6 @@ article.record > header { margin-bottom: 0; }
 .note.unread::before { content: ""; position: absolute; left: 7px; top: 50%; width: 7px; height: 7px; margin-top: -3px; border-radius: 50%; background: var(--acc2); }
 .note.unread { border-color: var(--acc2); }
 
-.printsheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px; margin-top: 18px; }
-.printsheet figure { margin: 0; padding: 10px; text-align: center; background: #fff; color: #000; border-radius: 10px; }
-.printsheet figcaption { margin-top: 4px; font-weight: 700; font-size: 0.85rem; }
-.print-only { display: none; }
 /* One tag's QR code in the popup on the QR tags page. */
 .qrbig { width: fit-content; margin: 14px auto 10px; padding: 16px 16px 10px; background: #fff; color: #000; border-radius: 14px; text-align: center; line-height: 0; }
 .qrbig svg { width: min(240px, 60vw); height: auto; }
@@ -745,7 +777,16 @@ article.record > header { margin-bottom: 0; }
   .bars li { grid-template-columns: 100px 1fr 24px; }
   .site dl { grid-template-columns: 110px 1fr; }
   .pad { padding: 16px; }
-  .foot { padding-bottom: 90px; }
+  .foot { margin-top: 0; }
+  .footbody { padding-bottom: 76px; }
+  .footgrid { grid-template-columns: minmax(0, 1fr); gap: 0; padding-inline: 16px; }
+  .footbar { padding-inline: 16px; }
+  .footbrand { padding-bottom: 14px; }
+  .footcol { border-top: 1px solid var(--line); }
+  .footcol summary { margin: 0; padding: 14px 0; cursor: pointer; }
+  .footcol summary .icon { display: inline; transition: transform 0.2s; }
+  .footcol[open] summary .icon { transform: rotate(180deg); }
+  .footcol ul { padding-bottom: 10px !important; }
   .toast { bottom: 140px; }
   .bottom {
     display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
@@ -794,11 +835,6 @@ article.record > header { margin-bottom: 0; }
   .site { color: #000; }
   .glass { background: #fff !important; border: 0; box-shadow: none; backdrop-filter: none; }
   .site .mute, .site th { color: #444; }
-  .print-only { display: grid; }
-  /* when a page has a .printsheet (QR tags), print only that sheet */
-  body:has(.printsheet) .site * { visibility: hidden; }
-  body:has(.printsheet) .printsheet, body:has(.printsheet) .printsheet * { visibility: visible; }
-  body:has(.printsheet) .printsheet { position: absolute; left: 0; top: 0; width: 100%; margin: 0; }
   /* QR tags print setup: only its sheet prints (it sits outside the app), at real size */
   body:has(> .tagprint) > :not(.tagprint) { display: none !important; }
   .tagprint { display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--gap); }

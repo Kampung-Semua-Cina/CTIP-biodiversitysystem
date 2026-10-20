@@ -2,6 +2,7 @@ import { useState } from "react";
 import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
+import PhotoEditor from "../components/PhotoEditor.jsx";
 import { Chip, Empty } from "../components/Bits.jsx";
 import { useStore } from "../store.js";
 import { can } from "../permissions.js";
@@ -12,9 +13,10 @@ const MORE = 12;
 
 // One species: what it is, where it grows, and every tagged plant of it.
 export default function SpeciesPage({ id }) {
-  const { db, role } = useStore();
+  const { db, role, setSpeciesMedia, notify } = useStore();
   const staff = can(role, "pending");
   const [limit, setLimit] = useState(MORE);
+  const [editing, setEditing] = useState(false);
 
   const all = speciesCatalogue(db, role);
   const s = all.find((x) => x.id === id);
@@ -28,8 +30,13 @@ export default function SpeciesPage({ id }) {
     );
   }
 
-  // Up to 3 photos from each tagged plant, best (primary) photo first.
-  const photos = s.plants.flatMap((p) => p.photos.slice(0, 3)).slice(0, 12);
+  // The species' own captioned photos. Until it has some, up to 3 photos from each tagged plant.
+  const photos = s.media.length ? s.media : s.plants.flatMap((p) => p.photos.slice(0, 3)).slice(0, 12);
+  const savePhotos = (list) => {
+    const r = setSpeciesMedia(s.id, list);
+    notify(r.ok ? "Photos saved" : r.message);
+    if (r.ok) setEditing(false);
+  };
   const points = mappable(s.plants, role);
   const related = all
     .filter((x) => x.id !== s.id && (x.genus === s.genus || x.family === s.family))
@@ -43,7 +50,7 @@ export default function SpeciesPage({ id }) {
 
       <section className="specieshero">
         <div className="speciesphotos">
-          {photos.length ? <PhotoGallery key={s.id} photos={photos} /> : <div className="glass pad"><Empty icon="camera">No photos yet.</Empty></div>}
+          <PhotoGallery key={s.id} photos={photos} canEdit={can(role, "species")} onEdit={() => setEditing(true)} />
         </div>
         <div className="speciesinfo">
           <p className="eyebrow">{s.family} · {s.genus}</p>
@@ -104,6 +111,8 @@ export default function SpeciesPage({ id }) {
           <p className="row center gap-top-s"><button className="btn ghost" onClick={() => setLimit(limit + MORE)}>Show {Math.min(MORE, s.plants.length - limit)} more</button></p>
         )}
       </section>
+
+      {editing && <PhotoEditor photos={s.media} captions min={0} onClose={() => setEditing(false)} onSave={savePhotos} />}
 
       {related.length > 0 && (
         <section className="gap-section-s" aria-labelledby="related">

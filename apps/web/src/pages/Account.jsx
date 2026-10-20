@@ -1,6 +1,5 @@
 // apps/web/src/pages/Account.jsx
 import { useState } from "react";
-import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Chip, PasswordInput } from "../components/Bits.jsx";
 import { useStore } from "../store.js";
@@ -14,7 +13,7 @@ const MAX_PHOTO = 2 * 1024 * 1024; // 2 MB
 export default function Account() {
   const { me } = useStore();
   return (
-    <Shell seg="account" plain>
+    <>
       <div className="pagehead">
         <div>
           <h1>Account settings</h1>
@@ -27,7 +26,7 @@ export default function Account() {
         <PasswordCard />
         <DetailsCard me={me} />
       </div>
-    </Shell>
+    </>
   );
 }
 

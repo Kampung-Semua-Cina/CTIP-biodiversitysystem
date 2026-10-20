@@ -4,7 +4,7 @@ import { StoreContext } from "./store.js";
 import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
-import { uid, nowIso } from "./utils.js";
+import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
 
 // Holds the sample database in memory. Every change a page makes goes through
 // one of the actions below, so it is easy to swap each one for a Supabase call.
@@ -234,6 +234,32 @@ export default function StoreProvider({ children }) {
   const deleteSpecies = (id) => setSpeciesDeleted(id, true);
   const restoreSpecies = (id) => setSpeciesDeleted(id, false);
 
+  // Saves a species' captioned catalogue photos in the order given; the first is the cover photo.
+  // API (CTIP-46): for each new photo, POST /v1/species/:id/media { content_type, size_bytes, caption, is_primary, sort_order },
+  // then PUT the file to the returned upload.url (species-media/{species_id}/{media_id}).
+  // The API checks the role, file type and size again; Storage rejects anything over its bucket limits.
+  const setSpeciesMedia = (speciesId, list) => {
+    if (!can(role, "species")) return { ok: false, message: "Only officers and admins can change species photos" };
+    const bad = list.map((p) => p.file && photoProblem(p.file)).find(Boolean);
+    if (bad) return { ok: false, message: bad };
+    const k = list.findIndex((p) => !p.caption?.trim());
+    if (k >= 0) return { ok: false, message: `Add a caption to photo ${k + 1}` };
+    if (list.some((p) => p.caption.trim().length > CAPTION_MAX)) return { ok: false, message: `Keep captions under ${CAPTION_MAX} characters` };
+
+    const now = nowIso();
+    const rows = list.map((p, i) => ({
+      id: p.id, species_id: speciesId, url: p.url, caption: p.caption.trim(), credit: p.credit ?? null,
+      is_primary: i === 0, sort_order: i, uploaded_by: p.uploaded_by ?? userId, created_at: p.created_at ?? now,
+    }));
+    const row = auditRow("species_media", speciesId, "update", null, { count: rows.length, added: list.filter((p) => p.file).length });
+    setDb((d) => ({
+      ...d,
+      species_media: [...d.species_media.filter((m) => m.species_id !== speciesId), ...rows],
+      audit: [row, ...d.audit],
+    }));
+    return { ok: true };
+  };
+
   /* ---------- users ---------- */
   // New accounts start with the part of the email before "@" as the username (made unique).
   const freeUsername = (email) => {
@@ -321,7 +347,7 @@ export default function StoreProvider({ children }) {
     setRole, logout, login, signIn, changePassword, updateProfile, changeMyPassword,
     setPlantPhotos, addPlant, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
-    saveSpecies, togglePublish, deleteSpecies, restoreSpecies,
+    saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,

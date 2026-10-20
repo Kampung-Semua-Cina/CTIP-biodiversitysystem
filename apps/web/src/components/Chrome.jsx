@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon.jsx";
 import { Avatar } from "./Bits.jsx";
-import { SITE, PARK, NAV } from "../site.js";
+import { SITE, PARK, NAV, FORESTRY, PARK_MAP } from "../site.js";
+import { useStore } from "../store.js";
+import { visiblePlants, staffCounts } from "../selectors.js";
 import { bottomLinks, staffLinks, ROLE_LABEL, TOOLS_LABEL, DASHBOARD_LABEL } from "../permissions.js";
 
 // "Plants" stays highlighted on plant pages too, and on #/dashboard for visitors (it shows them the catalogue).
@@ -133,16 +135,109 @@ export function BottomBar({ role, seg, unread }) {
   );
 }
 
+// Footer: brand + park, live counts, link columns and a bottom bar.
+// The third column and the counts change with the role: visitors get "Staff sign in",
+// staff get their own tools and the counts that need their attention.
+// On phones the link columns fold into tap-to-open sections.
+const FOOT_COLS = [
+  { title: "Explore", links: [{ to: "/", label: "Home" }, { to: "/plants", label: "Plant catalogue" }, { to: "/map", label: "Plant map" }] },
+  { title: "About", links: [{ to: "/about", label: "About us" }, { to: "/contact", label: "Contact" }, { href: FORESTRY, label: "Sarawak Forestry" }] },
+];
+
 export function Footer({ role, light, onTheme }) {
+  const { db, me } = useStore();
+  const staff = !!DASHBOARD_LABEL[role];
+  const plants = visiblePlants(db, role);
+  const species = db.species.filter((s) => !s.is_deleted && (staff || s.is_published)).length;
+  const endangered = plants.filter((p) => p.endangered).length;
+  const counts = staffCounts(db, me);
+
+  // Counts that need this role's attention, shown after the general ones.
+  const todo = {
+    botanist: [{ n: counts.returned, label: "returned to you", to: "/records" }],
+    officer: [{ n: counts.review, label: "awaiting review", to: "/review" }, { n: counts.alerts, label: counts.alerts === 1 ? "open alert" : "open alerts", to: "/monitoring" }],
+    admin: [{ n: counts.alerts, label: counts.alerts === 1 ? "open alert" : "open alerts", to: "/monitoring" }],
+  }[role] || [];
+
+  const staffCol = staff
+    ? { title: TOOLS_LABEL[role], links: [{ to: "/dashboard", label: DASHBOARD_LABEL[role] }, ...staffLinks(role), { to: "/notifications", label: "Notifications" }, { to: "/account", label: "Account settings" }] }
+    : { title: "Park staff", links: [{ to: "/staff", label: "Staff sign in" }] };
+
   return (
-    <footer className="glass foot">
-      <span>© 2026 {SITE} · {PARK}</span>
-      <span className="footlinks">
-        <a href="#/about">About us</a>
-        <a href="#/contact">Contact</a>
-        {role === "visitor" && <a href="#/staff">Staff sign in</a>}
-      </span>
-      <a onClick={onTheme}>{light ? "Dark mode" : "Light mode"}</a>
+    <footer className="foot">
+      <svg className="footwave" viewBox="0 0 1440 40" preserveAspectRatio="none" aria-hidden="true">
+        <path className="fill" d="M0 40V22c120-14 240-18 360-8s240 22 360 12 240-26 360-24 240 12 360 18v20Z" />
+        <path className="edge" d="M0 22c120-14 240-18 360-8s240 22 360 12 240-26 360-24 240 12 360 18" />
+      </svg>
+      <div className="footbody">
+        <div className="footgrid">
+          <div className="footbrand">
+            <a className="logo" href="#/">
+              <img src="/logo.svg" alt="" />
+              <span>{SITE}</span>
+            </a>
+            <p className="mute">Tagging and monitoring the plant life of {PARK}, one QR tag at a time.</p>
+            <p><a className="footmeta" href={PARK_MAP} target="_blank" rel="noreferrer" title="Open in Google Maps"><Icon name="pin" size={16} /> {PARK}, Miri, Sarawak ↗</a></p>
+            <ul className="plain footstats" aria-label="Plant counts">
+              <li><a href="#/plants"><b>{plants.length}</b> {staff ? "plants tagged" : "plants to explore"}</a></li>
+              <li><a href="#/plants"><b>{species}</b> species</a></li>
+              <li><b>{endangered}</b> endangered</li>
+              {todo.map((t) => (
+                <li key={t.label} className={t.n > 0 ? "todo" : ""}><a href={"#" + t.to}><b>{t.n}</b> {t.label}</a></li>
+              ))}
+            </ul>
+          </div>
+          {[...FOOT_COLS, staffCol].map((c) => <FootCol key={c.title} {...c} />)}
+        </div>
+        <div className="footbar">
+          <span className="mute small">
+            © 2026 {SITE} · A CTIP project
+            {me && <> · Signed in as <b>{me.full_name}</b> ({ROLE_LABEL[me.role]})</>}
+          </span>
+          <span className="row">
+            <button className="themetoggle" onClick={onTheme} aria-label={light ? "Switch to dark mode" : "Switch to light mode"}>
+              <span className={light ? "on" : ""}><Icon name="sun" size={15} /></span>
+              <span className={light ? "" : "on"}><Icon name="moon" size={15} /></span>
+            </button>
+            <button className="btn ghost totop" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+              Back to top <Icon name="chevD" size={15} />
+            </button>
+          </span>
+        </div>
+      </div>
     </footer>
   );
+}
+
+// One link column. Always open on wide screens; a tap-to-open section on phones.
+function FootCol({ title, links }) {
+  const phone = useMedia("(max-width: 800px)");
+  const [open, setOpen] = useState(false);
+  return (
+    <details className="footcol" open={!phone || open} onToggle={(e) => phone && setOpen(e.currentTarget.open)}>
+      <summary tabIndex={phone ? 0 : -1} onClick={(e) => !phone && e.preventDefault()}>
+        {title} <Icon name="chevD" size={16} />
+      </summary>
+      <ul className="plain">
+        {links.map((l) => (
+          <li key={l.label}>
+            {l.href
+              ? <a href={l.href} target="_blank" rel="noreferrer">{l.label} ↗</a>
+              : <a href={"#" + l.to}>{l.label}</a>}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function useMedia(query) {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const change = () => setOn(m.matches);
+    m.addEventListener("change", change);
+    return () => m.removeEventListener("change", change);
+  }, [query]);
+  return on;
 }
