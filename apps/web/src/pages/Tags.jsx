@@ -3,10 +3,10 @@ import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
-import { Chip } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { tagUrl } from "../selectors.js";
-import { fmtDate } from "../utils.js";
+import { Chip, Mono } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { tagUrl } from "../../../shared/selectors.js";
+import { fmtDate } from "../../../shared/utils.js";
 
 // QR tag stock (qr_tags table): make a batch, print the unused ones, retire damaged ones.
 export default function Tags() {
@@ -39,11 +39,11 @@ export default function Tags() {
           <tbody>
             {db.tags.map((t) => (
               <tr key={t.qr_id}>
-                <td>{t.qr_id}</td>
+                <td><Mono>{t.qr_id}</Mono></td>
                 <td><Chip value={t.status} /></td>
                 <td>{t.batch_label}</td>
                 <td>{fmtDate(t.created_at)}</td>
-                <td className="actions">{t.status === "unused" && <button className="btn ghost small-btn" onClick={() => retireTag(t.qr_id)}>Retire</button>}</td>
+                <td className="actions">{t.status === "unused" && <button className="btn ghost small-btn" onClick={() => retireTag(t.qr_id)}><Icon name="x" size={16} /> Retire</button>}</td>
               </tr>
             ))}
           </tbody>

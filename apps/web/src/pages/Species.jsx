@@ -3,9 +3,9 @@ import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip, Empty, Modal } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { CONSERVATION } from "../data.js";
-import { label } from "../utils.js";
+import { useStore } from "../../../shared/store.js";
+import { CONSERVATION } from "../../../shared/data.js";
+import { label } from "../../../shared/utils.js";
 
 const BLANK = {
   scientific_name: "", common_name: "", family: "", genus: "", description: "",
@@ -58,7 +58,7 @@ export default function Species() {
             <tbody>
               {list.map((s) => (
                 <tr key={s.id}>
-                  <td><b>{s.common_name || s.scientific_name}</b><small className="sci block">{s.scientific_name}</small></td>
+                  <td><b>{s.common_name || s.scientific_name}</b><i className="sci small block">{s.scientific_name}</i></td>
                   <td>{s.family}</td>
                   <td><Chip value={s.conservation_status} /></td>
                   <td>
@@ -91,16 +91,16 @@ export default function Species() {
             </label>
             <label>Description<textarea rows="3" value={form.description} onChange={set("description")} /></label>
             <label>Cultural significance<textarea rows="2" value={form.cultural_significance} onChange={set("cultural_significance")} /></label>
-            <p><button className="btn" type="submit">Save species</button></p>
+            <p className="gap-top"><button className="btn" type="submit"><Icon name="check" size={18} /> Save species</button></p>
           </form>
         </Modal>
       )}
 
       {removing && (
         <Modal title="Delete species" onClose={() => setRemoving(null)}>
-          <p>Delete <b>{removing.scientific_name}</b>?{inUse > 0 && ` ${inUse} tagged plant${inUse > 1 ? "s use" : " uses"} it and will show as unconfirmed.`} Past records are kept.</p>
+          <p>Delete <i className="sci">{removing.scientific_name}</i>?{inUse > 0 && ` ${inUse} tagged plant${inUse > 1 ? "s use" : " uses"} it and will show as unconfirmed.`} Past records are kept.</p>
           <div className="row">
-            <button className="btn danger" onClick={() => { deleteSpecies(removing.id); setRemoving(null); notify("Species deleted"); }}>Delete</button>
+            <button className="btn danger" onClick={() => { deleteSpecies(removing.id); setRemoving(null); notify("Species deleted"); }}><Icon name="trash" size={18} /> Delete</button>
             <button className="btn ghost" onClick={() => setRemoving(null)}>Cancel</button>
           </div>
         </Modal>

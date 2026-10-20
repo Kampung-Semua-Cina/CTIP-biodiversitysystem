@@ -2,11 +2,12 @@ import { useState } from "react";
 import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { can } from "../permissions.js";
-import { lastVisit, mappable, speciesCatalogue } from "../selectors.js";
-import { fmtDate } from "../utils.js";
+import Icon from "../components/Icon.jsx";
+import { Chip, Empty, Mono } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { can } from "../../../shared/permissions.js";
+import { lastVisit, mappable, speciesCatalogue } from "../../../shared/selectors.js";
+import { fmtDate } from "../../../shared/utils.js";
 
 const MORE = 12;
 
@@ -21,9 +22,9 @@ export default function SpeciesPage({ id }) {
   if (!s) {
     return (
       <section className="glass pad prose narrow">
-        <h2>Species not found</h2>
+        <h1>Species not found</h1>
         <p>This species is not in the catalogue, or it has not been published yet.</p>
-        <a className="btn" href="#/plants">Back to all plants</a>
+        <a className="btn" href="#/plants"><Icon name="chevL" size={18} /> Back to all plants</a>
       </section>
     );
   }
@@ -48,7 +49,7 @@ export default function SpeciesPage({ id }) {
         <div className="speciesinfo">
           <p className="eyebrow">{s.family} · {s.genus}</p>
           <h1>{s.name}</h1>
-          <p className="mute sciname"><i>{s.scientific_name}</i></p>
+          <p className="sci sciname">{s.scientific_name}</p>
           {staff && (
             <p className="row wrap">
               <Chip value={s.conservation_status} />
@@ -56,20 +57,20 @@ export default function SpeciesPage({ id }) {
             </p>
           )}
           {s.description && <p className="lede-s">{s.description}</p>}
-          <dl className="glass pad">
+          <dl>
             <dt>Family</dt><dd>{s.family}</dd>
             <dt>Genus</dt><dd>{s.genus}</dd>
             <dt>Tagged in Niah</dt><dd>{s.plants.length} {s.plants.length === 1 ? "plant" : "plants"}</dd>
             {s.cultural_significance && <><dt>Cultural note</dt><dd>{s.cultural_significance}</dd></>}
           </dl>
-          {role === "officer" && <a className="btn ghost gap-top-s" href="#/species">Edit species</a>}
+          {role === "officer" && <a className="btn ghost gap-top-s" href="#/species"><Icon name="pencil" size={18} /> Edit species</a>}
         </div>
       </section>
 
       <section className="glass pad gap-section-s" aria-labelledby="where">
         <div className="row between wrap">
           <h2 id="where">Where it grows</h2>
-          {points.length > 0 && <a className="textlink" href={"#/map/" + points[0].p.qr_id}>Open on the full map →</a>}
+          {points.length > 0 && <a className="textlink" href={"#/map/" + points[0].p.qr_id}>Open on the full map <Icon name="arrowR" size={16} /></a>}
         </div>
         {points.length ? (
           <MiniMap points={points} label={`Map of tagged ${s.name} plants`} />
@@ -81,7 +82,7 @@ export default function SpeciesPage({ id }) {
       </section>
 
       <section className="gap-section-s" aria-labelledby="tagged">
-        <h2 id="tagged">Tagged plants of this species <span className="mute">{s.plants.length}</span></h2>
+        <h2 id="tagged">Tagged plants of this species <span className="mute">· {s.plants.length}</span></h2>
         {!s.plants.length && <div className="glass pad"><Empty>No plants of this species have been tagged yet.</Empty></div>}
         <ul className="plain taggrid">
           {s.plants.slice(0, limit).map((p) => {
@@ -91,7 +92,7 @@ export default function SpeciesPage({ id }) {
                 <a className="glass tagcard" href={"#/tag/" + p.qr_id}>
                   <Img src={p.photos[0]?.url} alt="" />
                   <span>
-                    <b className="block tagid">{p.qr_id}</b>
+                    <Mono className="block"><b>{p.qr_id}</b></Mono>
                     <small className="mute block">{seen ? `Last visited ${fmtDate(seen)}` : "Not visited yet"}</small>
                     {staff && p.status !== "approved" && <Chip value={p.status} />}
                   </span>

@@ -7,7 +7,8 @@ import { uid, nowIso } from "./utils.js";
 
 // Holds the sample database in memory. Every change a page makes goes through
 // one of the actions below, so it is easy to swap each one for a Supabase call.
-export default function StoreProvider({ children }) {
+// deviceId is written on new records ("web" or "mobile").
+export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
   const [userId, setUserId] = useState(null);
@@ -78,7 +79,7 @@ export default function StoreProvider({ children }) {
     };
     const obs = {
       id: obsId, specimen_id: specimenId, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: "mobile", last_synced_at: now,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
     };
     const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${qr_id} was added.`, "observations", obsId));
     setDb((d) => ({
@@ -91,6 +92,28 @@ export default function StoreProvider({ children }) {
       notifications: [...notes_, ...d.notifications],
       audit: [auditRow("specimens", specimenId, "insert", null, { qr_id }), ...d.audit],
     }));
+  };
+
+  // A return visit to a plant that is already tagged: a new observation of the same specimen.
+  // Supabase: insert into observations (and observation_photos) with a client idempotency key.
+  const addRevisit = ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
+    const obsId = uid();
+    const now = nowIso();
+    const plant = db.plants.find((p) => p.id === specimen_id);
+    const obs = {
+      id: obsId, specimen_id, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
+    };
+    const added = (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false }));
+    const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${plant?.qr_id || "A plant"} was revisited.`, "observations", obsId));
+    setDb((d) => ({
+      ...d,
+      plants: d.plants.map((p) => (p.id === specimen_id ? { ...p, photos: [...(p.photos || []), ...added] } : p)),
+      observations: [...d.observations, obs],
+      notifications: [...notes_, ...d.notifications],
+      audit: [auditRow("observations", obsId, "insert", null, { specimen_id, status: "synced" }), ...d.audit],
+    }));
+    return obsId;
   };
 
   // The officer confirms which species a tagged plant is (specimens.species_id).
@@ -245,7 +268,7 @@ export default function StoreProvider({ children }) {
   const value = {
     db, me, role, toast, notify,
     setRole, logout, login, signIn, changePassword,
-    setPlantPhotos, addPlant, setPlantSpecies,
+    setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
     saveSpecies, togglePublish, deleteSpecies,
     addUser, updateUser,
@@ -253,5 +276,6 @@ export default function StoreProvider({ children }) {
     markRead, markAllRead, generateTags, retireTag,
   };
 
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+  // Written without JSX so the web (Vite) and mobile (Metro) can both load this .js file.
+  return React.createElement(StoreContext.Provider, { value }, children);
 }

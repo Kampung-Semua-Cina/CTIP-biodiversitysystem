@@ -1,912 +1,224 @@
 // apps/mobile/App.js
-import React, { useState, useRef, useEffect } from 'react';
+// Daun Sense field app. Screens follow the "Mobile app · all flows" canvas (design A):
+// a five-slot bottom bar per role with the role's main job raised in the centre, and
+// every colour, font and size taken from apps/shared/tokens.js through ThemeProvider.
+import React, { useEffect, useState } from 'react';
+import { View, Text, Pressable, BackHandler, Keyboard, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import {
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  View,
-  TouchableOpacity,
-  Text,
-  Modal,
-  Platform,
-  StatusBar as RNStatusBar,
-  Dimensions,
-  Animated,
-  PanResponder,
-  Pressable,
-  BackHandler,
-} from 'react-native';
+import { useFonts } from 'expo-font';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import StoreProvider from '../shared/StoreProvider.js';
 import { useStore } from '../shared/store.js';
-import { can, staffLinks, ROLES, ROLE_LABEL } from '../shared/permissions.js';
-import { SITE, PARK } from '../shared/site.js';
+import { can } from '../shared/permissions.js';
 
-// Mobile Pages
-import {
-  MobileHome,
-  MobileAbout,
-  MobileContact,
-  MobileStaff,
-  MobileNoAccess,
-  MobileNotFound,
-} from './pages/Public.js';
-import MobileScan from './pages/Scan.js';
-import MobileLogin from './pages/Login.js';
-import MobileDashboard from './pages/Dashboard.js';
-import MobileMapPage from './pages/MapPage.js';
-import MobileAddPlant from './pages/AddPlant.js';
-import MobileRecords from './pages/Records.js';
-import MobileReview from './pages/Review.js';
-import MobileReports from './pages/Reports.js';
-import MobileSpecies from './pages/Species.js';
-import MobileMonitoring from './pages/Monitoring.js';
-import { MobileUsers, MobileAudit } from './pages/Admin.js';
-import MobileTags from './pages/Tags.js';
-import MobileNotifications from './pages/Notifications.js';
-import MobileDiscussion from './pages/Discussion.js';
+import { ThemeProvider, useTheme, font, FONT_FILES } from './components/Theme.js';
+import Icon from './components/Icon.js';
 
-import { COLORS } from './components/Theme.js';
+import { Home, About, Contact, More, NoAccess } from './pages/Public.js';
+import { SpeciesList, TaggedPlants } from './pages/Dashboard.js';
+import { SpeciesProfile, TaggedPlant } from './pages/PlantPage.js';
+import MapPage from './pages/MapPage.js';
+import Scan from './pages/Scan.js';
+import SignIn from './pages/Login.js';
+import { AddPlant, Submitted, Revisit } from './pages/AddPlant.js';
+import { MyRecords, RecordDetail } from './pages/Records.js';
+import { ReviewQueue, ReviewRecord } from './pages/Review.js';
+import { Monitor, AlertDetail } from './pages/Monitoring.js';
+import Alerts from './pages/Notifications.js';
+import Discussion from './pages/Discussion.js';
+import SpeciesAdmin from './pages/Species.js';
+import Tags from './pages/Tags.js';
+import Reports from './pages/Reports.js';
+import { StaffMore, Users, Audit } from './pages/Admin.js';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.82, 330);
-
-const NEEDS = {
-  add: 'add',
-  records: 'records',
-  review: 'review',
-  reports: 'reports',
-  species: 'species',
-  monitoring: 'monitor',
-  users: 'users',
-  audit: 'audit',
-  tags: 'tags',
-  notifications: 'bell',
-  discussion: 'discuss',
-  // Note: 'scan' is NOT in NEEDS so even visitors can scan!
+// Every screen, by route name. Each one gets { nav, params }.
+const SCREENS = {
+  home: Home, about: About, contact: Contact, more: More, signin: SignIn,
+  plants: SpeciesList, species: SpeciesProfile, tag: TaggedPlant, map: MapPage, scan: Scan,
+  tagged: TaggedPlants, add: AddPlant, submitted: Submitted, revisit: Revisit,
+  records: MyRecords, record: RecordDetail, alerts: Alerts, discussion: Discussion,
+  review: ReviewQueue, reviewItem: ReviewRecord, monitor: Monitor, alert: AlertDetail,
+  staffMore: StaffMore, speciesAdmin: SpeciesAdmin, tags: Tags, reports: Reports,
+  users: Users, audit: Audit,
 };
 
-// Always the exact same 4 bottom buttons no matter the screen or access
-const FIXED_BOTTOM_NAV = [
-  { page: 'home', label: 'Home', icon: '🏠' },
-  { page: 'scan', label: 'Scan', icon: '📷' },
-  { page: 'dashboard', label: 'Plants', icon: '🌿' },
-  { page: 'map', label: 'Map', icon: '🗺️' },
-];
+// Which permission (apps/shared/permissions.js) a screen needs. The API checks again;
+// this only keeps people away from screens that would fail for them.
+const NEEDS = {
+  add: 'add', submitted: 'add', revisit: 'add', records: 'records', record: 'records',
+  review: 'review', reviewItem: 'review', monitor: 'monitor', alert: 'monitor',
+  speciesAdmin: 'species', tags: 'tags', reports: 'reports', users: 'users', audit: 'audit',
+  alerts: 'bell', discussion: 'discuss', tagged: 'pending', staffMore: 'pending',
+};
 
-function MobileMain() {
-  const { role, me, db, toast, setRole, logout } = useStore();
-  const [route, setRoute] = useState({ page: 'home', arg: null });
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [roleModalOpen, setRoleModalOpen] = useState(false);
-  const isDraggingRef = useRef(false);
+// The bottom bar for each role. `main` is the raised centre button.
+const TABS = {
+  visitor: [
+    { key: 'home', label: 'Home', icon: 'home' },
+    { key: 'plants', label: 'Plants', icon: 'leaf' },
+    { key: 'scan', label: 'Scan', icon: 'scan', main: true },
+    { key: 'map', label: 'Map', icon: 'map' },
+    { key: 'more', label: 'More', icon: 'more' },
+  ],
+  botanist: [
+    { key: 'tagged', label: 'Plants', icon: 'leaf' },
+    { key: 'records', label: 'My records', icon: 'file', badge: 'returned' },
+    { key: 'scan', label: 'Add plant', icon: 'scan', main: true },
+    { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
+    { key: 'staffMore', label: 'More', icon: 'more' },
+  ],
+  officer: [
+    { key: 'tagged', label: 'Plants', icon: 'leaf' },
+    { key: 'monitor', label: 'Monitor', icon: 'activity', badge: 'openAlerts' },
+    { key: 'review', label: 'Review', icon: 'clipboard', main: true },
+    { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
+    { key: 'staffMore', label: 'More', icon: 'more' },
+  ],
+  admin: [
+    { key: 'tagged', label: 'Plants', icon: 'leaf' },
+    { key: 'users', label: 'Users', icon: 'users' },
+    { key: 'monitor', label: 'Monitor', icon: 'activity', main: true },
+    { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
+    { key: 'staffMore', label: 'More', icon: 'more' },
+  ],
+};
 
-  const drawerAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const overlayAnim = useRef(new Animated.Value(0)).current;
+// Screens that cover the whole phone (no bottom bar).
+const FULL_SCREEN = ['scan', 'add', 'submitted', 'revisit', 'signin'];
 
-  // Handle Android hardware back press when drawer is open
+function badgeCounts(db, me) {
+  if (!me) return {};
+  return {
+    unread: db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length,
+    returned: db.observations.filter((o) => o.recorded_by === me.id && o.status === 'returned').length,
+    openAlerts: db.alerts.filter((a) => a.status === 'open').length,
+  };
+}
+
+function TabBar({ role, current, onTab, badges }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <View accessibilityRole="tablist" style={{ flexDirection: 'row', alignItems: 'flex-end', height: 76 + insets.bottom, paddingBottom: 12 + insets.bottom, paddingHorizontal: 4, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.line }}>
+      {TABS[role].map((tab) => {
+        const on = tab.key === current;
+        const count = tab.badge ? badges[tab.badge] : 0;
+        return (
+          <Pressable key={tab.key} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={count ? `${tab.label}, ${count} new` : tab.label}
+            onPress={() => onTab(tab.key)} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+            {tab.main ? (
+              <View style={{ width: 56, height: 56, marginTop: -30, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, borderWidth: 4, borderColor: c.surface }}>
+                <Icon name={tab.icon} size={26} color={c.onAccent} strokeWidth={2} />
+              </View>
+            ) : (
+              <View>
+                <Icon name={tab.icon} size={24} color={on ? c.accent : c.ink2} />
+                {count > 0 ? (
+                  <View style={{ position: 'absolute', top: -4, right: -10, minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: c.danger }}>
+                    <Text style={{ fontFamily: font('text', 800), fontSize: 11, color: c.onDanger }}>{count}</Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+            <Text numberOfLines={1} style={{ fontFamily: font('text', on || tab.main ? 800 : 700), fontSize: 12, color: tab.main ? c.ink : on ? c.accent : c.ink2 }}>{tab.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function Main() {
+  const { role, me, db, toast } = useStore();
+  const { c, scheme } = useTheme();
+  const first = TABS[role][0].key;
+  const [stack, setStack] = useState([{ name: first, params: {} }]);
+  const [stackRole, setStackRole] = useState(role);
+
+  // Signing in or out (or switching the prototype role) starts again at that role's first tab.
+  if (stackRole !== role) {
+    setStackRole(role);
+    setStack([{ name: first, params: {} }]);
+  }
+
+  const route = stack[stack.length - 1];
+  const nav = {
+    go: (name, params = {}) => setStack((s) => [...s, { name, params }]),
+    replace: (name, params = {}) => setStack((s) => [...s.slice(0, -1), { name, params }]),
+    back: () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)),
+    tab: (name) => setStack([{ name, params: {} }]),
+    home: () => setStack([{ name: first, params: {} }]),
+    canGoBack: stack.length > 1,
+  };
+
+  // Android hardware back button walks back through the screens.
   useEffect(() => {
-    const onBackPress = () => {
-      if (drawerOpen || drawerVisible) {
-        closeDrawer();
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (stack.length > 1) {
+        setStack((s) => s.slice(0, -1));
         return true;
       }
       return false;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
-  }, [drawerOpen, drawerVisible]);
-
-  const openDrawer = () => {
-    setDrawerVisible(true);
-    setDrawerOpen(true);
-    Animated.parallel([
-      Animated.timing(drawerAnim, {
-        toValue: 0,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-      Animated.timing(overlayAnim, {
-        toValue: 1,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const closeDrawer = () => {
-    Animated.parallel([
-      Animated.timing(drawerAnim, {
-        toValue: -DRAWER_WIDTH,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(overlayAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setDrawerOpen(false);
-      setDrawerVisible(false);
     });
-  };
+    return () => sub.remove();
+  }, [stack.length]);
 
-  const navigate = (page, arg = null) => {
-    setRoute({ page, arg });
-    if (drawerOpen || drawerVisible) {
-      closeDrawer();
-    }
-  };
+  // How far the on-screen keyboard reaches up from the bottom of the screen (0 when closed).
+  // Expo draws edge-to-edge on Android, so the window no longer shrinks for the keyboard;
+  // the screen is lifted by exactly this much instead. On Android the reported height
+  // already lines up with the bottom of the app (checked on a phone: adding the
+  // navigation bar's height on top left a gap of about 24px under the reply box).
+  const [keyboard, setKeyboard] = useState(0);
+  const navBar = useSafeAreaInsets().bottom;
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e) => setKeyboard(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const keyboardOpen = keyboard > 0;
 
-  // Edge PanResponder: Swipe from left edge (0-40px) to right smoothly follows finger in real-time
-  const edgePanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dx > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      },
-      onPanResponderGrant: () => {
-        isDraggingRef.current = true;
-        setDrawerVisible(true);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx > 0) {
-          const currentX = Math.min(0, -DRAWER_WIDTH + gestureState.dx);
-          drawerAnim.setValue(currentX);
-          const progress = Math.max(0, Math.min(1, gestureState.dx / DRAWER_WIDTH));
-          overlayAnim.setValue(progress);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        isDraggingRef.current = false;
-        if (gestureState.dx > DRAWER_WIDTH * 0.25 || gestureState.vx > 0.3) {
-          openDrawer();
-        } else {
-          closeDrawer();
-        }
-      },
-      onPanResponderTerminate: () => {
-        isDraggingRef.current = false;
-        closeDrawer();
-      },
-    })
-  ).current;
-
-  // Drawer PanResponder: Swiping left inside the drawer follows finger in real-time to slide closed
-  const drawerPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dx < -10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-      },
-      onPanResponderGrant: () => {
-        isDraggingRef.current = true;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx < 0) {
-          const currentX = Math.max(-DRAWER_WIDTH, gestureState.dx);
-          drawerAnim.setValue(currentX);
-          const progress = Math.max(0, Math.min(1, 1 + currentX / DRAWER_WIDTH));
-          overlayAnim.setValue(progress);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        isDraggingRef.current = false;
-        if (gestureState.dx < -DRAWER_WIDTH * 0.25 || gestureState.vx < -0.3) {
-          closeDrawer();
-        } else {
-          // snap back open
-          Animated.parallel([
-            Animated.timing(drawerAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-            Animated.timing(overlayAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
-          ]).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        isDraggingRef.current = false;
-        closeDrawer();
-      },
-    })
-  ).current;
-
-  const unread = me
-    ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length
-    : 0;
-
-  const currentPerm = NEEDS[route.page];
-  const isAllowed = !currentPerm || can(role, currentPerm);
-
-  const renderCurrentPage = () => {
-    if (!isAllowed) {
-      return <MobileNoAccess onNavigate={navigate} />;
-    }
-
-    switch (route.page) {
-      case 'home':
-        return <MobileHome park={PARK} onNavigate={navigate} />;
-      case 'scan':
-        return <MobileScan onNavigate={navigate} />;
-      case 'about':
-        return <MobileAbout site={SITE} park={PARK} />;
-      case 'contact':
-        return <MobileContact />;
-      case 'staff':
-        return <MobileStaff park={PARK} onNavigate={navigate} />;
-      case 'login':
-        return <MobileLogin onNavigate={navigate} />;
-      case 'dashboard':
-        return <MobileDashboard arg={route.arg} onNavigate={navigate} />;
-      case 'map':
-        return <MobileMapPage arg={route.arg} onNavigate={navigate} />;
-      case 'add':
-        return <MobileAddPlant onNavigate={navigate} />;
-      case 'records':
-        return <MobileRecords onNavigate={navigate} />;
-      case 'review':
-        return <MobileReview onNavigate={navigate} />;
-      case 'reports':
-        return <MobileReports onNavigate={navigate} />;
-      case 'species':
-        return <MobileSpecies onNavigate={navigate} />;
-      case 'monitoring':
-        return <MobileMonitoring onNavigate={navigate} />;
-      case 'users':
-        return <MobileUsers onNavigate={navigate} />;
-      case 'audit':
-        return <MobileAudit onNavigate={navigate} />;
-      case 'tags':
-        return <MobileTags onNavigate={navigate} />;
-      case 'notifications':
-        return <MobileNotifications onNavigate={navigate} />;
-      case 'discussion':
-        return <MobileDiscussion arg={route.arg} onNavigate={navigate} />;
-      default:
-        return <MobileNotFound onNavigate={navigate} />;
-    }
-  };
-
-  const sLinks = staffLinks(role);
+  const Screen = SCREENS[route.name] || Home;
+  const blocked = NEEDS[route.name] && !can(role, NEEDS[route.name]);
+  const tabKeys = TABS[role].map((t) => t.key);
+  const showTabs = !FULL_SCREEN.includes(route.name);
+  const currentTab = tabKeys.includes(route.name) ? route.name : tabKeys.includes(stack[0].name) ? stack[0].name : null;
+  const camera = route.name === 'scan';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Top Application Bar - enlarged & accounts for notification shades */}
-      <View style={styles.topBar}>
-        {/* Left: Hamburger menu button */}
-        <TouchableOpacity
-          style={styles.menuIconBtn}
-          onPress={openDrawer}
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.menuIconText}>☰</Text>
-        </TouchableOpacity>
-
-        {/* Center: Brand Logo */}
-        <TouchableOpacity
-          style={styles.logoBtn}
-          onPress={() => navigate('home')}
-          hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.logoText}>🌿 {SITE}</Text>
-        </TouchableOpacity>
-
-        {/* Right side: Role Switcher Chip & Notification Bell on top right */}
-        <View style={styles.topRight}>
-          {/* Quick Role switcher chip */}
-          <TouchableOpacity
-            style={styles.roleChip}
-            onPress={() => setRoleModalOpen(true)}
-            hitSlop={{ top: 14, bottom: 14, left: 8, right: 8 }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.roleChipText}>
-              {ROLE_LABEL[role] || (role === 'visitor' ? 'Visitor' : role)}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Notification button/icon on top right - always visible */}
-          <TouchableOpacity
-            style={styles.bellBtn}
-            onPress={() => navigate('notifications')}
-            hitSlop={{ top: 16, bottom: 16, left: 12, right: 16 }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.bellIcon}>🔔</Text>
-            {unread > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unread}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+    <View style={{ flex: 1, backgroundColor: camera ? c.camera : c.surface }}>
+      <StatusBar style={camera || scheme === 'dark' ? 'light' : 'dark'} />
+      {/* While typing, the screen ends exactly at the top of the keyboard, so a reply box has
+          the same gap above and below it. Otherwise, screens without the tab bar keep clear of
+          Android's navigation bar themselves. The tab bar is hidden while typing. */}
+      <View style={{ flex: 1, paddingBottom: keyboardOpen ? keyboard : !showTabs && !camera ? navBar : 0 }}>
+        {blocked ? <NoAccess nav={nav} /> : <Screen key={stack.length + route.name} nav={nav} params={route.params} />}
       </View>
-
-      {/* Main Content Area */}
-      <ScrollView contentContainerStyle={styles.container}>
-        {renderCurrentPage()}
-      </ScrollView>
-
-      {/* Left Edge Swipe Detection Strip to open drawer with thumb gesture */}
-      <View style={styles.edgeSwipeStrip} {...edgePanResponder.panHandlers} />
-
-      {/* Bottom Bar Navigation - Fixed 4 buttons (Home, Scan, Plants, Map) & extra padding for gesture bars */}
-      <View style={styles.bottomNav}>
-        {FIXED_BOTTOM_NAV.map((l) => {
-          const isActive = route.page === l.page;
-
-          return (
-            <TouchableOpacity
-              key={l.page}
-              style={[styles.bottomTab, isActive && styles.bottomTabActive]}
-              onPress={() => navigate(l.page)}
-              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.tabIconWrap}>
-                <Text style={[styles.tabIconEmoji, isActive && styles.tabIconEmojiActive]}>
-                  {l.icon}
-                </Text>
-              </View>
-              <Text style={[styles.bottomTabText, isActive && styles.bottomTabTextActive]}>
-                {l.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Toast Notification Alert */}
       {toast ? (
-        <View style={styles.toastWrap} pointerEvents="none">
-          <Text style={styles.toastText}>{toast}</Text>
+        <View accessibilityLiveRegion="polite" style={{ position: 'absolute', left: 16, right: 16, bottom: keyboardOpen ? keyboard + 12 : showTabs ? 96 : 24, padding: 14, borderRadius: 14, backgroundColor: c.ink }}>
+          <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: c.surface }}>{toast}</Text>
         </View>
       ) : null}
-
-      {/* Slide Drawer - Follows Finger in Real Time & Closes On Outside Tap */}
-      {drawerVisible || drawerOpen ? (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 999 }]}>
-          {/* Full-Screen Dim Backdrop with Tap-Outside-To-Close */}
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={closeDrawer}
-            accessibilityLabel="Tap outside to close sidebar"
-          >
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.drawerOverlay,
-                { opacity: overlayAnim },
-              ]}
-            />
-          </Pressable>
-
-          {/* Animated Drawer Sheet Sliding from Left */}
-          <Animated.View
-            style={[
-              styles.drawerSheet,
-              {
-                width: DRAWER_WIDTH,
-                transform: [{ translateX: drawerAnim }],
-              },
-            ]}
-            onStartShouldSetResponder={() => true}
-            {...drawerPanResponder.panHandlers}
-          >
-            <SafeAreaView style={{ flex: 1 }}>
-              <View style={styles.drawerHeader}>
-                <Text style={styles.drawerTitle}>Menu</Text>
-                <TouchableOpacity
-                  onPress={closeDrawer}
-                  style={styles.closeDrawerBtn}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                >
-                  <Text style={styles.closeDrawerText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView contentContainerStyle={styles.drawerBody}>
-                <Text style={styles.sectionHeader}>PUBLIC PAGES</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('home')}>
-                  <Text style={styles.drawerItemText}>🏠 Home</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('scan')}>
-                  <Text style={styles.drawerItemText}>📷 Scan Plant QR</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('dashboard')}>
-                  <Text style={styles.drawerItemText}>🌿 Plant Library (Plants)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('map')}>
-                  <Text style={styles.drawerItemText}>🗺️ Botanical Map</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('about')}>
-                  <Text style={styles.drawerItemText}>ℹ️ About DaunSense</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('contact')}>
-                  <Text style={styles.drawerItemText}>✉️ Contact SFC</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('staff')}>
-                  <Text style={styles.drawerItemText}>🔐 Staff Area</Text>
-                </TouchableOpacity>
-
-                {sLinks.length > 0 && (
-                  <>
-                    <Text style={[styles.sectionHeader, { marginTop: 18 }]}>STAFF ACTIONS</Text>
-                    {sLinks.map((sl) => {
-                      const targetPage = sl.to.replace('/', '');
-                      return (
-                        <TouchableOpacity
-                          key={sl.to}
-                          style={styles.drawerItem}
-                          onPress={() => navigate(targetPage)}
-                        >
-                          <Text style={styles.drawerItemStaffText}>• {sl.label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </>
-                )}
-
-                {/* Staff Communication & Alerts */}
-                <Text style={[styles.sectionHeader, { marginTop: 18 }]}>COMMUNICATION</Text>
-                <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('notifications')}>
-                  <Text style={styles.drawerItemStaffText}>
-                    🔔 Notifications {unread > 0 ? `(${unread})` : ''}
-                  </Text>
-                </TouchableOpacity>
-                {role !== 'visitor' && (
-                  <TouchableOpacity style={styles.drawerItem} onPress={() => navigate('discussion')}>
-                    <Text style={styles.drawerItemStaffText}>💬 Discussion Forum</Text>
-                  </TouchableOpacity>
-                )}
-
-                <View style={styles.drawerDivider} />
-
-                {/* Demo Role Switcher */}
-                <Text style={styles.sectionHeader}>VIEW APPLICATION AS</Text>
-                <View style={styles.roleButtonsRow}>
-                  {ROLES.map((r) => (
-                    <TouchableOpacity
-                      key={r.key}
-                      style={[styles.roleSelectBtn, role === r.key && styles.roleSelectBtnActive]}
-                      onPress={() => {
-                        setRole(r.key);
-                        closeDrawer();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.roleSelectBtnText,
-                          role === r.key && styles.roleSelectBtnTextActive,
-                        ]}
-                      >
-                        {r.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {role !== 'visitor' ? (
-                  <TouchableOpacity
-                    style={[styles.drawerItem, { marginTop: 16 }]}
-                    onPress={() => {
-                      logout();
-                      navigate('home');
-                    }}
-                  >
-                    <Text style={[styles.drawerItemText, { color: '#ff8787', fontWeight: '700' }]}>
-                      🚪 Sign out
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.drawerItem, { marginTop: 16 }]}
-                    onPress={() => navigate('login')}
-                  >
-                    <Text style={[styles.drawerItemText, { color: COLORS.primary, fontWeight: '700' }]}>
-                      🔐 Staff Login
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </ScrollView>
-            </SafeAreaView>
-          </Animated.View>
-        </View>
-      ) : null}
-
-      {/* Role Switcher Dialog */}
-      <Modal
-        visible={roleModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRoleModalOpen(false)}
-      >
-        <TouchableOpacity
-          style={styles.roleModalOverlay}
-          activeOpacity={1}
-          onPress={() => setRoleModalOpen(false)}
-        >
-          <View style={styles.roleModalBox}>
-            <Text style={styles.roleModalTitle}>Switch Demo Role</Text>
-            <Text style={styles.roleModalSubtitle}>
-              Test how different roles view and interact with the biodiversity system:
-            </Text>
-
-            {ROLES.map((r) => (
-              <TouchableOpacity
-                key={r.key}
-                style={[styles.roleChoiceItem, role === r.key && styles.roleChoiceItemActive]}
-                onPress={() => {
-                  setRole(r.key);
-                  setRoleModalOpen(false);
-                }}
-              >
-                <Text style={styles.roleChoiceIcon}>
-                  {r.key === 'visitor' && '👁️'}
-                  {r.key === 'botanist' && '🌿'}
-                  {r.key === 'officer' && '📋'}
-                  {r.key === 'admin' && '🛡️'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.roleChoiceLabel,
-                      role === r.key && { color: COLORS.primary, fontWeight: '800' },
-                    ]}
-                  >
-                    {r.label}
-                  </Text>
-                  <Text style={styles.roleChoiceDesc}>
-                    {r.key === 'visitor' && 'Public plant library, safe maps, no editing.'}
-                    {r.key === 'botanist' && 'Add plants, field records, and photo editing.'}
-                    {r.key === 'officer' && 'Review queue, species management, monitoring.'}
-                    {r.key === 'admin' && 'User management, sensor setup, audit logs.'}
-                  </Text>
-                </View>
-                {role === r.key && <Text style={styles.checkIcon}>✓</Text>}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      <StatusBar style="light" />
-    </SafeAreaView>
+      {showTabs && !keyboardOpen ? <TabBar role={role} current={currentTab} badges={badgeCounts(db, me)} onTab={(key) => (key === 'scan' ? nav.go('scan') : nav.tab(key))} /> : null}
+    </View>
   );
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts(FONT_FILES);
+  if (!fontsLoaded) return null; // the splash screen stays up until the fonts are ready
   return (
-    <StoreProvider>
-      <MobileMain />
-    </StoreProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <StoreProvider>
+          <Main />
+        </StoreProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#0a1a11',
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 26) + 12 : 16,
-    paddingBottom: 14,
-    backgroundColor: '#122618',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    minHeight: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 26) + 58 : 66,
-  },
-  menuIconBtn: {
-    padding: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuIconText: {
-    color: COLORS.primary,
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 30,
-  },
-  logoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-  },
-  logoText: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  topRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  roleChip: {
-    backgroundColor: '#183622',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  roleChipText: {
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  bellBtn: {
-    position: 'relative',
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bellIcon: {
-    fontSize: 22,
-  },
-  badge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: COLORS.danger,
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  container: {
-    padding: 14,
-    paddingBottom: 120, // generous bottom padding to keep all content clear of the enlarged bottom nav
-  },
-  edgeSwipeStrip: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 40,
-    zIndex: 90,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#122618',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 22, // protects against Android navigation buttons & iOS home bar
-    paddingHorizontal: 8,
-    minHeight: Platform.OS === 'ios' ? 84 : 76,
-  },
-  bottomTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingVertical: 6,
-    minHeight: 46,
-  },
-  bottomTabActive: {
-    borderTopWidth: 3,
-    borderTopColor: COLORS.primary,
-    marginTop: -3,
-  },
-  tabIconWrap: {
-    position: 'relative',
-    marginBottom: 2,
-  },
-  tabIconEmoji: {
-    fontSize: 22,
-    opacity: 0.7,
-  },
-  tabIconEmojiActive: {
-    opacity: 1,
-  },
-  bottomTabText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  bottomTabTextActive: {
-    color: COLORS.primary,
-    fontWeight: '800',
-  },
-  toastWrap: {
-    position: 'absolute',
-    bottom: 86,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(20, 48, 29, 0.95)',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-    zIndex: 200,
-  },
-  toastText: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  drawerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.68)',
-  },
-  drawerSheet: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: '#122618',
-    borderRightWidth: 1,
-    borderRightColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 5, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 16,
-    zIndex: 1000,
-  },
-  drawerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 26) + 14 : 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  drawerTitle: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  closeDrawerBtn: {
-    padding: 8,
-  },
-  closeDrawerText: {
-    color: COLORS.textMuted,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  drawerBody: {
-    padding: 18,
-    paddingBottom: 50,
-  },
-  sectionHeader: {
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  drawerItem: {
-    paddingVertical: 11,
-  },
-  drawerItemText: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  drawerItemStaffText: {
-    color: '#bde09c',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  drawerDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 16,
-  },
-  roleButtonsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  roleSelectBtn: {
-    backgroundColor: '#0a1a11',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  roleSelectBtnActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  roleSelectBtnText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  roleSelectBtnTextActive: {
-    color: COLORS.textDark,
-    fontWeight: '800',
-  },
-  roleModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  roleModalBox: {
-    backgroundColor: '#16301e',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 18,
-    width: '100%',
-    maxWidth: 360,
-  },
-  roleModalTitle: {
-    color: COLORS.text,
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  roleModalSubtitle: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginBottom: 12,
-  },
-  roleChoiceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0a1a11',
-    borderRadius: 10,
-    padding: 10,
-    marginVertical: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 10,
-  },
-  roleChoiceItemActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: 'rgba(155, 207, 106, 0.12)',
-  },
-  roleChoiceIcon: {
-    fontSize: 22,
-  },
-  roleChoiceLabel: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  roleChoiceDesc: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  checkIcon: {
-    color: COLORS.primary,
-    fontWeight: '800',
-    fontSize: 16,
-  },
-});

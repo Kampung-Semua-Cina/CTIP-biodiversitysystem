@@ -2,6 +2,7 @@
 // Read-only helpers that join the tables together for the pages.
 
 import { can } from "./permissions.js";
+import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -59,7 +60,6 @@ export function shownCoords(p, role) {
 }
 
 // One colour per plant family, for the map. Plants with no confirmed species are grey.
-const FAMILY_PALETTE = ["#2f9e44", "#e8590c", "#1c7ed6", "#c2255c", "#f2b705", "#7048e8", "#0ca678", "#a0522d", "#e64980", "#3bc9db"];
 export const UNKNOWN_FAMILY = "Not confirmed";
 export const familyOf = (p) => p.species?.family || UNKNOWN_FAMILY;
 
@@ -68,7 +68,7 @@ export const familyOf = (p) => p.species?.family || UNKNOWN_FAMILY;
 export function familyColors(species = [], plants = []) {
   const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
   const colorOf = Object.fromEntries(families.map((f, i) => [f, FAMILY_PALETTE[i % FAMILY_PALETTE.length]]));
-  colorOf[UNKNOWN_FAMILY] = "#868e96";
+  colorOf[UNKNOWN_FAMILY] = UNKNOWN_FAMILY_COLOR;
   const shown = [...new Set(plants.map(familyOf))].sort((a, b) => (a === UNKNOWN_FAMILY) - (b === UNKNOWN_FAMILY) || a.localeCompare(b));
   return Object.fromEntries(shown.map((f) => [f, colorOf[f] || colorOf[UNKNOWN_FAMILY]]));
 }
@@ -83,3 +83,44 @@ export const tagUrl = (qr) =>
   typeof window !== "undefined" && window.location
     ? `${window.location.origin}${window.location.pathname}#/dashboard/${qr}`
     : `https://daunsense.example/#/dashboard/${qr}`;
+
+export function staffCounts(db, me) {
+  return {
+    review: db.observations.filter((o) => o.status === "synced").length,
+    alerts: db.alerts.filter((a) => a.status === "open").length,
+    returned: me ? db.observations.filter((o) => o.recorded_by === me.id && o.status === "returned").length : 0,
+  };
+}
+
+// ---------- Species catalogue, species page and plant page ----------
+
+// Visits to one tagged plant (observations), newest first. Visitors only see approved visits.
+export function plantVisits(db, plantId, role) {
+  return db.observations
+    .filter((o) => o.specimen_id === plantId && (can(role, "pending") || o.status === "approved"))
+    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+}
+
+// Date of the newest visit, or null.
+export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0]?.observed_at || null;
+
+// One entry per species for the catalogue, with the tagged plants this role can see.
+// Visitors only get published species. Staff also see unpublished ones.
+export function speciesCatalogue(db, role) {
+  const plants = visiblePlants(db, role);
+  return db.species
+    .filter((s) => !s.is_deleted && (can(role, "pending") || s.is_published))
+    .map((s) => {
+      const mine = plants.filter((p) => p.species_id === s.id);
+      return {
+        ...s,
+        name: s.common_name || s.scientific_name,
+        plants: mine,
+        photo: mine.find((p) => p.photos.length)?.photos[0]?.url || null,
+        endangered: s.conservation_status === "endangered",
+      };
+    });
+}
+
+// Plants that are not on the map for this role (endangered for visitors) still count, but have no coords.
+export const mappable = (plants, role) => plants.map((p) => ({ p, c: shownCoords(p, role) })).filter((x) => x.c);

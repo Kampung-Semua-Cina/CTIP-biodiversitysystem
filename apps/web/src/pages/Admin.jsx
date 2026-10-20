@@ -3,10 +3,10 @@ import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { ROLE_LABEL } from "../permissions.js";
-import { DEFAULT_PW } from "../data.js";
-import { fmtDate, fmtDateTime } from "../utils.js";
+import { useStore } from "../../../shared/store.js";
+import { ROLE_LABEL } from "../../../shared/permissions.js";
+import { DEFAULT_PW } from "../../../shared/data.js";
+import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
 
 // Admin page for accounts. Botanists and officers are registered here, not by themselves.
 export function Users() {
@@ -28,7 +28,7 @@ export function Users() {
       <h2>Users</h2>
 
       <form className="addform" onSubmit={add}>
-        <h3 className="sub"><Icon name="plus" size={18} /> Add botanist or officer</h3>
+        <h3><Icon name="users" size={18} /> Add botanist or officer</h3>
         <div className="row wrap">
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
@@ -37,9 +37,9 @@ export function Users() {
               {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
             </select>
           </label>
-          <button className="btn" type="submit">Add account</button>
+          <button className="btn" type="submit"><Icon name="plus" size={18} /> Add account</button>
         </div>
-        <p className="mute small">Default password: <b>{DEFAULT_PW}</b>. Give it to them yourself; they are asked to change it the first time they sign in, and can change it later from the login page.</p>
+        <p className="mute small">Default password: <span className="mono">{DEFAULT_PW}</span>. Give it to them yourself; they are asked to change it the first time they sign in, and can change it later from the login page.</p>
       </form>
 
       <div className="tablewrap">

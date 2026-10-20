@@ -3,13 +3,20 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
+    "@expo-google-fonts/fraunces": "^0.4.1",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@expo-google-fonts/nunito": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "expo": "~57.0.24",
     "expo-camera": "^57.0.6",
+    "expo-font": "~57.0.4",
     "expo-image-picker": "^57.0.20",
     "expo-status-bar": "~57.0.1",
+    "lucide-react-native": "^1.59.0",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4"
   },
   "scripts": {
     "start": "expo start",

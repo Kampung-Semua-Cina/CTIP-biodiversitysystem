@@ -1,158 +1,92 @@
 // apps/mobile/components/Theme.js
-import { StyleSheet } from 'react-native';
+// Light and dark themes for the field app. Colour values come from apps/shared/tokens.js
+// (the same file the web app reads), so the two apps cannot drift apart.
+//
+// useTheme() gives every screen:
+//   c        the colours for the current theme (c.accent, c.ink2, c.dangerSoft, ...)
+//   t        ready-made text styles (t.title1, t.body, t.sci, t.mono, ...)
+//   mode     'device' | 'light' | 'dark'  (what the person picked in More > Appearance)
+//   scheme   'light' | 'dark'             (what is actually showing)
+//   setMode  change the theme
+import React, { createContext, useContext, useMemo, useState } from 'react';
+import { useColorScheme } from 'react-native';
+// One import per weight, so only these nine font files are bundled into the app.
+import { Fraunces_500Medium } from '@expo-google-fonts/fraunces/500Medium';
+import { Fraunces_500Medium_Italic } from '@expo-google-fonts/fraunces/500Medium_Italic';
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces/600SemiBold';
+import { Fraunces_700Bold } from '@expo-google-fonts/fraunces/700Bold';
+import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
 
-export const COLORS = {
-  bg: '#0e2217',
-  card: '#16301e',
-  cardAlt: '#1d3d27',
-  border: 'rgba(190, 220, 170, 0.22)',
-  borderLight: 'rgba(190, 220, 170, 0.12)',
-  text: '#eef4e4',
-  textMuted: '#b9cdb0',
-  textDark: '#14301d',
-  primary: '#9bcf6a',
-  primaryPressed: '#86ba56',
-  danger: '#e05d5d',
-  warning: '#e89a3c',
-  info: '#4ea8de',
-  activeGreen: '#2f9e44',
+import { colors, typeScale, space, radius, STATUS_TONE, STATUS_TEXT } from '../../shared/tokens.js';
+
+// Passed to useFonts() in App.js. The keys are the fontFamily names used below.
+export const FONT_FILES = {
+  Fraunces_500Medium,
+  Fraunces_500Medium_Italic,
+  Fraunces_600SemiBold,
+  Fraunces_700Bold,
+  Nunito_400Regular,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+  JetBrainsMono_500Medium,
 };
 
-export const CHIP_COLORS = {
-  approved: { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  synced: { bg: 'rgba(28, 126, 214, 0.25)', text: '#74b9ff', border: '#1c7ed6' },
-  returned: { bg: 'rgba(232, 89, 12, 0.25)', text: '#ff922b', border: '#e8590c' },
-  rejected: { bg: 'rgba(194, 37, 92, 0.25)', text: '#ff8787', border: '#c2255c' },
-  draft: { bg: 'rgba(134, 142, 150, 0.25)', text: '#ced4da', border: '#868e96' },
-  queued: { bg: 'rgba(242, 183, 5, 0.25)', text: '#ffd43b', border: '#f2b705' },
-  'least-concern': { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  'near-threatened': { bg: 'rgba(242, 183, 5, 0.25)', text: '#ffd43b', border: '#f2b705' },
-  vulnerable: { bg: 'rgba(232, 89, 12, 0.25)', text: '#ff922b', border: '#e8590c' },
-  endangered: { bg: 'rgba(194, 37, 92, 0.25)', text: '#ff8787', border: '#c2255c' },
-  high: { bg: 'rgba(224, 93, 93, 0.25)', text: '#ff8787', border: '#e05d5d' },
-  medium: { bg: 'rgba(232, 154, 60, 0.25)', text: '#ff922b', border: '#e89a3c' },
-  low: { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  active: { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  offline: { bg: 'rgba(134, 142, 150, 0.25)', text: '#ced4da', border: '#868e96' },
-  faulty: { bg: 'rgba(224, 93, 93, 0.25)', text: '#ff8787', border: '#e05d5d' },
-  open: { bg: 'rgba(224, 93, 93, 0.25)', text: '#ff8787', border: '#e05d5d' },
-  acknowledged: { bg: 'rgba(242, 183, 5, 0.25)', text: '#ffd43b', border: '#f2b705' },
-  resolved: { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  assigned: { bg: 'rgba(28, 126, 214, 0.25)', text: '#74b9ff', border: '#1c7ed6' },
-  unused: { bg: 'rgba(134, 142, 150, 0.25)', text: '#ced4da', border: '#868e96' },
-  retired: { bg: 'rgba(224, 93, 93, 0.25)', text: '#ff8787', border: '#e05d5d' },
-  botanist: { bg: 'rgba(47, 158, 68, 0.25)', text: '#74c476', border: '#2f9e44' },
-  officer: { bg: 'rgba(28, 126, 214, 0.25)', text: '#74b9ff', border: '#1c7ed6' },
-  admin: { bg: 'rgba(194, 37, 92, 0.25)', text: '#ff8787', border: '#c2255c' },
-  visitor: { bg: 'rgba(134, 142, 150, 0.25)', text: '#ced4da', border: '#868e96' },
+// On Android a custom font must be picked by its file name, not by fontWeight,
+// so each weight has its own family name.
+const FAMILY = {
+  display: { 500: 'Fraunces_500Medium', 600: 'Fraunces_600SemiBold', 700: 'Fraunces_700Bold', italic: 'Fraunces_500Medium_Italic' },
+  text: { 400: 'Nunito_400Regular', 600: 'Nunito_600SemiBold', 700: 'Nunito_700Bold', 800: 'Nunito_800ExtraBold' },
+  mono: { 500: 'JetBrainsMono_500Medium' },
 };
 
-export const commonStyles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  heading: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  subHeading: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginVertical: 8,
-  },
-  body: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  mute: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    lineHeight: 18,
-  },
-  btnPrimary: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  btnPrimaryText: {
-    color: COLORS.textDark,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  btnGhost: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  btnGhostText: {
-    color: COLORS.text,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  btnDanger: {
-    backgroundColor: COLORS.danger,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  btnDangerText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  input: {
-    backgroundColor: '#0a1a11',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: COLORS.text,
-    fontSize: 14,
-    marginVertical: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    marginTop: 10,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rowWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginVertical: 8,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 14,
-  },
-});
+// fontFamily for a role and weight, e.g. font('text', 700) -> 'Nunito_700Bold'
+export const font = (role, weight = 400, italic = false) =>
+  italic ? FAMILY[role].italic : FAMILY[role][weight] || FAMILY[role][Object.keys(FAMILY[role])[0]];
+
+// The type scale from tokens.js as React Native text styles (colour added per theme).
+function textStyles(c) {
+  const out = {};
+  for (const [name, s] of Object.entries(typeScale)) {
+    out[name] = {
+      fontFamily: font(s.font, s.weight, s.italic),
+      fontSize: s.size,
+      lineHeight: s.line,
+      color: name === 'sci' ? c.ink2 : c.ink,
+      ...(s.caps ? { textTransform: 'uppercase', letterSpacing: s.size * s.tracking, color: c.ink2 } : null),
+    };
+  }
+  return out;
+}
+
+const ThemeContext = createContext(null);
+
+export function ThemeProvider({ children }) {
+  const device = useColorScheme(); // follows the phone's dark mode setting
+  const [mode, setMode] = useState('device');
+  const scheme = mode === 'device' ? (device === 'light' ? 'light' : 'dark') : mode;
+
+  const value = useMemo(() => {
+    const c = colors(scheme);
+    return { c, t: textStyles(c), mode, scheme, setMode, space, radius };
+  }, [scheme, mode]);
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export const useTheme = () => useContext(ThemeContext);
+
+// Tone name ('success', 'danger', ...) for a status or conservation value.
+export const toneOf = (value) => STATUS_TONE[String(value || '').toLowerCase()] || 'neutral';
+
+// Plain-language label for a status ("synced" -> "Needs review").
+export const statusText = (value) => {
+  const v = String(value || '');
+  if (STATUS_TEXT[v]) return STATUS_TEXT[v];
+  const t = v.replaceAll('_', ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};

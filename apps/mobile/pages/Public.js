@@ -1,253 +1,148 @@
 // apps/mobile/pages/Public.js
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+// Screens anyone can open: Home, More, About, Contact, and the "no access" fallback.
+import React, { useState } from 'react';
+import { View, Linking } from 'react-native';
 
+import { useStore } from '../../shared/store.js';
+import { visiblePlants } from '../../shared/selectors.js';
+import { getAboutContent, getContactContent, getHomeContent } from '../../shared/publicContent.js';
+import { SITE, PARK } from '../../shared/site.js';
+import { useTheme } from '../components/Theme.js';
+import Icon from '../components/Icon.js';
+import { LogoMark, AppearanceSection, PrototypeRoleSection } from '../components/Chrome.js';
 import {
-  getAboutContent,
-  getHomeContent,
-  getContactContent,
-  getStaffPageContent,
-  getAccessContent,
-} from "../../shared/publicContent.js";
-import { useStore } from "../../shared/store.js";
-import { visiblePlants } from "../../shared/selectors.js";
-import { COLORS, commonStyles } from "../components/Theme.js";
+  Screen, Header, TitleBlock, SearchField, Section, Row, Thumb, Sci, DotLabel, TextLink, Txt,
+  MenuRow, Button, KV, IconTile, IconButton, Empty,
+} from '../components/Bits.js';
 
-export function MobileHome({ park = "Niah National Park", onNavigate }) {
-  const store = useStore();
-  const db = store?.db;
-  const content = getHomeContent(park);
-  const latest = db ? visiblePlants(db, "visitor").slice(0, 3) : [];
+// Newest published plants first (the date an officer approved them).
+function recentPublished(db) {
+  const approvedAt = (plantId) => {
+    const obs = db.observations.filter((o) => o.specimen_id === plantId && o.status === 'approved');
+    const rev = db.reviews.filter((r) => obs.some((o) => o.id === r.observation_id));
+    return rev.map((r) => r.created_at).sort().pop() || '';
+  };
+  return visiblePlants(db, 'visitor').sort((a, b) => approvedAt(b.id).localeCompare(approvedAt(a.id)));
+}
+
+export function Home({ nav }) {
+  const { db } = useStore();
+  const { c } = useTheme();
+  const [q, setQ] = useState('');
+  const recent = recentPublished(db).slice(0, 5);
+  const home = getHomeContent(PARK);
 
   return (
-    <View>
-      {/* Hero section */}
-      <View style={styles.heroCard}>
-        <Text style={styles.heroBadge}>🌿 DaunSense</Text>
-        <Text style={styles.heroTitle}>{content.heroTitle}</Text>
-        <Text style={styles.heroSubtitle}>{content.heroSubtitle}</Text>
-
-        <View style={styles.btnRow}>
-          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
-            <Text style={commonStyles.btnPrimaryText}>Browse plants</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={commonStyles.btnGhost} onPress={() => onNavigate?.('map')}>
-            <Text style={commonStyles.btnGhostText}>Open map</Text>
-          </TouchableOpacity>
+    <Screen
+      header={
+        <View style={{ height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 8 }}>
+          <LogoMark />
+          <TextLink label="Sign in" onPress={() => nav.go('signin')} />
         </View>
+      }
+      top={4}
+    >
+      <TitleBlock title="Plants of Niah" sub={`Verified records from ${PARK}`} size={34} />
+      <SearchField
+        value={q}
+        onChangeText={(text) => {
+          setQ(text);
+          if (text.length > 1) nav.go('plants', { q: text });
+        }}
+        placeholder="Search plants or tag ID"
+      />
+      <Section title={home.recentSectionTitle} top={false} gap={0} right={<TextLink label="See all" size={14} onPress={() => nav.tab('plants')} />}>
+        {recent.length === 0 ? <Empty>No plants are published yet.</Empty> : null}
+        {recent.map((p, i) => (
+          <Row
+            key={p.id}
+            left={<Thumb uri={p.photos[0]?.url} />}
+            title={p.name}
+            sub={
+              <>
+                <Sci size={14}>{p.scientific}</Sci>
+                {p.endangered ? <DotLabel status="endangered" /> : null}
+              </>
+            }
+            onPress={() => nav.go('species', { id: p.species?.id })}
+            last={i === recent.length - 1}
+          />
+        ))}
+      </Section>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Icon name="lock" size={16} color={c.ink2} />
+        <Txt v="caption" color={c.ink2} style={{ flex: 1, fontWeight: undefined }}>Endangered plants never show an exact location.</Txt>
       </View>
+    </Screen>
+  );
+}
 
-      {/* Features */}
-      <View style={commonStyles.card}>
-        <Text style={commonStyles.subHeading}>System Features</Text>
-        {content.features.map((item, idx) => (
-          <View key={idx} style={styles.featureItem}>
-            <Text style={styles.featureTitle}>• {item.title}</Text>
-            <Text style={commonStyles.mute}>{item.text}</Text>
+// Visitor "More" tab.
+export function More({ nav }) {
+  const { c } = useTheme();
+  return (
+    <Screen gap={20}>
+      <TitleBlock title="More" />
+      <View>
+        <MenuRow icon="info" label={`About ${SITE}`} onPress={() => nav.go('about')} />
+        <MenuRow icon="mail" label="Contact" onPress={() => nav.go('contact')} last />
+      </View>
+      <AppearanceSection />
+      <Section title="Park staff" gap={12}>
+        <Txt v="body" color={c.ink2} style={{ fontSize: 15, lineHeight: 22 }}>
+          For Sarawak Forestry Corporation botanists, officers and admins.
+        </Txt>
+        <Button label="Staff sign in" kind="secondary" icon="lock" onPress={() => nav.go('signin')} />
+      </Section>
+      <PrototypeRoleSection />
+    </Screen>
+  );
+}
+
+export function About({ nav }) {
+  const { c } = useTheme();
+  const about = getAboutContent(SITE, PARK);
+  const features = getHomeContent(PARK).features;
+  return (
+    <Screen header={<Header left={<IconButton name="chevL" label="Back" onPress={nav.back} />} />} top={0} gap={18}>
+      <TitleBlock title={about.title} />
+      {about.paragraphs.map((p) => (
+        <Txt key={p.slice(0, 20)} v="body" style={{ lineHeight: 25 }}>{p}</Txt>
+      ))}
+      <View>
+        {features.map((f, i) => (
+          <View key={f.title} style={{ flexDirection: 'row', gap: 14, paddingVertical: 14, borderBottomWidth: i < features.length - 1 ? 1 : 0, borderBottomColor: c.line }}>
+            <IconTile name={f.icon} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Txt v="label" style={{ fontSize: 16 }}>{f.title}</Txt>
+              <Txt v="body" color={c.ink2} style={{ fontSize: 15, lineHeight: 22 }}>{f.text}</Txt>
+            </View>
           </View>
         ))}
       </View>
-
-      {/* Recently Published */}
-      {latest.length > 0 && (
-        <View style={commonStyles.card}>
-          <Text style={commonStyles.subHeading}>{content.recentSectionTitle || "Recently published"}</Text>
-          <View style={styles.recentList}>
-            {latest.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                style={styles.recentCard}
-                onPress={() => onNavigate?.('dashboard', p.qr_id)}
-              >
-                <Image
-                  source={{ uri: p.photos[0]?.url }}
-                  style={styles.recentImg}
-                />
-                <View style={styles.recentInfo}>
-                  <Text style={styles.recentName}>{p.name}</Text>
-                  <Text style={styles.recentSci}>{p.scientific || p.qr_id}</Text>
-                </View>
-                <Text style={styles.arrowIcon}>›</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-    </View>
+    </Screen>
   );
 }
 
-export function MobileAbout({ site = "Daun Sense", park = "Niah National Park" }) {
-  const content = getAboutContent(site, park);
+export function Contact({ nav }) {
+  const info = getContactContent();
   return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>{content.title}</Text>
-      {content.paragraphs.map((para, i) => (
-        <Text key={i} style={[commonStyles.body, { marginBottom: 14 }]}>
-          {para}
-        </Text>
-      ))}
-    </View>
+    <Screen header={<Header left={<IconButton name="chevL" label="Back" onPress={nav.back} />} />} top={0} gap={18}>
+      <TitleBlock title={info.title} />
+      <KV rows={[['Organisation', info.organization], ['Address', info.address], ['Email', info.email]]} />
+      <Button label="Email us" icon="mail" onPress={() => Linking.openURL(`mailto:${info.email}`)} />
+    </Screen>
   );
 }
 
-export function MobileContact() {
-  const content = getContactContent();
+export function NoAccess({ nav }) {
+  const { role } = useStore();
   return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>{content.title}</Text>
-      <Text style={[commonStyles.body, { fontWeight: '600' }]}>Email: {content.email}</Text>
-      <Text style={commonStyles.body}>{content.organization}</Text>
-      <Text style={commonStyles.mute}>{content.address}</Text>
-    </View>
+    <Screen header={<Header left={nav.canGoBack ? <IconButton name="chevL" label="Back" onPress={nav.back} /> : null} />} top={0}>
+      <Empty icon="lock">
+        {role === 'visitor' ? 'This page is for staff. Sign in to continue.' : 'Your role does not include this page.'}
+      </Empty>
+      {role === 'visitor' ? <Button label="Staff sign in" onPress={() => nav.go('signin')} /> : null}
+    </Screen>
   );
 }
-
-export function MobileStaff({ park = "Niah National Park", onNavigate }) {
-  const store = useStore();
-  const me = store?.me;
-  const role = store?.role || "visitor";
-  const content = getStaffPageContent(park);
-
-  return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>{content.title}</Text>
-      {me ? (
-        <View style={{ gap: 12 }}>
-          <Text style={commonStyles.body}>
-            You are signed in as <Text style={{ fontWeight: '700', color: COLORS.primary }}>{me.full_name}</Text> ({me.role}).
-          </Text>
-          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('dashboard')}>
-            <Text style={commonStyles.btnPrimaryText}>Go to dashboard</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={{ gap: 12 }}>
-          <Text style={commonStyles.body}>{content.description}</Text>
-          <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('login')}>
-            <Text style={commonStyles.btnPrimaryText}>Go to login</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {role === 'visitor' && (
-        <Text style={[commonStyles.mute, { marginTop: 14 }]}>{content.visitorHint}</Text>
-      )}
-    </View>
-  );
-}
-
-export function MobileNoAccess({ onNavigate }) {
-  const store = useStore();
-  const role = store?.role || "visitor";
-  const content = getAccessContent();
-
-  return (
-    <View style={commonStyles.card}>
-      <Text style={[commonStyles.heading, { color: COLORS.danger }]}>{content.noAccessTitle}</Text>
-      <Text style={[commonStyles.body, { marginBottom: 14 }]}>
-        {role === 'visitor' ? content.visitorText : content.staffText}
-      </Text>
-      <TouchableOpacity
-        style={commonStyles.btnPrimary}
-        onPress={() => onNavigate?.(role === 'visitor' ? 'login' : 'dashboard')}
-      >
-        <Text style={commonStyles.btnPrimaryText}>
-          {role === 'visitor' ? 'Go to login' : 'Back to dashboard'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-export function MobileNotFound({ onNavigate }) {
-  const content = getAccessContent();
-  return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>{content.notFoundTitle}</Text>
-      <Text style={[commonStyles.body, { marginBottom: 14 }]}>{content.notFoundText}</Text>
-      <TouchableOpacity style={commonStyles.btnPrimary} onPress={() => onNavigate?.('home')}>
-        <Text style={commonStyles.btnPrimaryText}>Back to home</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  heroCard: {
-    backgroundColor: '#132c1c',
-    borderRadius: 18,
-    padding: 20,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(155, 207, 106, 0.28)',
-  },
-  heroBadge: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginBottom: 8,
-    lineHeight: 30,
-  },
-  heroSubtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: COLORS.textMuted,
-    marginBottom: 16,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  featureItem: {
-    marginVertical: 8,
-  },
-  featureTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  recentList: {
-    gap: 8,
-    marginTop: 6,
-  },
-  recentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f2416',
-    borderRadius: 12,
-    padding: 10,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  recentImg: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-  },
-  recentInfo: {
-    flex: 1,
-  },
-  recentName: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  recentSci: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  arrowIcon: {
-    color: COLORS.primary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-});

@@ -1,14 +1,15 @@
 // apps/web/src/App.jsx
 // Needs one extra package:  npm i qrcode.react
-// Styles are in App.css. Sample data is in data.js. Who-can-do-what is in permissions.js.
+// Styles are in App.css and theme.js. Sample data, the store and who-can-do-what live in apps/shared.
 
 import { useState } from "react";
 import "./App.css";
 
-import StoreProvider from "./StoreProvider.jsx";
-import { useStore } from "./store.js";
+import StoreProvider from "../../shared/StoreProvider.js";
+import { useStore } from "../../shared/store.js";
 import { useRoute } from "./useRoute.js";
-import { can } from "./permissions.js";
+import { can } from "../../shared/permissions.js";
+import { themeVars, useThemeMode } from "./theme.js";
 
 import { Navbar, Drawer, BottomBar, Footer } from "./components/Chrome.jsx";
 import RoleSwitch from "./components/RoleSwitch.jsx";
@@ -66,37 +67,34 @@ function renderPage(seg, arg) {
 function Site() {
   const { seg, arg } = useRoute();
   const { role, me, db, toast, setRole, logout } = useStore();
-  const [light, setLight] = useState(false);
+  const { mode, theme, setMode } = useThemeMode(); // Light, Dark, or follow the device (remembered)
   const [menuAt, setMenuAt] = useState(null); // the page the menu was opened on, so it closes when you move on
 
   const unread = me ? db.notifications.filter((n) => n.user_id === me.id && !n.is_read).length : 0;
   const menuOpen = menuAt === seg + arg;
-  const toggleTheme = () => setLight(!light);
-
-  // Light/dark colours are switched with data-theme (see App.css).
+  // Light/dark colours come from apps/shared/tokens.js as CSS variables (see theme.js).
   const needs = NEEDS[seg];
   const page = needs && !can(role, needs) ? <NoAccess /> : renderPage(seg, arg);
 
   return (
-    <div className="site" data-theme={light ? "light" : "dark"}>
-      <div className="bg" />
+    <div className="site" data-theme={theme} style={themeVars(theme)}>
       <RoleSwitch role={role} setRole={setRole} />
-      <Navbar seg={seg} role={role} me={me} unread={unread} light={light} onTheme={toggleTheme}
+      <Navbar seg={seg} role={role} me={me} unread={unread} mode={mode} theme={theme} onMode={setMode}
         onMenu={() => setMenuAt(seg + arg)} onLogout={() => { logout(); window.location.hash = "/"; }} />
-      {menuOpen && <Drawer role={role} light={light} onTheme={toggleTheme} onClose={() => setMenuAt(null)} />}
+      {menuOpen && <Drawer role={role} mode={mode} onMode={setMode} onClose={() => setMenuAt(null)} />}
 
-      <main>{page}</main>
+      <main id="main">{page}</main>
 
       <BottomBar role={role} seg={seg} unread={unread} />
-      <Footer light={light} onTheme={toggleTheme} />
-      {toast && <div className="glass toast" role="status">{toast}</div>}
+      <Footer mode={mode} onMode={setMode} />
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }
 
 export default function App() {
   return (
-    <StoreProvider>
+    <StoreProvider deviceId="web">
       <Site />
     </StoreProvider>
   );

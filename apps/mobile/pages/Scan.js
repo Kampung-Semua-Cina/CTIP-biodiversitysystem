@@ -1,533 +1,244 @@
 // apps/mobile/pages/Scan.js
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
-import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
+// Scan a pre-printed QR tag (CTIP-15). Tags are printed in batches beforehand and fixed
+// to the plant in the field, so the app never makes or prints a code. What happens next
+// depends on the tag and who is scanning:
+//   unused tag + botanist   -> "Start a new plant record?"  -> Add plant
+//   tag already on a plant  -> botanist: "Record a revisit" / everyone else: plant page
+//   retired or unknown      -> explain, scan again
+import React, { useState } from 'react';
+import { View, Text, Pressable, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 import { useStore } from '../../shared/store.js';
 import { plantView } from '../../shared/selectors.js';
-import { COLORS, commonStyles } from '../components/Theme.js';
+import { useTheme, font } from '../components/Theme.js';
+import Icon from '../components/Icon.js';
+import { Sheet, Button, Txt, Mono, Sci, DotLabel, Thumb, IconButton } from '../components/Bits.js';
+import { shortDate } from '../components/format.js';
 
-export default function MobileScan({ onNavigate }) {
-  const { db, role, notify } = useStore();
-  const [manualCode, setManualCode] = useState('');
-  const [facing, setFacing] = useState('back');
-  const [torch, setTorch] = useState(false);
-  const [scanned, setScanned] = useState(false);
-  const [cameraError, setCameraError] = useState(null);
-  const [pickedImageUri, setPickedImageUri] = useState(null);
-  const [analyzingImage, setAnalyzingImage] = useState(false);
+const CAMERA_TEXT = '#eef4e4';
+const CAMERA_MUTED = '#b4c9ab';
 
-  // Camera permissions hook
+// Pull "NIAH-0007" out of whatever the QR holds (a bare ID or a link to the plant page).
+export function extractTag(raw) {
+  const match = String(raw || '').toUpperCase().match(/NIAH-\d{4}/);
+  return match ? match[0] : String(raw || '').trim().toUpperCase();
+}
+
+// What a scanned ID refers to. Supabase: GET /tags/{qrId} once the apps use the API.
+export function lookupTag(db, id) {
+  const plant = db.plants.find((p) => p.qr_id.toUpperCase() === id && !p.is_deleted);
+  if (plant) return { kind: 'used', id, plant: plantView(db, plant) };
+  const tag = db.tags.find((t) => t.qr_id.toUpperCase() === id);
+  if (tag?.status === 'unused') return { kind: 'unused', id, tag };
+  if (tag?.status === 'retired') return { kind: 'retired', id, tag };
+  return { kind: 'unknown', id };
+}
+
+export default function Scan({ nav, params = {} }) {
+  const { db, role } = useStore();
   const [permission, requestPermission] = useCameraPermissions();
+  const [torch, setTorch] = useState(false);
+  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code)) : null);
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState('');
 
-  // Auto-request permission on mount if not yet requested
-  useEffect(() => {
-    if (permission && !permission.granted && permission.canAskAgain) {
-      requestPermission();
-    }
-  }, [permission]);
+  const close = () => (nav.canGoBack ? nav.back() : nav.home());
 
-  const extractCode = (raw) => {
-    if (!raw) return '';
-    const trimmed = String(raw).trim();
-    // Match NIAH-XXXX pattern inside URLs or text
-    const match = trimmed.match(/NIAH-[0-9]{4}/i);
-    if (match) {
-      return match[0].toUpperCase();
-    }
-    return trimmed.toUpperCase();
+  const handle = (raw) => {
+    if (result) return; // ignore repeat reads while a result is showing
+    const r = lookupTag(db, extractTag(raw));
+    // A visitor who scans a published plant goes straight to its page.
+    if (r.kind === 'used' && role !== 'botanist') return nav.replace('tag', { qr: r.id });
+    setTyping(false);
+    setResult(r);
   };
 
-  const handleScanCode = (code) => {
-    const cleanCode = extractCode(code);
-    if (!cleanCode) {
-      return notify('Please enter or scan a valid QR tag');
-    }
-
-    // Check if the QR code matches a registered plant
-    const plant = db.plants.find((p) => p.qr_id.toUpperCase() === cleanCode);
-    if (plant) {
-      const pv = plantView(db, plant);
-      notify(`Found ${cleanCode}: ${pv.name}`);
-      // Open plant details on Dashboard
-      onNavigate?.('dashboard', plant.qr_id);
-      return;
-    }
-
-    // Check if it's an unused tag in the system
-    const unusedTag = db.tags.find(
-      (t) => t.qr_id.toUpperCase() === cleanCode && t.status === 'unused'
-    );
-    if (unusedTag) {
-      if (role === 'botanist' || role === 'admin') {
-        notify(`Unused tag ${cleanCode}. Opening registration form.`);
-        onNavigate?.('add');
-      } else {
-        notify(`Tag ${cleanCode} is registered in stock but has not been bound to a plant yet.`);
-      }
-      return;
-    }
-
-    notify(`Tag "${cleanCode}" not found in Niah National Park database.`);
-  };
-
-  // Barcode scanned event from live camera
-  const handleBarcodeScanned = ({ data }) => {
-    if (scanned) return;
-    setScanned(true);
-
-    const detected = data || '';
-    handleScanCode(detected);
-
-    // Prevent immediate re-triggering for 2.5 seconds
-    setTimeout(() => {
-      setScanned(false);
-    }, 2500);
-  };
-
-  // Switch between front and back camera
-  const toggleFacing = () => {
-    setFacing((cur) => (cur === 'back' ? 'front' : 'back'));
-    setCameraError(null);
-  };
-
-  const handleMountError = (e) => {
-    console.log('Camera error:', e);
-    if (facing === 'back') {
-      // Try front camera fallback (e.g. desktop webcam)
-      setFacing('front');
-    } else {
-      setCameraError(e?.message || 'Unable to access device camera');
-    }
-  };
-
-  // Launch gallery picker to select photo
-  const handlePickFromGallery = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        setPickedImageUri(uri);
-        setAnalyzingImage(true);
-
-        try {
-          // Attempt QR scan from picked image URL
-          if (typeof scanFromURLAsync === 'function') {
-            const results = await scanFromURLAsync(uri, ['qr']);
-            if (results && results.length > 0 && results[0]?.data) {
-              const detected = results[0].data;
-              setAnalyzingImage(false);
-              handleScanCode(detected);
-              return;
-            }
-          }
-        } catch (scanErr) {
-          console.log('Error scanning from URL:', scanErr);
-        }
-
-        setAnalyzingImage(false);
-        notify('Photo loaded. Please enter or confirm the tag ID below.');
-      }
-    } catch (err) {
-      console.log('Gallery picker error:', err);
-      notify('Unable to access device gallery');
-      setAnalyzingImage(false);
-    }
-  };
+  const granted = permission?.granted;
 
   return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>Scan plant tag</Text>
-      <Text style={commonStyles.mute}>
-        Point your phone camera at a physical QR tag in Niah National Park or upload a photo from your
-        gallery to view the plant profile.
-        {role === 'visitor'
-          ? ' Visitors can view full verified plant records.'
-          : ' Staff can view plant records and edit photos.'}
-      </Text>
+    <View style={{ flex: 1, backgroundColor: '#06110b' }}>
+      {granted && !result ? (
+        <CameraView
+          style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
+          facing="back"
+          enableTorch={torch}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          onBarcodeScanned={({ data }) => handle(data)}
+        />
+      ) : null}
 
-      {/* Main Viewfinder - Displays actual camera feed directly without scan animation */}
-      <View style={styles.viewfinderContainer}>
-        {/* State 1: Permission still loading */}
-        {!permission ? (
-          <View style={styles.centerBox}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.statusText}>Starting camera...</Text>
-          </View>
-        ) : !permission.granted ? (
-          /* State 2: Permission denied or not yet requested */
-          <View style={styles.permissionBox}>
-            <Text style={styles.permissionIcon}>📷</Text>
-            <Text style={styles.permissionTitle}>Camera Access Required</Text>
-            <Text style={styles.permissionText}>
-              Allow camera access to scan physical QR tags in Niah National Park.
-            </Text>
-            <TouchableOpacity
-              style={[commonStyles.btnPrimary, { marginTop: 14, width: '100%' }]}
-              onPress={requestPermission}
-            >
-              <Text style={commonStyles.btnPrimaryText}>Grant Camera Permission</Text>
-            </TouchableOpacity>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+        <View style={{ height: 56, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 }}>
+          <IconButton name="x" label="Close scanner" color={CAMERA_TEXT} onPress={close} />
+          {granted && !result ? <IconButton name="torch" label={torch ? 'Turn off torch' : 'Turn on torch'} color={torch ? '#e8bd5c' : CAMERA_TEXT} size={22} onPress={() => setTorch(!torch)} /> : null}
+        </View>
 
-            <TouchableOpacity
-              style={[styles.galleryFallbackBtn, { marginTop: 10, width: '100%' }]}
-              onPress={handlePickFromGallery}
-            >
-              <Text style={styles.galleryFallbackText}>🖼️ Choose Photo from Gallery</Text>
-            </TouchableOpacity>
+        {result ? (
+          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+            <Result result={result} role={role} nav={nav} onAgain={() => setResult(null)} />
           </View>
-        ) : cameraError ? (
-          /* State 3: Camera hardware or mount error */
-          <View style={styles.permissionBox}>
-            <Text style={styles.permissionIcon}>⚠️</Text>
-            <Text style={styles.permissionTitle}>Camera View Unavailable</Text>
-            <Text style={styles.permissionText}>
-              {cameraError}. You can upload an image from your device gallery or enter the tag ID manually.
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12, width: '100%' }}>
-              <TouchableOpacity
-                style={[styles.galleryFallbackBtn, { flex: 1 }]}
-                onPress={toggleFacing}
-              >
-                <Text style={styles.galleryFallbackText}>🔄 Try Other Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[commonStyles.btnPrimary, { flex: 1 }]}
-                onPress={handlePickFromGallery}
-              >
-                <Text style={commonStyles.btnPrimaryText}>🖼️ Pick Photo</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        ) : typing ? (
+          <ManualEntry value={typed} onChange={setTyped} onSubmit={() => handle(typed)} onCancel={() => setTyping(false)} />
         ) : (
-          /* State 4: Real Live Camera View - direct feed with no artificial scan animations */
-          <View style={styles.cameraWrapper}>
-            <CameraView
-              style={StyleSheet.absoluteFillObject}
-              facing={facing}
-              enableTorch={torch}
-              barcodeScannerSettings={{
-                barcodeTypes: ['qr'],
-              }}
-              onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-              onMountError={handleMountError}
-            />
-
-            {/* Viewfinder Controls & Status Bar */}
-            <View style={styles.hudOverlay} pointerEvents="box-none">
-              {/* Top controls: torch toggle & camera flip */}
-              <View style={styles.hudTopRow}>
-                <View style={styles.liveIndicator}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>LIVE CAMERA</Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity
-                    style={[styles.cameraControlBtn, torch && styles.cameraControlBtnActive]}
-                    onPress={() => setTorch(!torch)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.cameraControlText}>{torch ? '🔦 ON' : '💡 Torch'}</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.cameraControlBtn}
-                    onPress={toggleFacing}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.cameraControlText}>🔄 Flip</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Bottom scan status hint */}
-              <View style={styles.hudBottomRow}>
-                <Text style={styles.hudHint}>
-                  {scanned ? '✓ Tag detected! Opening...' : 'Point camera at plant QR code'}
+          <>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 }}>
+              {granted ? <Viewfinder /> : <PermissionAsk onAsk={requestPermission} canAsk={permission?.canAskAgain !== false} />}
+              <View style={{ alignItems: 'center', gap: 6, paddingHorizontal: 32 }}>
+                <Text style={{ fontFamily: font('display', 700), fontSize: 22, color: CAMERA_TEXT, textAlign: 'center' }}>Point at the plant's tag</Text>
+                <Text style={{ fontFamily: font('text', 400), fontSize: 15, lineHeight: 22, color: CAMERA_MUTED, textAlign: 'center' }}>
+                  Hold steady about a hand's length away. It scans by itself.
                 </Text>
               </View>
             </View>
-          </View>
+            <View style={{ alignItems: 'center', paddingBottom: 20 }}>
+              <Pressable accessibilityRole="button" onPress={() => setTyping(true)}
+                style={{ height: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, borderRadius: 999, backgroundColor: 'rgba(238, 244, 228, 0.12)' }}>
+                <Icon name="keyboard" size={18} color={CAMERA_TEXT} />
+                <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: CAMERA_TEXT }}>Tag damaged? Type the ID</Text>
+              </Pressable>
+            </View>
+          </>
         )}
-      </View>
-
-      {/* Gallery Image Upload Option */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.galleryBtn}
-          onPress={handlePickFromGallery}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.galleryBtnIcon}>🖼️</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.galleryBtnTitle}>Upload image from gallery</Text>
-            <Text style={styles.galleryBtnSub}>Select a captured photo of a park QR tag</Text>
-          </View>
-          <Text style={styles.galleryBtnArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Picked Image Preview if user selected a gallery image */}
-      {pickedImageUri ? (
-        <View style={styles.pickedImageCard}>
-          <Image source={{ uri: pickedImageUri }} style={styles.pickedThumbnail} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.pickedImageTitle}>Selected Photo</Text>
-            {analyzingImage ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={[styles.pickedImageDesc, { marginLeft: 6 }]}>Analyzing photo...</Text>
-              </View>
-            ) : (
-              <Text style={styles.pickedImageDesc}>
-                Photo loaded. Enter or confirm tag ID below to view plant.
-              </Text>
-            )}
-            <TouchableOpacity
-              style={styles.repickBtn}
-              onPress={handlePickFromGallery}
-            >
-              <Text style={styles.repickBtnText}>Choose different photo</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Manual Tag Code Input */}
-      <Text style={commonStyles.label}>Or enter QR tag ID:</Text>
-      <View style={[commonStyles.row, { gap: 8 }]}>
-        <TextInput
-          style={[commonStyles.input, { flex: 1, marginVertical: 0 }]}
-          value={manualCode}
-          onChangeText={setManualCode}
-          placeholder="e.g. NIAH-0001"
-          placeholderTextColor="#688065"
-          autoCapitalize="characters"
-        />
-        <TouchableOpacity
-          style={commonStyles.btnPrimary}
-          onPress={() => handleScanCode(manualCode)}
-        >
-          <Text style={commonStyles.btnPrimaryText}>Scan</Text>
-        </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  viewfinderContainer: {
-    marginVertical: 14,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(155, 207, 106, 0.4)',
-    backgroundColor: '#000',
-    height: 380,
-    width: '100%',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cameraWrapper: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  centerBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  statusText: {
-    color: COLORS.textMuted,
-    marginTop: 10,
-    fontSize: 13,
-  },
-  permissionBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    width: '100%',
-  },
-  permissionIcon: {
-    fontSize: 40,
-    marginBottom: 8,
-  },
-  permissionTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  permissionText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 12,
-  },
-  galleryFallbackBtn: {
-    backgroundColor: '#16301e',
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
-  galleryFallbackText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  hudOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  hudTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-  },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 80, 80, 0.4)',
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ff4d4f',
-    marginRight: 6,
-  },
-  liveText: {
-    color: '#ff4d4f',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  cameraControlBtn: {
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cameraControlBtnActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  cameraControlText: {
-    color: COLORS.text,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  hudBottomRow: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(155, 207, 106, 0.35)',
-  },
-  hudHint: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  actionRow: {
-    marginBottom: 12,
-  },
-  galleryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#122618',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  galleryBtnIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  galleryBtnTitle: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  galleryBtnSub: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  galleryBtnArrow: {
-    color: COLORS.primary,
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  pickedImageCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0d2215',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  pickedThumbnail: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: '#06130b',
-  },
-  pickedImageTitle: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pickedImageDesc: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  repickBtn: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  repickBtnText: {
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-});
+function Viewfinder() {
+  const corner = { position: 'absolute', width: 44, height: 44, borderColor: '#9bcf6a' };
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 250, height: 250 }}>
+      <View style={[corner, { left: 0, top: 0, borderLeftWidth: 4, borderTopWidth: 4, borderTopLeftRadius: 20 }]} />
+      <View style={[corner, { right: 0, top: 0, borderRightWidth: 4, borderTopWidth: 4, borderTopRightRadius: 20 }]} />
+      <View style={[corner, { left: 0, bottom: 0, borderLeftWidth: 4, borderBottomWidth: 4, borderBottomLeftRadius: 20 }]} />
+      <View style={[corner, { right: 0, bottom: 0, borderRightWidth: 4, borderBottomWidth: 4, borderBottomRightRadius: 20 }]} />
+    </View>
+  );
+}
+
+function PermissionAsk({ onAsk, canAsk }) {
+  return (
+    <View style={{ width: 280, alignItems: 'center', gap: 14 }}>
+      <Icon name="camera" size={40} color={CAMERA_MUTED} />
+      <Text style={{ fontFamily: font('text', 400), fontSize: 15, lineHeight: 22, color: CAMERA_MUTED, textAlign: 'center' }}>
+        {canAsk ? 'The camera is needed to read plant tags.' : 'Camera access is off. Turn it on in the phone settings, or type the tag ID.'}
+      </Text>
+      {canAsk ? <View style={{ width: '100%' }}><Button label="Allow camera" onPress={onAsk} /></View> : null}
+    </View>
+  );
+}
+
+function ManualEntry({ value, onChange, onSubmit, onCancel }) {
+  const { c } = useTheme();
+  return (
+    // App.js lifts the screen above the keyboard, so the sheet stays visible while typing.
+    <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <Sheet>
+        <Txt v="title2">Type the tag ID</Txt>
+        <TextInput
+          autoFocus
+          accessibilityLabel="Tag ID"
+          value={value}
+          onChangeText={(t) => onChange(t.toUpperCase())}
+          placeholder="NIAH-0001"
+          placeholderTextColor={c.ink3}
+          autoCapitalize="characters"
+          onSubmitEditing={onSubmit}
+          style={{ height: 52, paddingHorizontal: 14, borderRadius: 10, backgroundColor: c.bg, fontFamily: font('mono', 500), fontSize: 18, color: c.ink }}
+        />
+        <View style={{ gap: 4 }}>
+          <Button label="Look up tag" disabled={!/NIAH-\d{4}/.test(value)} onPress={onSubmit} />
+          <Button label="Back to camera" kind="text" height={48} size={15} onPress={onCancel} />
+        </View>
+      </Sheet>
+    </View>
+  );
+}
+
+function Result({ result, role, nav, onAgain }) {
+  const { c } = useTheme();
+  const { db } = useStore();
+
+  if (result.kind === 'unused') {
+    const botanist = role === 'botanist';
+    return (
+      <Sheet>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <View style={{ width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: c.successSoft }}>
+            <Icon name="check" size={26} color={c.success} strokeWidth={2} />
+          </View>
+          <View style={{ gap: 2 }}>
+            <Mono size={20}>{result.id}</Mono>
+            <DotLabel tone="neutral" label={`Unused tag · batch ${result.tag.batch_label}`} />
+          </View>
+        </View>
+        <View style={{ gap: 6 }}>
+          <Txt v="title2" style={{ fontSize: 26, lineHeight: 32 }}>{botanist ? 'Start a new plant record?' : 'This tag is not on a plant yet'}</Txt>
+          <Txt v="body" color={c.ink2}>
+            {botanist
+              ? "This tag isn't linked to a plant yet. Once you save, it belongs to this plant for good."
+              : 'Park botanists have not recorded a plant with this tag yet.'}
+          </Txt>
+        </View>
+        {botanist ? (
+          <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingHorizontal: 16, borderRadius: 14, backgroundColor: c.bg }}>
+            <Icon name="info" size={20} color={c.ink2} />
+            <Txt v="small" style={{ flex: 1, fontFamily: font('text', 400) }}>Check the tag is fixed to the plant and its plastic cover is sealed before you continue.</Txt>
+          </View>
+        ) : null}
+        <View style={{ gap: 4 }}>
+          {botanist ? <Button label="Start plant record" onPress={() => nav.replace('add', { qr: result.id })} /> : null}
+          <Button label="Scan a different tag" kind={botanist ? 'text' : 'primary'} height={botanist ? 48 : 52} size={botanist ? 15 : 16} onPress={onAgain} />
+        </View>
+      </Sheet>
+    );
+  }
+
+  if (result.kind === 'used') {
+    const p = result.plant;
+    const last = db.observations.filter((o) => o.specimen_id === p.id).map((o) => o.observed_at).sort().pop();
+    return (
+      <Sheet>
+        <View style={{ gap: 6 }}>
+          <Mono size={15} color={c.ink2}>{result.id}</Mono>
+          <Txt v="title2" style={{ fontSize: 26, lineHeight: 32 }}>This tag is already on a plant</Txt>
+        </View>
+        <Pressable accessibilityRole="button" onPress={() => nav.replace('tag', { qr: result.id })}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, backgroundColor: c.bg }}>
+          <Thumb uri={p.photos[0]?.url} size={64} />
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={{ fontFamily: font('display', 600), fontSize: 18, color: c.ink }}>{p.name}</Text>
+            {p.scientific ? <Sci size={14}>{p.scientific}</Sci> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <DotLabel status={p.status} />
+              <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>· last visit {shortDate(last)}</Txt>
+            </View>
+          </View>
+          <Icon name="chevR" size={20} color={c.ink3} />
+        </Pressable>
+        <View style={{ gap: 4 }}>
+          <Button label="Record a revisit" icon="plus" onPress={() => nav.replace('revisit', { qr: result.id })} />
+          <Button label="Open plant page" kind="text" height={48} size={15} onPress={() => nav.replace('tag', { qr: result.id })} />
+        </View>
+        <Txt v="caption" color={c.ink2} style={{ textAlign: 'center', fontFamily: font('text', 600) }}>Each tag holds one plant. To tag a different plant, use an unused tag.</Txt>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet>
+      <View style={{ gap: 6 }}>
+        <Mono size={15} color={c.ink2}>{result.id || 'No tag ID'}</Mono>
+        <Txt v="title2" style={{ fontSize: 26, lineHeight: 32 }}>{result.kind === 'retired' ? 'This tag was retired' : "We don't know this tag"}</Txt>
+        <Txt v="body" color={c.ink2}>
+          {result.kind === 'retired'
+            ? 'It was taken out of use. Use a new unused tag for this plant.'
+            : 'It is not a Daun Sense tag for Niah National Park. Check the code and try again.'}
+        </Txt>
+      </View>
+      <Button label="Scan again" onPress={onAgain} />
+    </Sheet>
+  );
+}

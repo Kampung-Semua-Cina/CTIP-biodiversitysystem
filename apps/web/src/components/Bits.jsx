@@ -1,19 +1,41 @@
 // apps/web/src/components/Bits.jsx
+// Small shared pieces of the Daun design language: status chips, scientific names,
+// tag IDs, filter pills, popups, empty states and the sensor sparkline.
 import { useEffect } from "react";
 import Icon from "./Icon.jsx";
-import { label } from "../utils.js";
+import { label } from "../../../shared/utils.js";
+import { STATUS_TEXT } from "../../../shared/tokens.js";
 
-// Plain-language names for record statuses. The database values stay the same.
-const STATUS_TEXT = {
-  synced: "Needs review",
-  queued: "Waiting to sync",
-  returned: "Returned to botanist",
-};
-
-// Colour-coded label for statuses (approved, open, endangered, ...)
+// Colour-coded status with a dot (approved, open, endangered, ...).
+// The colour comes from STATUS_TONE in tokens.js, the same as the mobile app.
+// Plain-language names for record statuses ("synced" shows as "Needs review").
 export function Chip({ value, children }) {
   const key = String(value || "").replaceAll(" ", "-").replaceAll("_", "-");
   return <span className={`chip chip-${key}`}>{children || STATUS_TEXT[value] || label(value)}</span>;
+}
+
+// Scientific name: always Fraunces italic.
+export function Sci({ children, block, className = "" }) {
+  if (!children) return null;
+  return <i className={`sci ${block ? "block " : ""}${className}`}>{children}</i>;
+}
+
+// Tag IDs, coordinates and readings: JetBrains Mono, so 0 and O never get confused.
+export function Mono({ children, className = "" }) {
+  return <span className={`mono ${className}`}>{children}</span>;
+}
+
+// One row of filter pills. items = [{ key, label, count? }]; the picked one is filled.
+export function Pills({ items, value, onChange, label: groupLabel }) {
+  return (
+    <div className="pills" role="group" aria-label={groupLabel}>
+      {items.map((it) => (
+        <button key={it.key} type="button" className={"pill" + (value === it.key ? " on" : "")} aria-pressed={value === it.key} onClick={() => onChange(it.key)}>
+          {it.label}{it.count != null && <b>{it.count}</b>}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // Centered popup. Closes with the X button, a click outside, or the Escape key.
@@ -25,7 +47,7 @@ export function Modal({ title, onClose, children, wide }) {
   }, [onClose]);
   return (
     <div className="modal" onClick={onClose}>
-      <div className={"glass pop" + (wide ? " wide" : "")} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={"pop" + (wide ? " wide" : "")} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="pophead">
           <h3>{title}</h3>
           <button className="ic" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
