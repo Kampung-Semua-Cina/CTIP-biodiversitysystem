@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Shell from "../components/Shell.jsx";
 import { Mono } from "../components/Bits.jsx";
+import TagPrint from "../components/TagPrint.jsx";
 import { useStore } from "../../../shared/store.js";
 import { tagUrl } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
@@ -19,6 +20,7 @@ export default function AddPlant() {
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState([]);
   const [spot, setSpot] = useState({ lat: 3.8031, lng: 113.7762, acc: null });
+  const [printing, setPrinting] = useState(false);
 
   const unused = db.tags.filter((t) => t.status === "unused");
 
@@ -84,13 +86,8 @@ export default function AddPlant() {
             <div>
               <b className="tagid">{qr}</b>
               <p className="mute small">This tag will be bound to the plant when you save.</p>
-              <button type="button" className="btn ghost small-btn" onClick={() => window.print()}><Icon name="printer" size={16} /> Print tag</button>
+              <button type="button" className="btn ghost small-btn" onClick={() => setPrinting(true)}><Icon name="printer" size={16} /> Print tag…</button>
             </div>
-          </div>
-        )}
-        {qr && (
-          <div className="printsheet print-only">
-            <figure><QRCodeSVG value={tagUrl(qr)} size={160} /><figcaption>{qr}</figcaption></figure>
           </div>
         )}
 
@@ -114,6 +111,9 @@ export default function AddPlant() {
 
         <p className="gap-top"><button className="btn" type="submit"><Icon name="send" size={18} /> Send for review</button></p>
       </form>
+
+      {/* Same print setup as the QR tags page (size, label or A4, copies), with only this tag in it. */}
+      {printing && <TagPrint tags={db.tags.filter((t) => t.qr_id === qr)} initial={[qr]} onClose={() => setPrinting(false)} />}
     </Shell>
   );
 }

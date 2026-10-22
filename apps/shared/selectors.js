@@ -104,6 +104,10 @@ export function plantVisits(db, plantId, role) {
 // Date of the newest visit, or null.
 export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0]?.observed_at || null;
 
+// Captioned catalogue photos of one species, cover photo first.
+export const speciesMedia = (db, speciesId) =>
+  db.species_media.filter((m) => m.species_id === speciesId).sort((a, b) => a.sort_order - b.sort_order);
+
 // One entry per species for the catalogue, with the tagged plants this role can see.
 // Visitors only get published species. Staff also see unpublished ones.
 export function speciesCatalogue(db, role) {
@@ -112,11 +116,13 @@ export function speciesCatalogue(db, role) {
     .filter((s) => !s.is_deleted && (can(role, "pending") || s.is_published))
     .map((s) => {
       const mine = plants.filter((p) => p.species_id === s.id);
+      const media = speciesMedia(db, s.id);
       return {
         ...s,
         name: s.common_name || s.scientific_name,
         plants: mine,
-        photo: mine.find((p) => p.photos.length)?.photos[0]?.url || null,
+        media,
+        photo: media[0]?.url || mine.find((p) => p.photos.length)?.photos[0]?.url || null,
         endangered: s.conservation_status === "endangered",
       };
     });

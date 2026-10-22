@@ -1,10 +1,33 @@
 // apps/web/src/components/Bits.jsx
 // Small shared pieces of the Daun design language: status chips, scientific names,
-// tag IDs, filter pills, popups, empty states and the sensor sparkline.
-import { useEffect } from "react";
+// tag IDs, filter pills, popups, empty states, the sensor sparkline, avatars and password boxes.
+import { useEffect, useState } from "react";
 import Icon from "./Icon.jsx";
-import { label } from "../../../shared/utils.js";
+import { initials, label } from "../../../shared/utils.js";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
+
+// Password box with an eye button that shows or hides what was typed.
+export function PasswordInput(props) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="pwfield">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button type="button" className="ic" onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible}>
+        <Icon name={visible ? "eyeOff" : "eye"} size={18} />
+      </button>
+    </span>
+  );
+}
+
+// Round profile picture, or the person's initials when they have no photo.
+export function Avatar({ user, large }) {
+  return (
+    <span className={"avatar" + (large ? " lg" : "")} aria-hidden="true">
+      {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : initials(user?.full_name)}
+    </span>
+  );
+}
 
 // Colour-coded status with a dot (approved, open, endangered, ...).
 // The colour comes from STATUS_TONE in tokens.js, the same as the mobile app.
@@ -47,7 +70,7 @@ export function Modal({ title, onClose, children, wide }) {
   }, [onClose]);
   return (
     <div className="modal" onClick={onClose}>
-      <div className={"pop" + (wide ? " wide" : "")} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div className={"pop" + (wide === "xl" ? " xl" : wide ? " wide" : "")} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="pophead">
           <h3>{title}</h3>
           <button className="ic" onClick={onClose} aria-label="Close"><Icon name="x" /></button>

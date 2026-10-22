@@ -3,20 +3,7 @@ import { useState } from "react";
 import { useStore } from "../../../shared/store.js";
 import { go } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
-
-// Password box with an eye button that shows or hides what was typed.
-function PasswordInput(props) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <span className="pwfield">
-      <input {...props} type={visible ? "text" : "password"} />
-      <button type="button" className="ic" onClick={() => setVisible((v) => !v)}
-        aria-label={visible ? "Hide password" : "Show password"} aria-pressed={visible}>
-        <Icon name={visible ? "eyeOff" : "eye"} size={18} />
-      </button>
-    </span>
-  );
-}
+import { PasswordInput } from "../components/Bits.jsx";
 
 // Staff login with email and password. There is no register button: an admin creates each account.
 // The same page lets staff change their password with just their email and a new password.
@@ -78,9 +65,9 @@ export default function Login() {
         <form onSubmit={submit}>
           <h1>Staff sign in</h1>
           <p className="mute">
-            For botanists, conservation officers and admins. Sign in with the email your admin registered for you.
+            For botanists, conservation officers and admins. Sign in with the email your admin registered for you, or your username.
           </p>
-          <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
+          <label>Email or username<input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
           <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
           <div className="row wrap gap-top">
             <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>

@@ -31,11 +31,13 @@ import { Users, Audit } from "./pages/Admin.jsx";
 import Tags from "./pages/Tags.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import Discussion from "./pages/Discussion.jsx";
+import Account from "./pages/Account.jsx";
 
 // Which permission (see permissions.js) a staff page needs.
 const NEEDS = {
   add: "add", records: "records", review: "review", reports: "reports", species: "species",
   monitoring: "monitor", users: "users", audit: "audit", tags: "tags", notifications: "bell", discussion: "discuss",
+  account: "pending", // any signed-in staff
 };
 
 function renderPage(seg, arg) {
@@ -60,6 +62,7 @@ function renderPage(seg, arg) {
     case "tags": return <Tags />;
     case "notifications": return <Notifications />;
     case "discussion": return <Discussion arg={arg} />;
+    case "account": return <Account />;
     default: return <NotFound />;
   }
 }

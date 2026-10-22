@@ -6,7 +6,7 @@ import Img from "../components/Img.jsx";
 import { Chip, Empty, Sci } from "../components/Bits.jsx";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
 import { useStore } from "../../../shared/store.js";
-import { can } from "../../../shared/permissions.js";
+import { can, DASHBOARD_LABEL } from "../../../shared/permissions.js";
 import { lastVisit, nameOf, visiblePlants } from "../../../shared/selectors.js";
 import { download, fmtDate, toCsv } from "../../../shared/utils.js";
 import Catalogue from "./Catalogue.jsx";
@@ -15,10 +15,11 @@ import Specimen from "./Specimen.jsx";
 const DAY = 86400000;
 
 // Saved views: each is a ready-made filter staff use often. `roles` limits who sees it.
+// Botanists' rows are already only their own (see TaggedTable), so "My records" is everything they get.
 const VIEWS = [
-  { key: "all", name: "All tagged plants", hint: "Every tagged plant you can see.", test: () => true },
+  { key: "all", name: "All tagged plants", hint: "Every tagged plant you can see.", test: () => true, roles: ["officer", "admin"] },
+  { key: "mine", name: "My records", hint: "Plants you tagged.", test: () => true, roles: ["botanist"] },
   { key: "review", name: "Needs review", hint: "Synced from the field and waiting for an officer.", test: (r) => r.status === "synced", roles: ["officer", "admin"] },
-  { key: "mine", name: "My records", hint: "Plants you tagged.", test: (r, me) => r.registered_by === me?.id, roles: ["botanist"] },
   { key: "returned", name: "Returned to botanist", hint: "An officer asked for changes.", test: (r) => r.status === "returned" },
   { key: "stale", name: "Not visited in 6 months", hint: "Due for a field visit.", test: (r) => !r.seen || Date.now() - new Date(r.seen) > 182 * DAY },
   { key: "nophotos", name: "No photos yet", hint: "Records without a single photo.", test: (r) => r.photos.length === 0 },
@@ -35,7 +36,8 @@ const COLUMNS = [
   ["nphotos", "Photos"],
 ];
 
-// `#/dashboard` is the staff table of tagged plants. Visitors get the species catalogue instead.
+// `#/dashboard` is each staff role's own dashboard: officers and admins see every tagged plant,
+// botanists only the plants they recorded. Visitors get the species catalogue instead.
 // `#/dashboard/NIAH-0001` (the link printed on QR tags) opens that plant's page.
 export default function Dashboard({ arg }) {
   const { role } = useStore();
@@ -55,7 +57,8 @@ function TaggedTable() {
   const [page, setPage] = useState(1);
 
   const nodes = new Set(db.nodes.map((n) => n.specimen_id));
-  const rows = visiblePlants(db, role).map((p) => ({
+  const all = can(role, "allPlants");
+  const rows = visiblePlants(db, role).filter((p) => all || p.registered_by === me?.id).map((p) => ({
     ...p,
     by: nameOf(db, p.registered_by),
     seen: lastVisit(db, p.id, role),
@@ -101,6 +104,7 @@ function TaggedTable() {
 
           <div className="pagehead">
             <div>
+              <p className="overline">{DASHBOARD_LABEL[role]}</p>
               <h1>{cur.name}</h1>
               <p className="mute">{cur.hint}</p>
             </div>
@@ -114,16 +118,18 @@ function TaggedTable() {
           <div className="toolbar">
             <label className="search grow">
               <Icon name="search" size={18} />
-              <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Tag ID, species or botanist" aria-label="Search tagged plants" />
+              <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder={all ? "Tag ID, species or botanist" : "Tag ID or species"} aria-label="Search tagged plants" />
             </label>
             <select value={speciesId} onChange={(e) => { setSpeciesId(e.target.value); setPage(1); }} aria-label="Filter by species">
               <option value="">All species</option>
               {speciesOptions.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
             </select>
-            <select value={by} onChange={(e) => { setBy(e.target.value); setPage(1); }} aria-label="Filter by who recorded it">
-              <option value="">Recorded by anyone</option>
-              {people.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
-            </select>
+            {all && (
+              <select value={by} onChange={(e) => { setBy(e.target.value); setPage(1); }} aria-label="Filter by who recorded it">
+                <option value="">Recorded by anyone</option>
+                {people.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+              </select>
+            )}
           </div>
 
           {!shown.length ? (

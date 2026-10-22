@@ -8,6 +8,18 @@ export const uid = () =>
 
 export const nowIso = () => new Date().toISOString();
 
+// Upload rules, the same as the Storage buckets (supabase/migrations/*_storage.sql)
+// and UploadRequest in the API contract. The API and Storage check them again.
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export const PHOTO_MAX_MB = 10;
+export const CAPTION_MAX = 200;
+
+// Why a file can't be uploaded, or null if it is fine.
+export const photoProblem = (file) =>
+  !PHOTO_TYPES.includes(file.type) ? `${file.name} is not a JPG, PNG or WebP image`
+  : file.size > PHOTO_MAX_MB * 1024 * 1024 ? `${file.name} is larger than ${PHOTO_MAX_MB} MB`
+  : null;
+
 export const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" }) : "-";
 

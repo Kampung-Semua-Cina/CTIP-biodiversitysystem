@@ -1,6 +1,6 @@
 // apps/web/src/components/Shell.jsx
 import Icon from "./Icon.jsx";
-import { staffLinks, TOOLS_LABEL } from "../../../shared/permissions.js";
+import { can, staffLinks, TOOLS_LABEL } from "../../../shared/permissions.js";
 import { staffCounts } from "../../../shared/selectors.js";
 import { useStore } from "../../../shared/store.js";
 
@@ -24,7 +24,7 @@ export default function Shell({ seg, children, plain }) {
     <div className="shell">
       <aside className="glass side" aria-label="Staff menu">
         <p className="overline toolslabel">Library</p>
-        {link("/dashboard", "file", "Tagged plants")}
+        {link("/dashboard", "file", can(role, "allPlants") ? "Tagged plants" : "My plants")}
         {link("/plants", "leaf", "Species catalogue")}
         {links.length > 0 && <p className="overline toolslabel">{TOOLS_LABEL[role]}</p>}
         {links.map((l) => link(l.to, l.icon, l.label, l.badge))}

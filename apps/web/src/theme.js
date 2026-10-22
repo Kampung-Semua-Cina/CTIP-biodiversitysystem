@@ -4,7 +4,7 @@
 // Colour, type, spacing and radius values live only in tokens.js. Never put a hex value here.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
-import { colors, alpha, typeScale, space, radius, fonts, motion } from "../../shared/tokens.js";
+import { colors, alpha, typeScale, space, radius, fonts, motion, layout } from "../../shared/tokens.js";
 
 // ---------- CSS variables ----------
 export function themeVars(theme) {
@@ -29,6 +29,7 @@ export function themeVars(theme) {
     "--ok": c.success,
     "--info": c.info,
     "--warn": c.warning,
+    "--on-warn": c.onWarning,
     "--bad": c.danger,
     "--on-bad": c.onDanger,
     "--neutral": c.neutral,
@@ -53,6 +54,7 @@ export function themeVars(theme) {
   }
   for (const [k, v] of Object.entries(space)) vars[`--s-${k}`] = v + "px";
   for (const [k, v] of Object.entries(radius)) vars[`--r-${k}`] = v + "px";
+  vars["--page-max"] = layout.pageMax + "px"; // widest content column (header, page, footer)
   // Motion: --m-fast, --m-base, --m-slow durations and the two easing curves.
   for (const k of ["fast", "base", "slow"]) vars[`--m-${k}`] = motion[k] + "ms";
   vars["--ease"] = motion.ease;

@@ -24,6 +24,7 @@ export const palettes = {
     success: "#8fd18a", // done, safe, published
     info: "#82c8dc", // waiting on someone else
     warning: "#e8bd5c", // needs your attention
+    onWarning: "#2b1d00", // text on warning fills (unread count badges)
     danger: "#f2907b", // at risk, rejected, destructive
     onDanger: "#2b0e08", // text on danger buttons
     neutral: "#aabba6", // draft, unused, offline
@@ -47,6 +48,7 @@ export const palettes = {
     success: "#2b7a3a",
     info: "#1b6e85",
     warning: "#8a5a00",
+    onWarning: "#ffffff",
     danger: "#b23c26",
     onDanger: "#ffffff",
     neutral: "#5a6f61",
@@ -133,6 +135,11 @@ export const typeScale = {
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 56 };
 export const radius = { tag: 6, control: 10, card: 14, sheet: 20, pill: 999 };
 export const touch = { phone: 48, web: 44 };
+
+// ---------- page layout (web only) ----------
+// Widest the web content column grows to. Wide enough to use a 1920px (Full HD) screen,
+// while paragraphs keep their own reading width (.lede, .prose, 34ch footer text).
+export const layout = { pageMax: 1680 };
 
 // ---------- motion ----------
 // Short and calm: things fade and settle into place, nothing bounces. Durations in ms.

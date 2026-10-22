@@ -4,6 +4,7 @@ import Icon from "./Icon.jsx";
 import Img from "./Img.jsx";
 
 // Slideshow with the primary photo first, arrows, and a numbered strip underneath.
+// Photos with a caption (species catalogue) show it under the slide.
 // Pass key={plant.id} from the parent so it starts again on photo 1 for each plant.
 export default function PhotoGallery({ photos, canEdit, onEdit }) {
   const [i, setI] = useState(0);
@@ -33,7 +34,7 @@ export default function PhotoGallery({ photos, canEdit, onEdit }) {
   return (
     <div className="gallery">
       <div className="slide">
-        <Img key={photos[cur].id} src={photos[cur].url} alt={`Plant photo ${cur + 1} of ${n}`} />
+        <Img key={photos[cur].id} src={photos[cur].url} alt={photos[cur].caption || `Plant photo ${cur + 1} of ${n}`} />
         {n > 1 && (
           <>
             <button className="nav" style={{ left: 8 }} onClick={() => go(-1)} aria-label="Previous photo"><Icon name="chevL" /></button>
@@ -43,6 +44,7 @@ export default function PhotoGallery({ photos, canEdit, onEdit }) {
         {cur === 0 && <span className="primary-badge"><Icon name="star" size={13} /> Primary</span>}
         {canEdit && <button className="edit" onClick={onEdit} aria-label="Edit photos"><Icon name="pencil" size={18} /></button>}
       </div>
+      {photos[cur].caption && <p className="caption">{photos[cur].caption}</p>}
       {n > 1 && (
         <div className="strip">
           {photos.map((p, k) => (
