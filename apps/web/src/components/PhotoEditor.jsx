@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon.jsx";
 import Img from "./Img.jsx";
-import { CAPTION_MAX, PHOTO_MAX_MB, PHOTO_TYPES, nowIso, photoProblem, uid } from "../utils.js";
+import { CAPTION_MAX, PHOTO_MAX_MB, PHOTO_TYPES, nowIso, photoProblem, uid } from "../../../shared/utils.js";
 
 // Popup from the whiteboard sketch: upload icon on the left, close on the right,
 // numbered photo cards you drag to arrange, and a Save button.

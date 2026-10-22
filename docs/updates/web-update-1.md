@@ -2,9 +2,11 @@
 
 **Branch:** `rick2` · **Web source:** `apps/web/src/` · **Status:** working on sample data, no API yet
 
+> **Merged with main's redesign (22 Oct 2026).** The shared logic below now lives in `apps/shared/` (step 1 is done, see the ticked checklist in section 11), and the web screens use main's Daun design tokens. Two changes from what this note describes: the theme control is main's Light / Dark / Device switch (not a sun/moon toggle), and the unread badge uses the warning colour (`--warn`, new `onWarning` token). On phones, the staff bottom-bar item that opens the dashboard is now labelled "Dashboard". Only the mobile **screens** are left to port.
+
 These features were added to the web prototype. The mobile app does not have them yet.
 
-Mobile reads its store, permissions and sample data from `apps/shared/`, and **none of these changes are in `apps/shared/` yet**. Port each feature in two steps:
+Mobile reads its store, permissions and sample data from `apps/shared/`. Port each feature in two steps:
 
 1. **Shared logic:** copy the data, permission and store changes into `apps/shared/`. These are plain JS and can be copied almost line for line.
 2. **Screens:** rebuild the UI in React Native. The web uses DOM and CSS, so only the behaviour carries over, not the code.
@@ -449,20 +451,20 @@ The contract has **no endpoint to edit or delete a species photo** (only list an
 
 **Shared (`apps/shared/`):**
 
-- [ ] `permissions.js`: `allPlants` (officer and admin), `species` for admin plus a Species link, `DASHBOARD_LABEL`
-- [ ] `data.js`: `username`, `phone` and `avatar_url` on every profile
-- [ ] `site.js`: `PARK_MAP` and `FORESTRY`
-- [ ] `StoreProvider.js`:
-  - [ ] login by email or username
-  - [ ] `updateProfile` and `changeMyPassword`
-  - [ ] default username in `addUser`
-  - [ ] `restoreSpecies`, plus role checks on delete and restore
-  - [ ] `deleteTag`
-  - [ ] `generateTags` skips deleted numbers
-  - [ ] `setSpeciesMedia`
-- [ ] `data.js`: `species_media` table
-- [ ] `utils.js`: `PHOTO_TYPES`, `PHOTO_MAX_MB`, `CAPTION_MAX`, `photoProblem`
-- [ ] `selectors.js`: `speciesMedia`, plus `media` and the cover `photo` in `speciesCatalogue`
+- [x] `permissions.js`: `allPlants` (officer and admin), `species` for admin plus a Species link, `DASHBOARD_LABEL`
+- [x] `data.js`: `username`, `phone` and `avatar_url` on every profile
+- [x] `site.js`: `PARK_MAP` and `FORESTRY`
+- [x] `StoreProvider.js`:
+  - [x] login by email or username
+  - [x] `updateProfile` and `changeMyPassword`
+  - [x] default username in `addUser`
+  - [x] `restoreSpecies`, plus role checks on delete and restore
+  - [x] `deleteTag`
+  - [x] `generateTags` skips deleted numbers
+  - [x] `setSpeciesMedia`
+- [x] `data.js`: `species_media` table
+- [x] `utils.js`: `PHOTO_TYPES`, `PHOTO_MAX_MB`, `CAPTION_MAX`, `photoProblem`
+- [x] `selectors.js`: `speciesMedia`, plus `media` and the cover `photo` in `speciesCatalogue`
 
 **Screens:**
 

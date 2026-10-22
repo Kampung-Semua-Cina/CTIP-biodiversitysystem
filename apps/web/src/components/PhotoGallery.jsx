@@ -34,7 +34,7 @@ export default function PhotoGallery({ photos, canEdit, onEdit }) {
   return (
     <div className="gallery">
       <div className="slide">
-        <Img src={photos[cur].url} alt={photos[cur].caption || `Plant photo ${cur + 1} of ${n}`} />
+        <Img key={photos[cur].id} src={photos[cur].url} alt={photos[cur].caption || `Plant photo ${cur + 1} of ${n}`} />
         {n > 1 && (
           <>
             <button className="nav" style={{ left: 8 }} onClick={() => go(-1)} aria-label="Previous photo"><Icon name="chevL" /></button>

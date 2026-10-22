@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import Icon from "./Icon.jsx";
 import { Chip, Modal } from "./Bits.jsx";
-import { tagUrl } from "../selectors.js";
+import { tagUrl } from "../../../shared/selectors.js";
 
 // QR code width in millimetres. Small for twigs and pots, large for trunks and signposts.
 // Medium is the default and listed first.
@@ -84,7 +84,7 @@ export default function TagPrint({ tags, initial, onClose }) {
               <li key={t.qr_id}>
                 <label className="check">
                   <input type="checkbox" checked={picked.has(t.qr_id)} onChange={() => toggle(t.qr_id)} />
-                  <span className="grow">{t.qr_id} <span className="mute small">· {t.batch_label}</span></span>
+                  <span className="grow"><span className="mono">{t.qr_id}</span> <span className="mute small">· {t.batch_label}</span></span>
                   <Chip value={t.status} />
                 </label>
               </li>
@@ -104,7 +104,7 @@ export default function TagPrint({ tags, initial, onClose }) {
               <input type="number" min={MIN_MM} max={MAX_MM} value={custom} onChange={(e) => setCustom(e.target.value)} />
             </label>
           )}
-          <fieldset className="seg">
+          <fieldset className="layoutpick">
             <legend>Layout</legend>
             <label className="check"><input type="radio" name="layout" checked={layout === "label"} onChange={() => setLayout("label")} /> One tag per label (label printer) <span className="mute small">recommended</span></label>
             <label className="check"><input type="radio" name="layout" checked={layout === "sheet"} onChange={() => setLayout("sheet")} /> A4 sheet, cut out by hand</label>

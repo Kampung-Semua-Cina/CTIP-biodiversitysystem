@@ -1,5 +1,5 @@
 // apps/web/src/components/RoleSwitch.jsx
-import { ROLES } from "../permissions.js";
+import { ROLES } from "../../../shared/permissions.js";
 
 // Demo bar at the very top of the page: switch which role you are viewing the site as.
 // It sits above the navbar so it never covers page content.

@@ -2,9 +2,9 @@
 import { useState } from "react";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Chip, PasswordInput } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { ROLE_LABEL } from "../permissions.js";
-import { fmtDate } from "../utils.js";
+import { useStore } from "../../../shared/store.js";
+import { ROLE_LABEL } from "../../../shared/permissions.js";
+import { PHOTO_TYPES, fmtDate } from "../../../shared/utils.js";
 
 const MAX_PHOTO = 2 * 1024 * 1024; // 2 MB
 
@@ -37,7 +37,7 @@ function PhotoCard({ me }) {
     const file = e.target.files[0];
     e.target.value = ""; // so picking the same file again still fires
     if (!file) return;
-    if (!file.type.startsWith("image/")) return notify("Choose an image file");
+    if (!PHOTO_TYPES.includes(file.type)) return notify("Choose a JPG, PNG or WebP image");
     if (file.size > MAX_PHOTO) return notify("Photo must be 2 MB or smaller");
     // Supabase: upload to Storage and save its public URL. Here the image is kept as a data URL.
     const reader = new FileReader();
@@ -54,7 +54,7 @@ function PhotoCard({ me }) {
           <div className="row wrap">
             <label className="btn ghost filebtn">
               <Icon name="upload" size={16} /> {me.avatar_url ? "Change photo" : "Upload photo"}
-              <input type="file" accept="image/*" onChange={pick} hidden />
+              <input type="file" accept={PHOTO_TYPES.join(",")} onChange={pick} hidden />
             </label>
             {me.avatar_url && (
               <button className="btn ghost" onClick={() => { updateProfile({ avatar_url: null }); notify("Photo removed"); }}>

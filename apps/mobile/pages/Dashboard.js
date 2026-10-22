@@ -1,361 +1,242 @@
 // apps/mobile/pages/Dashboard.js
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
+// The two long lists: the species catalogue (everyone) and the tagged plants (staff).
+// Both load in pages as you scroll (infinite scroll) and show a small loading line
+// while the next page arrives.
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, FlatList, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useStore } from '../../shared/store.js';
-import { can } from '../../shared/permissions.js';
-import { familyOf, shownCoords, visiblePlants } from '../../shared/selectors.js';
-import { CONSERVATION } from '../../shared/data.js';
-import { Chip, Empty } from '../components/Bits.js';
-import PhotoGallery from '../components/PhotoGallery.js';
-import PhotoEditor from '../components/PhotoEditor.js';
-import { COLORS, commonStyles } from '../components/Theme.js';
+import { visiblePlants, nameOf } from '../../shared/selectors.js';
+import { useTheme, font } from '../components/Theme.js';
+import {
+  TitleBlock, SearchField, Pills, Segmented, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,
+  SkeletonRow, LoadingMore, Empty,
+} from '../components/Bits.js';
+import { shortDate } from '../components/format.js';
 
-const fmtHeight = (cm) => (cm == null ? '-' : cm >= 100 ? `${(cm / 100).toFixed(1)} m` : `${cm} cm`);
+const PAGE_SIZE = 20; // same as the API's default `limit`
+const ROW_HEIGHT = 77; // fixed row height lets the list jump straight to a letter
+const LETTER_HEIGHT = 42;
 
-export default function MobileDashboard({ arg, onNavigate }) {
-  const { db, role, setPlantPhotos, notify } = useStore();
-  const [q, setQ] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [editing, setEditing] = useState(false);
-  const [selectedQr, setSelectedQr] = useState(arg || null);
+// Pages through `items` the way the API will: page 1, 2, 3… of PAGE_SIZE.
+// Swap the setTimeout for `GET /public/species?page=&limit=` (or /plants) when the
+// apps are connected to the API (CTIP-26, CTIP-87). `total` comes from the response meta.
+function usePaged(items, resetKey) {
+  const [page, setPage] = useState({ key: resetKey, count: 0, loading: true });
+  // A new search or filter starts again from page 1.
+  if (page.key !== resetKey) setPage({ key: resetKey, count: 0, loading: true });
 
-  const staff = can(role, 'pending');
+  useEffect(() => {
+    if (!page.loading) return undefined;
+    const timer = setTimeout(() => setPage((p) => ({ ...p, count: p.count + PAGE_SIZE, loading: false })), 450);
+    return () => clearTimeout(timer);
+  }, [page.loading, page.key]);
+
+  const loadMore = () => {
+    if (!page.loading && page.count < items.length) setPage((p) => ({ ...p, loading: true }));
+  };
+
+  return { shown: items.slice(0, page.count), loading: page.loading, loadMore, total: items.length, done: page.count >= items.length };
+}
+
+function ListHeader({ children }) {
+  return <View style={{ gap: 14, paddingTop: 12, paddingBottom: 8 }}>{children}</View>;
+}
+
+/* ---------- species catalogue ---------- */
+
+export function SpeciesList({ nav, params = {} }) {
+  const { db, role } = useStore();
+  const { c } = useTheme();
+  const [q, setQ] = useState(params.q || '');
+  const [family, setFamily] = useState('all');
+  const list = useRef(null);
+  const staff = role !== 'visitor';
+
+  // Published species only for visitors; staff also see unpublished ones.
+  const species = db.species.filter((s) => !s.is_deleted && (staff || s.is_published));
+  const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
   const plants = visiblePlants(db, role);
 
-  const options = staff ? CONSERVATION : [...new Set(plants.map(familyOf))].sort();
-  const active = options.includes(filter) ? filter : 'all';
+  const needle = q.trim().toLowerCase();
+  const filtered = species
+      .filter((s) => family === 'all' || s.family === family)
+      .filter((s) => {
+        if (!needle) return true;
+        const tags = plants.filter((p) => p.species_id === s.id).map((p) => p.qr_id.toLowerCase());
+        return [s.common_name, s.scientific_name, s.family].join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
+      })
+      .sort((a, b) => (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name));
 
-  const shown = plants.filter(
-    (p) =>
-      (active === 'all' || (staff ? p.conservation : familyOf(p)) === active) &&
-      `${p.name} ${p.scientific} ${p.qr_id}`.toLowerCase().includes(q.toLowerCase())
-  );
+  const { shown, loading, loadMore, total, done } = usePaged(filtered, `${q}|${family}`);
 
-  // If a specific plant is selected (via arg or user click), pick it; otherwise show first or none
-  const currentQr = selectedQr || arg;
-  const sel = currentQr ? plants.find((p) => p.qr_id === currentQr) : null;
+  // Insert a letter heading before the first species of each letter.
+  const rows = [];
+  let last = '';
+  for (const s of shown) {
+    const letter = (s.common_name || s.scientific_name)[0].toUpperCase();
+    if (letter !== last) rows.push({ type: 'letter', key: 'L' + letter, letter });
+    last = letter;
+    rows.push({ type: 'species', key: s.id, s });
+  }
+  const offsets = [];
+  rows.reduce((y, r) => {
+    offsets.push(y);
+    return y + (r.type === 'letter' ? LETTER_HEIGHT : ROW_HEIGHT);
+  }, 0);
+  const letters = rows.filter((r) => r.type === 'letter').map((r) => r.letter);
+  const headerHeight = useRef(0);
+  const jump = (letter) => {
+    const i = rows.findIndex((r) => r.type === 'letter' && r.letter === letter);
+    if (i >= 0) list.current?.scrollToOffset({ offset: offsets[i] + headerHeight.current, animated: true });
+  };
 
-  return (
-    <View>
-      {/* If a plant is selected on mobile, show the detailed plant view */}
-      {sel ? (
-        <View style={commonStyles.card}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => {
-              setSelectedQr(null);
-              if (arg) onNavigate?.('dashboard');
-            }}
-          >
-            <Text style={styles.backBtnText}>‹ Back to plant list</Text>
-          </TouchableOpacity>
-
-          <PhotoGallery
-            key={sel.id}
-            photos={sel.photos}
-            canEdit={can(role, 'editPhotos')}
-            onEdit={() => setEditing(true)}
-          />
-
-          <View style={[commonStyles.row, { flexWrap: 'wrap', marginTop: 10 }]}>
-            <Text style={[commonStyles.heading, { marginBottom: 0, flex: 1 }]}>{sel.name}</Text>
-            {staff && <Chip value={sel.status} />}
-          </View>
-
-          {sel.scientific ? <Text style={styles.sciText}>{sel.scientific}</Text> : null}
-          {sel.species?.description ? <Text style={commonStyles.mute}>{sel.species.description}</Text> : null}
-
-          <View style={commonStyles.divider} />
-
-          <Text style={commonStyles.subHeading}>Plant Details</Text>
-          <PlantDetails plant={sel} role={role} onNavigate={onNavigate} />
-
-          {staff && (
-            <View style={styles.qrCard}>
-              <View style={styles.qrBadgeIcon}>
-                <Text style={styles.qrIconEmoji}>🏷️</Text>
-                <Text style={styles.qrCodeLabel}>{sel.qr_id}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={commonStyles.mute}>Permanent tag assigned to this specimen.</Text>
-                {role === 'officer' && (
-                  <TouchableOpacity
-                    style={[commonStyles.btnGhost, { marginTop: 8, alignSelf: 'flex-start' }]}
-                    onPress={() => onNavigate?.('species')}
-                  >
-                    <Text style={commonStyles.btnGhostText}>Edit species details</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
-
-          {editing && (
-            <PhotoEditor
-              photos={sel.photos}
-              onClose={() => setEditing(false)}
-              onSave={(list) => {
-                setPlantPhotos(sel.id, list);
-                setEditing(false);
-                notify('Photos saved');
-              }}
-            />
-          )}
-        </View>
-      ) : (
-        /* Plant Library List view */
-        <View>
-          <View style={commonStyles.card}>
-            <Text style={commonStyles.heading}>Plant library</Text>
-            <Text style={commonStyles.mute}>
-              {staff
-                ? 'Browse all registered and pending plants. Filter by conservation status.'
-                : 'Browse verified botanical species recorded in Niah.'}
-            </Text>
-
-            {/* Search */}
-            <TextInput
-              style={commonStyles.input}
-              placeholder="Search by name, scientific name, or tag..."
-              placeholderTextColor="#688065"
-              value={q}
-              onChangeText={setQ}
-            />
-
-            {/* Filter pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-              <TouchableOpacity
-                style={[styles.filterPill, active === 'all' && styles.filterPillActive]}
-                onPress={() => setFilter('all')}
-              >
-                <Text style={[styles.filterPillText, active === 'all' && styles.filterPillTextActive]}>
-                  {staff ? 'All status' : 'All families'}
-                </Text>
-              </TouchableOpacity>
-              {options.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.filterPill, active === opt && styles.filterPillActive]}
-                  onPress={() => setFilter(opt)}
-                >
-                  <Text style={[styles.filterPillText, active === opt && styles.filterPillTextActive]}>
-                    {opt}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Plant cards */}
-          {shown.length === 0 ? (
-            <View style={commonStyles.card}>
-              <Empty icon="search">No plants match your search.</Empty>
-            </View>
-          ) : (
-            shown.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                style={styles.plantRowCard}
-                onPress={() => setSelectedQr(p.qr_id)}
-              >
-                <Image
-                  source={{ uri: p.photos[0]?.url }}
-                  style={styles.plantRowThumb}
-                />
-                <View style={styles.plantRowDetails}>
-                  <Text style={styles.plantRowName}>{p.name}</Text>
-                  <Text style={styles.plantRowSci}>{p.scientific || p.qr_id}</Text>
-                  <View style={[commonStyles.row, { marginTop: 4 }]}>
-                    <Text style={commonStyles.mute}>{p.qr_id}</Text>
-                    {staff && p.status !== 'approved' && <Chip value={p.status} />}
-                  </View>
-                </View>
-                <Text style={styles.rowChevron}>›</Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-      )}
+  const header = (
+    <View onLayout={(e) => (headerHeight.current = e.nativeEvent.layout.height)}>
+      <ListHeader>
+        {nav.canGoBack ? <View style={{ marginLeft: -16, marginTop: -8 }}><IconButton name="chevL" label="Back" onPress={nav.back} /></View> : null}
+        <TitleBlock title={staff ? 'Species' : 'Plants'} right={<Txt v="small" color={c.ink2}>{total} species</Txt>} />
+        <SearchField value={q} onChangeText={setQ} placeholder="Search name or tag ID" />
+        <Pills value={family} onChange={setFamily} items={[{ key: 'all', label: 'All families' }, ...families.map((f) => ({ key: f, label: f }))]} />
+      </ListHeader>
     </View>
   );
-}
-
-function PlantDetails({ plant, role, onNavigate }) {
-  const c = shownCoords(plant, role);
-  const staff = can(role, 'pending');
 
   return (
-    <View style={styles.dl}>
-      <DetailItem label="Family" value={plant.species ? `${plant.species.family} · ${plant.species.genus}` : 'Not confirmed yet'} />
-      {staff && (
-        <View style={styles.detailRow}>
-          <Text style={styles.dt}>Conservation</Text>
-          <View style={styles.dd}>
-            {plant.species ? <Chip value={plant.conservation} /> : <Text style={commonStyles.mute}>-</Text>}
-          </View>
-        </View>
-      )}
-      <View style={styles.detailRow}>
-        <Text style={styles.dt}>Location</Text>
-        <View style={styles.dd}>
-          {c ? (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.surface }}>
+      <FlatList
+        ref={list}
+        data={rows}
+        keyExtractor={(r) => r.key}
+        ListHeaderComponent={header}
+        contentContainerStyle={{ paddingLeft: 20, paddingRight: 36, paddingBottom: 24 }}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        renderItem={({ item }) =>
+          item.type === 'letter' ? (
+            <View style={{ height: LETTER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
+              <Text accessibilityRole="header" style={{ fontFamily: font('display', 700), fontSize: 18, color: c.accent }}>{item.letter}</Text>
+            </View>
+          ) : (
+            <SpeciesRow s={item.s} plants={plants} staff={staff} onPress={() => nav.go('species', { id: item.s.id })} />
+          )
+        }
+        ListEmptyComponent={loading ? null : <Empty icon="search">No species match. Try another name or family.</Empty>}
+        ListFooterComponent={
+          loading ? (
             <View>
-              <TouchableOpacity
-                style={[commonStyles.btnGhost, { paddingVertical: 4, paddingHorizontal: 8, marginBottom: 4 }]}
-                onPress={() => onNavigate?.('map', plant.qr_id)}
-              >
-                <Text style={commonStyles.btnGhostText}>📍 View on map</Text>
-              </TouchableOpacity>
-              <Text style={commonStyles.mute}>
-                {c.lat.toFixed(5)}, {c.lng.toFixed(5)} (±{plant.gps_accuracy_m} m)
-              </Text>
+              {shown.length === 0 ? [0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} />) : <SkeletonRow />}
+              <LoadingMore />
             </View>
-          ) : (
-            <Text style={commonStyles.mute}>Hidden to protect this plant.</Text>
-          )}
-        </View>
-      </View>
-      <DetailItem label="ID" value={plant.qr_id} />
-      <DetailItem label="Height" value={fmtHeight(plant.height_cm)} />
-      {plant.morphology ? <DetailItem label="Appearance" value={plant.morphology} /> : null}
-      {plant.species?.cultural_significance ? <DetailItem label="Cultural note" value={plant.species.cultural_significance} /> : null}
-    </View>
+          ) : done && shown.length > PAGE_SIZE ? <Txt v="caption" color={c.ink3} style={{ textAlign: 'center', paddingVertical: 16 }}>That's every species.</Txt> : null
+        }
+      />
+      {letters.length > 1 ? <LetterIndex letters={letters} onJump={jump} /> : null}
+    </SafeAreaView>
   );
 }
 
-function DetailItem({ label: dt, value: dd }) {
+function SpeciesRow({ s, plants, staff, onPress }) {
+  const photo = plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
   return (
-    <View style={styles.detailRow}>
-      <Text style={styles.dt}>{dt}</Text>
-      <Text style={[styles.dd, commonStyles.body, { marginBottom: 0 }]}>{dd}</Text>
+    <View style={{ height: ROW_HEIGHT }}>
+      <Row
+        left={<Thumb uri={photo} />}
+        title={s.common_name || s.scientific_name}
+        sub={
+          <>
+            <Sci size={14}>{s.scientific_name}</Sci>
+            {s.conservation_status === 'endangered' ? <DotLabel status="endangered" /> : null}
+            {staff && !s.is_published ? <DotLabel tone="neutral" label="Not published" /> : null}
+          </>
+        }
+        onPress={onPress}
+        right={null}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  backBtn: {
-    paddingVertical: 6,
-    marginBottom: 8,
-  },
-  backBtnText: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sciText: {
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    fontSize: 14,
-    marginVertical: 4,
-  },
-  qrCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0a1a11',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 12,
-    marginTop: 14,
-  },
-  qrBadgeIcon: {
-    backgroundColor: '#16301e',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    padding: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 70,
-  },
-  qrIconEmoji: {
-    fontSize: 22,
-  },
-  qrCodeLabel: {
-    color: COLORS.primary,
-    fontWeight: '800',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  filterScroll: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  filterPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#0a1a11',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  filterPillActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  filterPillText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  filterPillTextActive: {
-    color: COLORS.textDark,
-    fontWeight: '700',
-  },
-  plantRowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    padding: 12,
-    marginVertical: 5,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 12,
-  },
-  plantRowThumb: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-  },
-  plantRowDetails: {
-    flex: 1,
-  },
-  plantRowName: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  plantRowSci: {
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    fontSize: 12,
-  },
-  rowChevron: {
-    color: COLORS.textMuted,
-    fontSize: 22,
-    fontWeight: '600',
-  },
-  dl: {
-    gap: 10,
-    marginVertical: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    paddingVertical: 6,
-  },
-  dt: {
-    width: 100,
-    color: COLORS.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dd: {
-    flex: 1,
-  },
-});
+// A–Z strip down the right edge. Letters that have species are green and tappable.
+function LetterIndex({ letters, onJump }) {
+  const { c } = useTheme();
+  const all = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  return (
+    <View accessibilityLabel="Jump to letter" style={{ position: 'absolute', right: 4, top: 200, bottom: 16, width: 24, justifyContent: 'space-between', alignItems: 'center' }}>
+      {all.map((l) => {
+        const has = letters.includes(l);
+        return (
+          <Pressable key={l} disabled={!has} onPress={() => onJump(l)} accessibilityRole="button" accessibilityLabel={`Jump to ${l}`} hitSlop={{ left: 12, right: 4 }}>
+            <Text style={{ fontFamily: font('text', 800), fontSize: 11, color: has ? c.accent : c.ink3 }}>{l}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ---------- tagged plants (staff) ---------- */
+
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'mine', label: 'Recorded by me' },
+  { key: 'synced', label: 'Needs review' },
+  { key: 'returned', label: 'Returned' },
+  { key: 'endangered', label: 'Endangered' },
+];
+
+export function TaggedPlants({ nav }) {
+  const { db, role, me } = useStore();
+  const { c } = useTheme();
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+
+  const lastVisit = (id) => db.observations.filter((o) => o.specimen_id === id).map((o) => o.observed_at).sort().pop();
+  const all = visiblePlants(db, role)
+    .map((p) => ({ ...p, seen: lastVisit(p.id), by: nameOf(db, p.registered_by) }))
+    .sort((a, b) => (b.seen || '').localeCompare(a.seen || ''));
+  const needle = q.trim().toLowerCase();
+  const filtered = all
+    .filter((p) => (filter === 'all' ? true : filter === 'mine' ? p.registered_by === me?.id : filter === 'endangered' ? p.endangered : p.status === filter))
+    .filter((p) => !needle || [p.qr_id, p.name, p.scientific, p.by].join(' ').toLowerCase().includes(needle));
+  const { shown, loading, loadMore } = usePaged(filtered, `${q}|${filter}|${db.plants.length}`);
+  const filters = role === 'botanist' ? FILTERS : FILTERS.filter((f) => f.key !== 'mine');
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.surface }}>
+      <FlatList
+        data={shown}
+        keyExtractor={(p) => p.id}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        ListHeaderComponent={
+          <ListHeader>
+            <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{all.length} tagged</Txt>} />
+            <Segmented value="tagged" onChange={(k) => k === 'species' && nav.go('plants')} items={[{ key: 'tagged', label: 'Tagged plants' }, { key: 'species', label: 'Species' }]} />
+            <SearchField value={q} onChangeText={setQ} placeholder="Tag ID, species or botanist" />
+            <Pills value={filter} onChange={setFilter} items={filters} />
+          </ListHeader>
+        }
+        renderItem={({ item: p, index }) => (
+          <Row
+            left={<Thumb uri={p.photos[0]?.url} />}
+            title={p.name}
+            sub={
+              <>
+                <Mono size={13}>{p.qr_id}</Mono>
+                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>· {p.by} · {shortDate(p.seen)}</Txt>
+              </>
+            }
+            right={<DotLabel status={p.status} />}
+            onPress={() => nav.go('tag', { qr: p.qr_id })}
+            last={index === shown.length - 1 && !loading}
+          />
+        )}
+        ListEmptyComponent={loading ? null : <Empty icon="search">No tagged plants match.</Empty>}
+        ListFooterComponent={loading ? <View>{shown.length === 0 ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />) : null}<LoadingMore /></View> : null}
+      />
+    </SafeAreaView>
+  );
+}

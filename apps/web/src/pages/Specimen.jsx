@@ -5,11 +5,11 @@ import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { can } from "../permissions.js";
-import { nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../selectors.js";
-import { fmtDate, fmtDateTime, label } from "../utils.js";
+import { Chip, Empty, Mono, Sci } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { can } from "../../../shared/permissions.js";
+import { nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../../../shared/selectors.js";
+import { fmtDate, fmtDateTime, label } from "../../../shared/utils.js";
 
 const height = (cm) => (cm == null ? "-" : cm >= 100 ? `${(cm / 100).toFixed(cm % 10 ? 2 : 1)} m` : `${cm} cm`);
 
@@ -26,9 +26,9 @@ export default function Specimen({ qr }) {
     const exists = db.plants.some((p) => p.qr_id === qr && !p.is_deleted);
     return (
       <section className="glass pad prose narrow">
-        <h2>{exists ? "This plant is not published yet" : "Tag not found"}</h2>
-        <p>{exists ? `Tag ${qr} is still being checked by park officers. Its page will open here once it is approved.` : `There is no plant with tag ${qr}. Check the code on the tag.`}</p>
-        <a className="btn" href="#/plants">Browse all plants</a>
+        <h1>{exists ? "This plant is not published yet" : "Tag not found"}</h1>
+        <p>{exists ? <>Tag <Mono>{qr}</Mono> is still being checked by park officers. Its page will open here once it is approved.</> : <>There is no plant with tag <Mono>{qr}</Mono>. Check the code on the tag.</>}</p>
+        <a className="btn" href="#/plants"><Icon name="leaf" size={18} /> Browse all plants</a>
       </section>
     );
   }
@@ -55,7 +55,7 @@ export default function Specimen({ qr }) {
       <nav className="crumbs" aria-label="Breadcrumb">
         <a href={staff ? "#/dashboard" : "#/plants"}>{staff ? "Tagged plants" : "Plants"}</a> <span aria-hidden="true">›</span>{" "}
         {plant.species ? <a href={"#/plants/" + plant.species.id}>{plant.name}</a> : <span>{plant.name}</span>} <span aria-hidden="true">›</span>{" "}
-        <span aria-current="page">{plant.qr_id}</span>
+        <Mono><span aria-current="page">{plant.qr_id}</span></Mono>
       </nav>
 
       <section className="glass pad tagheader">
@@ -63,14 +63,14 @@ export default function Specimen({ qr }) {
         <div className="grow">
           {staff && (
             <p className="row wrap">
-              <Chip value={plant.status}>{plant.status === "approved" ? "Published" : undefined}</Chip>
+              <Chip value={plant.status} />
               {plant.species && <Chip value={plant.conservation} />}
             </p>
           )}
           <h1 className="tagid">{plant.qr_id}</h1>
           <p className="lede-s">
             {plant.species ? <a className="textlink" href={"#/plants/" + plant.species.id}>{plant.name}</a> : <b>{plant.name}</b>}
-            {plant.scientific && <span className="mute"> · <i>{plant.scientific}</i></span>}
+            {plant.scientific && <> · <Sci>{plant.scientific}</Sci></>}
           </p>
           <p className="mute small">
             {first ? `First recorded ${fmtDate(first.observed_at)} by ${nameOf(db, plant.registered_by)}` : `Tagged by ${nameOf(db, plant.registered_by)}`}
@@ -145,7 +145,7 @@ export default function Specimen({ qr }) {
             {coords ? (
               <>
                 <MiniMap points={[{ p: plant, c: coords }]} height={150} highlight={plant.qr_id} label={`Location of ${plant.qr_id}`} />
-                <p className="gap-top-s">{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</p>
+                <p className="gap-top-s"><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono></p>
                 <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>
               </>
             ) : (
@@ -165,7 +165,7 @@ export default function Specimen({ qr }) {
             <section className="glass pad">
               <h2>Same species</h2>
               <p className="mute">{siblings.length ? `${siblings.length} other tagged ${plant.name} ${siblings.length === 1 ? "plant" : "plants"} in the park.` : `This is the only tagged ${plant.name} so far.`}</p>
-              <a className="textlink" href={"#/plants/" + plant.species.id}>About this species →</a>
+              <a className="textlink" href={"#/plants/" + plant.species.id}>About this species <Icon name="arrowR" size={16} /></a>
             </section>
           )}
           {staff && node && (
@@ -257,7 +257,7 @@ function Sensor({ db, node }) {
     <div className="glass pad">
       <p className="row between wrap"><b>{node.name}</b><Chip value={node.status} /></p>
       {last ? (
-        <p>Latest reading: <b>{last.temperature}°C</b> · soil moisture <b>{last.soil_moisture}%</b> <span className="mute small">({fmtDateTime(last.ts)})</span></p>
+        <p>Latest reading: <Mono>{last.temperature}°C</Mono> · soil moisture <Mono>{last.soil_moisture}%</Mono> <span className="mute small">({fmtDateTime(last.ts)})</span></p>
       ) : <p className="mute">No readings yet.</p>}
       <p className="mute small">Alert limits: {node.thresholds.temp_max}°C max, {node.thresholds.moisture_min}% soil moisture min.</p>
       <a className="btn ghost" href="#/monitoring"><Icon name="activity" size={16} /> Open Monitoring</a>

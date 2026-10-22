@@ -1,10 +1,12 @@
 // apps/web/src/pages/MapPage.jsx
 import { useState } from "react";
 import Img from "../components/Img.jsx";
-import { useStore } from "../store.js";
-import { can } from "../permissions.js";
-import { familyColors, familyOf, shownCoords, visiblePlants } from "../selectors.js";
-import { MAP_BOUNDS } from "../site.js";
+import Icon from "../components/Icon.jsx";
+import { Mono, Sci } from "../components/Bits.jsx";
+import { useStore } from "../../../shared/store.js";
+import { can } from "../../../shared/permissions.js";
+import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../shared/selectors.js";
+import { MAP_BOUNDS } from "../../../shared/site.js";
 
 // Schematic map: dots are placed from lat/lng inside the fixed MAP_BOUNDS area (site.js).
 // Replace the background with Leaflet + OpenStreetMap later; the pin data stays the same.
@@ -36,7 +38,7 @@ export default function MapPage({ arg }) {
 
   return (
     <section className="glass pad">
-      <h2>Plant map</h2>
+      <h1>Plant map</h1>
       <p className="mute">
         Each dot is one plant and its colour shows the plant family (see the legend). Select a dot to see the plant,
         or a family in the legend to show only that family.
@@ -66,7 +68,7 @@ export default function MapPage({ arg }) {
 
       <div className="maplegend" role="group" aria-labelledby="legend-title">
         <h3 id="legend-title">Legend</h3>
-        <p className="mute small"><i className="dot" style={{ background: "var(--mute)" }} /> One dot = one plant. Colour = plant family.</p>
+        <p className="mute small"><i className="dot" style={{ background: "var(--ink2)" }} /> One dot = one plant. Colour = plant family.</p>
         <div className="legend">
           <button className={"fam" + (!only ? " on" : "")} onClick={() => setOnly(null)} aria-pressed={!only}>All families ({all.length} {all.length === 1 ? "plant" : "plants"})</button>
           {Object.entries(colors).map(([f, color]) => (
@@ -82,12 +84,12 @@ export default function MapPage({ arg }) {
           <Img src={sel.p.photos[0]?.url} />
           <span>
             <b>{sel.p.name}</b>
-            <small className="sci">{sel.p.scientific || sel.p.qr_id}</small>
+            {sel.p.scientific ? <Sci block className="small">{sel.p.scientific}</Sci> : <Mono className="block">{sel.p.qr_id}</Mono>}
             <small className="mute block">
-              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · {sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}
+              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>
             </small>
           </span>
-          <a className="btn" href={"#/tag/" + sel.p.qr_id}>View plant</a>
+          <a className="btn" href={"#/tag/" + sel.p.qr_id}>View plant <Icon name="arrowR" size={18} /></a>
         </div>
       )}
     </section>

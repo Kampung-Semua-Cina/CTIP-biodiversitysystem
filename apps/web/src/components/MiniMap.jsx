@@ -1,4 +1,4 @@
-import { MAP_BOUNDS } from "../site.js";
+import { MAP_BOUNDS } from "../../../shared/site.js";
 
 // Small version of the plant map (same schematic background as MapPage).
 // `points` is a list of { p, c } where c = { lat, lng }. Clicking a dot opens that plant.

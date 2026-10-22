@@ -30,11 +30,11 @@ const readings = (base, amp, spikeAt, spike, moist) =>
 
 export const seed = {
   profiles: [
-    { id: "u1", full_name: "Ahmad Faizal", email: "admin@sfc.my", role: "admin", is_active: true, created_at: "2026-08-01T02:00:00Z" },
-    { id: "u2", full_name: "Siti Aminah", email: "botanist@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T02:00:00Z" },
-    { id: "u3", full_name: "Jonathan Rajang", email: "jonathan@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T03:00:00Z" },
-    { id: "u4", full_name: "Dayang Norsyafiqah", email: "officer@sfc.my", role: "officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
-    { id: "u5", full_name: "Lim Chee Wei", email: "cheewei@sfc.my", role: "botanist", is_active: false, created_at: "2026-08-10T02:00:00Z" },
+    { id: "u1", full_name: "Ahmad Faizal", username: "ahmad.faizal", phone: "", avatar_url: null, email: "admin@sfc.my", role: "admin", is_active: true, created_at: "2026-08-01T02:00:00Z" },
+    { id: "u2", full_name: "Siti Aminah", username: "siti.aminah", phone: "", avatar_url: null, email: "botanist@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T02:00:00Z" },
+    { id: "u3", full_name: "Jonathan Rajang", username: "jonathan", phone: "", avatar_url: null, email: "jonathan@sfc.my", role: "botanist", is_active: true, created_at: "2026-08-03T03:00:00Z" },
+    { id: "u4", full_name: "Dayang Norsyafiqah", username: "dayang", phone: "", avatar_url: null, email: "officer@sfc.my", role: "officer", is_active: true, created_at: "2026-08-02T02:00:00Z" },
+    { id: "u5", full_name: "Lim Chee Wei", username: "cheewei", phone: "", avatar_url: null, email: "cheewei@sfc.my", role: "botanist", is_active: false, created_at: "2026-08-10T02:00:00Z" },
   ],
 
   species: [
@@ -45,6 +45,14 @@ export const seed = {
     { id: "sp5", scientific_name: "Cratoxylum arborescens", common_name: "Geronggang", family: "Hypericaceae", genus: "Cratoxylum", description: "A medium-sized tree of swamp forest with reddish young leaves.", conservation_status: "vulnerable", cultural_significance: "", is_published: false, is_deleted: false },
   ],
 
+  // Captioned catalogue photos for each species (species_media table). sort_order 0 is the cover photo.
+  species_media: [
+    { id: "m1", species_id: "sp1", url: IMG[0], caption: "Cluster of rounded ground pitchers on the peat floor", credit: null, is_primary: true, sort_order: 0, uploaded_by: "u4", created_at: "2026-09-10T02:00:00Z" },
+    { id: "m2", species_id: "sp1", url: IMG[1], caption: "Leaves and climbing stem", credit: null, is_primary: false, sort_order: 1, uploaded_by: "u4", created_at: "2026-09-10T02:01:00Z" },
+    { id: "m3", species_id: "sp3", url: IMG[3], caption: "Open flower on the host vine root", credit: null, is_primary: true, sort_order: 0, uploaded_by: "u4", created_at: "2026-09-12T02:00:00Z" },
+  ],
+
+  // One row per tagged plant (specimens table) joined with its photos (observation_photos table).
   plants: [
     { id: "s1", qr_id: "NIAH-0001", species_id: "sp1", proposed_species: "", registered_by: "u2", lat: 3.8052, lng: 113.7731, gps_accuracy_m: 6.5, endangered_override: false, is_deleted: false,
       photos: [

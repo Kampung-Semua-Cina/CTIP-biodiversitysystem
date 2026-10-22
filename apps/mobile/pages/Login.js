@@ -1,182 +1,40 @@
 // apps/mobile/pages/Login.js
+// Staff sign in. On sample data for now; CTIP-42 swaps login() for Supabase Auth.
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native';
+
 import { useStore } from '../../shared/store.js';
-import { COLORS, commonStyles } from '../components/Theme.js';
+import { getStaffPageContent } from '../../shared/publicContent.js';
+import { PARK } from '../../shared/site.js';
+import { useTheme } from '../components/Theme.js';
+import { Screen, Header, IconButton, TitleBlock, Field, Button, Txt } from '../components/Bits.js';
 
-function PasswordInput({ value, onChangeText, placeholder }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <View style={styles.pwWrap}>
-      <TextInput
-        style={[commonStyles.input, styles.pwInput]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#688065"
-        secureTextEntry={!visible}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TouchableOpacity
-        style={styles.eyeBtn}
-        onPress={() => setVisible((v) => !v)}
-        accessibilityRole="button"
-        accessibilityLabel={visible ? 'Hide password' : 'Show password'}
-        hitSlop={8}
-      >
-        <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textMuted} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-export default function MobileLogin({ onNavigate }) {
-  const { login, signIn, changePassword, notify } = useStore();
-  const [mode, setMode] = useState('signin'); // signin | change | first
+export default function SignIn({ nav }) {
+  const { login, signIn } = useStore();
+  const { c } = useTheme();
   const [email, setEmail] = useState('');
-  const [pw, setPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [pending, setPending] = useState(null);
-
-  const switchTo = (next) => {
-    setMode(next);
-    setPw('');
-    setNewPw('');
-  };
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState('');
+  const staff = getStaffPageContent(PARK);
 
   const submit = () => {
-    if (!email.trim() || !pw.trim()) {
-      return notify('Please enter both email and password');
-    }
-    const res = login(email, pw);
-    if (!res.ok) return notify(res.message);
-    if (res.first) {
-      setPending(res.id);
-      return setMode('first');
-    }
-    signIn(res.id);
-    notify('Signed in successfully');
-    onNavigate?.('dashboard');
-  };
-
-  const change = () => {
-    if (!email.trim()) return notify('Please enter your email');
-    if (newPw.length < 8) return notify('Use at least 8 characters for the new password');
-    const res = changePassword(email, newPw);
-    if (!res.ok) return notify(res.message);
-    notify('Password changed successfully');
-    if (mode === 'first') {
-      signIn(pending);
-      return onNavigate?.('dashboard');
-    }
-    switchTo('signin');
-  };
-
-  const skip = () => {
-    signIn(pending);
-    onNavigate?.('dashboard');
+    const res = login(email, password);
+    if (!res.ok) return setError(res.message);
+    signIn(res.id); // the app then opens this person's first tab
   };
 
   return (
-    <View style={commonStyles.card}>
-      {mode === 'signin' && (
-        <View>
-          <Text style={commonStyles.heading}>Staff login</Text>
-          <Text style={commonStyles.mute}>
-            For botanists, conservation officers and admins. Sign in with your registered SFC email.
-          </Text>
-
-          <Text style={commonStyles.label}>Email</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="name@sfc.my"
-            placeholderTextColor="#688065"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <Text style={commonStyles.label}>Password</Text>
-          <PasswordInput value={pw} onChangeText={setPw} placeholder="Enter password" />
-
-          <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
-            <TouchableOpacity style={commonStyles.btnPrimary} onPress={submit}>
-              <Text style={commonStyles.btnPrimaryText}>Sign in</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={commonStyles.btnGhost} onPress={() => switchTo('change')}>
-              <Text style={commonStyles.btnGhostText}>Change password</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {mode === 'change' && (
-        <View>
-          <Text style={commonStyles.heading}>Change password</Text>
-          <Text style={commonStyles.mute}>Enter your email and choose a new password.</Text>
-
-          <Text style={commonStyles.label}>Email</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="name@sfc.my"
-            placeholderTextColor="#688065"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <Text style={commonStyles.label}>New password (min 8 characters)</Text>
-          <PasswordInput value={newPw} onChangeText={setNewPw} placeholder="New password" />
-
-          <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
-            <TouchableOpacity style={commonStyles.btnPrimary} onPress={change}>
-              <Text style={commonStyles.btnPrimaryText}>Save new password</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={commonStyles.btnGhost} onPress={() => switchTo('signin')}>
-              <Text style={commonStyles.btnGhostText}>Back to sign in</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {mode === 'first' && (
-        <View>
-          <Text style={commonStyles.heading}>Set a new password</Text>
-          <Text style={commonStyles.mute}>
-            You signed in with the default password. Choose a new one now, or keep it for later.
-          </Text>
-
-          <Text style={commonStyles.label}>New password</Text>
-          <PasswordInput value={newPw} onChangeText={setNewPw} placeholder="New password" />
-
-          <View style={[commonStyles.rowWrap, { marginTop: 16 }]}>
-            <TouchableOpacity style={commonStyles.btnPrimary} onPress={change}>
-              <Text style={commonStyles.btnPrimaryText}>Change password</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={commonStyles.btnGhost} onPress={skip}>
-              <Text style={commonStyles.btnGhostText}>Not now</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
+    <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />} top={0} gap={18}>
+      <TitleBlock title="Staff sign in" />
+      <Txt v="body" color={c.ink2}>For Sarawak Forestry Corporation botanists, conservation officers and admins.</Txt>
+      <Field label="Email" value={email} onChangeText={(v) => { setEmail(v); setError(''); }} placeholder="name@sfc.my" keyboardType="email-address" />
+      <Field label="Password" value={password} onChangeText={(v) => { setPassword(v); setError(''); }} secure={!show}
+        rightIcon={show ? 'eyeOff' : 'eye'} onRightPress={() => setShow(!show)} error={error || undefined} />
+      <View style={{ paddingTop: 4 }}>
+        <Button label="Sign in" disabled={!email || !password} onPress={submit} />
+      </View>
+      <Txt v="small" color={c.ink2} style={{ fontSize: 14 }}>{staff.description.split('. ').pop()} {staff.visitorHint}</Txt>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  pwWrap: {
-    justifyContent: 'center',
-  },
-  pwInput: {
-    paddingRight: 44,
-  },
-  eyeBtn: {
-    position: 'absolute',
-    right: 10,
-    padding: 4,
-  },
-});

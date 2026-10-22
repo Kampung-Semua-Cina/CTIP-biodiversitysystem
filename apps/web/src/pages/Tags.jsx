@@ -3,11 +3,11 @@ import { useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
-import { Chip, Modal } from "../components/Bits.jsx";
+import { Chip, Mono, Modal } from "../components/Bits.jsx";
 import TagPrint from "../components/TagPrint.jsx";
-import { useStore } from "../store.js";
-import { tagUrl } from "../selectors.js";
-import { download, fmtDate } from "../utils.js";
+import { useStore } from "../../../shared/store.js";
+import { tagUrl } from "../../../shared/selectors.js";
+import { download, fmtDate } from "../../../shared/utils.js";
 
 // QR tag stock (qr_tags table): make a batch, print tags at any size, retire damaged ones,
 // delete unused ones made by mistake. Each tag's QR code opens in a popup to share or print.
@@ -50,7 +50,7 @@ export default function Tags() {
           <tbody>
             {db.tags.map((t) => (
               <tr key={t.qr_id}>
-                <td>{t.qr_id}</td>
+                <td><Mono>{t.qr_id}</Mono></td>
                 <td><Chip value={t.status} /></td>
                 <td>{t.batch_label}</td>
                 <td>{fmtDate(t.created_at)}</td>
@@ -58,7 +58,7 @@ export default function Tags() {
                   <button className="btn ghost small-btn" onClick={() => setViewing(t)} aria-label={`Show QR code for ${t.qr_id}`}><Icon name="qr" size={16} /> QR</button>
                   {t.status === "unused" && (
                     <>
-                      <button className="btn ghost small-btn" onClick={() => retireTag(t.qr_id)}>Retire</button>
+                      <button className="btn ghost small-btn" onClick={() => retireTag(t.qr_id)}><Icon name="x" size={16} /> Retire</button>
                       <button className="ic" onClick={() => setRemoving(t)} aria-label={`Delete ${t.qr_id}`}><Icon name="trash" size={18} /></button>
                     </>
                   )}
@@ -74,9 +74,9 @@ export default function Tags() {
 
       {removing && (
         <Modal title="Delete QR tag" onClose={() => setRemoving(null)}>
-          <p>Delete <b>{removing.qr_id}</b>? It has not been put on a plant. Its number will not be used again, so throw away the sticker if it was already printed.</p>
+          <p>Delete <Mono>{removing.qr_id}</Mono>? It has not been put on a plant. Its number will not be used again, so throw away the sticker if it was already printed.</p>
           <div className="row">
-            <button className="btn danger" onClick={remove}>Delete</button>
+            <button className="btn danger" onClick={remove}><Icon name="trash" size={18} /> Delete</button>
             <button className="btn ghost" onClick={() => setRemoving(null)}>Cancel</button>
           </div>
         </Modal>
@@ -92,6 +92,7 @@ function TagQr({ tag, onClose, onPrint }) {
   const url = tagUrl(tag.qr_id);
 
   // Draws the QR code with its tag ID underneath onto a white PNG, for sharing or saving.
+  // Black on white whatever the theme, so the code always scans and prints.
   const toPng = () =>
     new Promise((resolve, reject) => {
       const svg = new XMLSerializer().serializeToString(box.current.querySelector("svg"));
@@ -105,7 +106,7 @@ function TagQr({ tag, onClose, onPrint }) {
         g.fillRect(0, 0, c.width, c.height);
         g.drawImage(img, 40, 40, 520, 520);
         g.fillStyle = "#000";
-        g.font = "bold 44px Nunito, sans-serif";
+        g.font = "500 44px 'JetBrains Mono', monospace"; // tag IDs are always mono
         g.textAlign = "center";
         g.fillText(tag.qr_id, 300, 630);
         c.toBlob((b) => (b ? resolve(b) : reject(new Error("png"))), "image/png");

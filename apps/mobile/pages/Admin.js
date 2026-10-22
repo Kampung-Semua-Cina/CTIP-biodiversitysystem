@@ -1,306 +1,169 @@
 // apps/mobile/pages/Admin.js
+// Staff "More" tab (profile, tools, appearance, sign out), and the admin's Users and Audit log.
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, ScrollView } from 'react-native';
+import { View, Text } from 'react-native';
+
 import { useStore } from '../../shared/store.js';
-import { ROLE_LABEL } from '../../shared/permissions.js';
-import { DEFAULT_PW } from '../../shared/data.js';
-import { fmtDate, fmtDateTime } from '../../shared/utils.js';
-import { Chip } from '../components/Bits.js';
-import { COLORS, commonStyles } from '../components/Theme.js';
+import { nameOf } from '../../shared/selectors.js';
+import { can, ROLE_LABEL } from '../../shared/permissions.js';
+import { useTheme, font } from '../components/Theme.js';
+import { AppearanceSection, PrototypeRoleSection } from '../components/Chrome.js';
+import {
+  Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, Row, DotLabel,
+  Field, Segmented, Empty,
+} from '../components/Bits.js';
+import { shortDate } from '../components/format.js';
 
-export function MobileUsers() {
-  const { db, me, addUser, updateUser, notify } = useStore();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [newRole, setNewRole] = useState('botanist');
+export function StaffMore({ nav }) {
+  const { me, role, logout } = useStore();
+  const { c } = useTheme();
+  const tools = [
+    can(role, 'species') && { icon: 'leaf', label: 'Species', go: 'speciesAdmin' },
+    can(role, 'tags') && { icon: 'qr', label: 'QR tags', go: 'tags' },
+    can(role, 'reports') && { icon: 'chart', label: 'Reports', go: 'reports' },
+    can(role, 'audit') && { icon: 'shield', label: 'Audit log', go: 'audit' },
+    can(role, 'discuss') && { icon: 'chat', label: 'Discussion', go: 'discussion' },
+    { icon: 'map', label: 'Plant map', go: 'map' },
+    { icon: 'leaf', label: 'Species catalogue', go: 'plants' },
+  ].filter(Boolean);
 
-  const add = () => {
-    if (!name.trim() || !email.trim()) {
-      return notify('Please enter both name and email');
-    }
-    const success = addUser({ full_name: name.trim(), email: email.trim(), role: newRole });
-    if (!success) return notify('This email already has an account');
-    setName('');
-    setEmail('');
-    notify('Staff account created');
+  return (
+    <Screen gap={18}>
+      <TitleBlock title="More" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, backgroundColor: c.bg }}>
+        <Avatar name={me?.full_name} size={48} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt v="label" style={{ fontSize: 17 }}>{me?.full_name}</Txt>
+          <Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{ROLE_LABEL[role]} · {me?.email}</Txt>
+        </View>
+      </View>
+      <Section title="Tools" gap={0}>
+        {tools.map((t, i) => <MenuRow key={t.label} icon={t.icon} label={t.label} onPress={() => nav.go(t.go)} last={i === tools.length - 1} />)}
+      </Section>
+      <AppearanceSection />
+      <PrototypeRoleSection />
+      <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={logout} />
+    </Screen>
+  );
+}
+
+const ROLE_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'botanist', label: 'Botanists' },
+  { key: 'officer', label: 'Officers' },
+  { key: 'admin', label: 'Admins' },
+  { key: 'off', label: 'Deactivated' },
+];
+
+export function Users({ nav }) {
+  const { db, addUser, notify } = useStore();
+  const { c } = useTheme();
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [inviting, setInviting] = useState(false);
+  const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist' });
+  const [error, setError] = useState('');
+  const needle = q.trim().toLowerCase();
+  const rows = db.profiles
+    .filter((p) => (filter === 'all' ? true : filter === 'off' ? !p.is_active : p.role === filter && p.is_active))
+    .filter((p) => !needle || `${p.full_name} ${p.email}`.toLowerCase().includes(needle))
+    .sort((a, b) => b.is_active - a.is_active || a.full_name.localeCompare(b.full_name));
+  const off = db.profiles.filter((p) => !p.is_active).length;
+
+  const invite = () => {
+    if (!form.full_name.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Enter a name and a valid email.');
+    if (!addUser({ ...form, full_name: form.full_name.trim() })) return setError('Someone already uses this email.');
+    notify(`${form.full_name.trim()} can now sign in`);
+    setInviting(false);
+    setForm({ full_name: '', email: '', role: 'botanist' });
+    setError('');
   };
 
   return (
-    <View>
-      <View style={commonStyles.card}>
-        <Text style={commonStyles.heading}>Users & Access</Text>
-        <Text style={commonStyles.mute}>
-          Register botanists and conservation officers. Accounts are created by an administrator.
-        </Text>
-
-        {/* Add Account Form */}
-        <View style={styles.addForm}>
-          <Text style={commonStyles.subHeading}>＋ Add botanist or officer</Text>
-
-          <Text style={commonStyles.label}>Full Name</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Dayang Norsyafiqah"
-            placeholderTextColor="#688065"
-          />
-
-          <Text style={commonStyles.label}>Email Address</Text>
-          <TextInput
-            style={commonStyles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="e.g. officer@sfc.my"
-            placeholderTextColor="#688065"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <Text style={commonStyles.label}>Role Assignment</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roleScroll}>
-            {Object.entries(ROLE_LABEL).map(([r, text]) => (
-              <TouchableOpacity
-                key={r}
-                style={[styles.roleOption, newRole === r && styles.roleOptionActive]}
-                onPress={() => setNewRole(r)}
-              >
-                <Text style={[styles.roleOptionText, newRole === r && styles.roleOptionTextActive]}>
-                  {text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <TouchableOpacity style={[commonStyles.btnPrimary, { marginTop: 12 }]} onPress={add}>
-            <Text style={commonStyles.btnPrimaryText}>Add account</Text>
-          </TouchableOpacity>
-
-          <Text style={[commonStyles.mute, { marginTop: 8 }]}>
-            Default temporary password: <Text style={{ color: COLORS.primary, fontWeight: '700' }}>{DEFAULT_PW}</Text>
-          </Text>
+    <Screen gap={14}>
+      <TitleBlock title="Users" sub={`${db.profiles.length} accounts · ${off} deactivated`}
+        right={!inviting ? <Button label="Invite" icon="plus" height={44} size={15} onPress={() => setInviting(true)} /> : null} />
+      {inviting ? (
+        <View style={{ gap: 14, padding: 16, borderRadius: 14, backgroundColor: c.bg }}>
+          <Txt v="title3">Invite someone</Txt>
+          <Field label="Full name" value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} />
+          <Field label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} keyboardType="email-address" error={error || undefined} />
+          <Segmented value={form.role} onChange={(v) => setForm({ ...form, role: v })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button label="Cancel" kind="secondary" flex={1} onPress={() => { setInviting(false); setError(''); }} />
+            <Button label="Send invite" flex={1.4} onPress={invite} />
+          </View>
         </View>
+      ) : null}
+      <SearchField value={q} onChangeText={setQ} placeholder="Search name or email" />
+      <Pills value={filter} onChange={setFilter} items={ROLE_FILTERS} />
+      <View>
+        {rows.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
+        {rows.map((p, i) => (
+          <Row key={p.id} serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={p.full_name}
+            sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
+            right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
+            last={i === rows.length - 1} />
+        ))}
       </View>
-
-      {/* Existing Users List */}
-      <View style={commonStyles.card}>
-        <Text style={commonStyles.subHeading}>Registered Staff ({db.profiles.length})</Text>
-
-        <View style={styles.userList}>
-          {db.profiles.map((u) => {
-            const isSelf = me && u.id === me.id;
-            return (
-              <View key={u.id} style={styles.userCard}>
-                <View style={[commonStyles.row, { justifyContent: 'space-between' }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={styles.userName}>
-                      {u.full_name} {isSelf && <Text style={styles.selfTag}>(you)</Text>}
-                    </Text>
-                    <Text style={commonStyles.mute}>{u.email}</Text>
-                  </View>
-                  <Chip value={u.role}>{ROLE_LABEL[u.role] || u.role}</Chip>
-                </View>
-
-                {/* Role and Active toggle */}
-                <View style={[commonStyles.row, styles.userControls]}>
-                  <View style={commonStyles.row}>
-                    <Text style={commonStyles.mute}>Active:</Text>
-                    <Switch
-                      value={u.is_active}
-                      disabled={isSelf}
-                      onValueChange={() => updateUser(u.id, { is_active: !u.is_active })}
-                      trackColor={{ false: '#26422f', true: COLORS.primary }}
-                      thumbColor={u.is_active ? '#14301d' : '#889e82'}
-                    />
-                  </View>
-
-                  <Text style={styles.joinedDate}>Joined {fmtDate(u.created_at)}</Text>
-                </View>
-
-                {/* Role Switcher buttons */}
-                {!isSelf && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.switchRoleRow}>
-                    {Object.entries(ROLE_LABEL).map(([r, text]) => (
-                      <TouchableOpacity
-                        key={r}
-                        style={[styles.smallRoleBtn, u.role === r && styles.smallRoleBtnActive]}
-                        onPress={() => updateUser(u.id, { role: r })}
-                      >
-                        <Text style={[styles.smallRoleText, u.role === r && styles.smallRoleTextActive]}>
-                          {text}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    </View>
+      <Button label="Audit log" kind="text" icon="shield" height={48} size={15} onPress={() => nav.go('audit')} />
+    </Screen>
   );
 }
 
-export function MobileAudit() {
+// Plain sentence for one audit row.
+function describe(db, a) {
+  const plantOfObs = (id) => db.plants.find((p) => p.id === db.observations.find((o) => o.id === id)?.specimen_id)?.qr_id;
+  const nv = a.new_value || {};
+  if (a.table_name === 'observations' && nv.status) {
+    const verb = { approved: 'Approved', returned: 'Returned', rejected: 'Rejected', synced: 'Sent' }[nv.status] || 'Updated';
+    return `${verb} the record for ${plantOfObs(a.record_id) || 'a plant'}`;
+  }
+  if (a.table_name === 'profiles') {
+    if (nv.is_active === false) return `Deactivated ${nameOf(db, a.record_id)}`;
+    if (nv.is_active === true) return `Turned on ${nameOf(db, a.record_id)}`;
+    if (a.action === 'insert') return `Added ${nv.email}`;
+    if (nv.password) return 'Changed their password';
+  }
+  return `${a.action === 'insert' ? 'Added' : a.action === 'delete' ? 'Removed' : 'Changed'} ${a.table_name.replace('_', ' ')}`;
+}
+
+const diff = (a) => {
+  const keys = Object.keys(a.new_value || {});
+  if (!keys.length) return null;
+  const k = keys[0];
+  const before = a.old_value?.[k];
+  return before === undefined ? `${k}: ${a.new_value[k]}` : `${k}: ${before} → ${a.new_value[k]}`;
+};
+
+export function Audit({ nav }) {
   const { db } = useStore();
-
+  const { c } = useTheme();
+  const [filter, setFilter] = useState('all');
+  const rows = db.audit
+    .filter((a) => filter === 'all' || (filter === 'accounts' ? a.table_name === 'profiles' : a.table_name !== 'profiles'))
+    .sort((a, b) => b.changed_at.localeCompare(a.changed_at));
   return (
-    <View style={commonStyles.card}>
-      <Text style={commonStyles.heading}>Audit log</Text>
-      <Text style={commonStyles.mute}>
-        Immutable audit trail of system modifications and review actions ({db.audit.length} entries).
-      </Text>
-
-      <View style={styles.auditList}>
-        {db.audit.map((a) => {
-          const author = db.profiles.find((p) => p.id === a.changed_by);
-          return (
-            <View key={a.id} style={styles.auditCard}>
-              <View style={[commonStyles.row, { justifyContent: 'space-between', marginBottom: 4 }]}>
-                <Text style={styles.auditTime}>{fmtDateTime(a.changed_at)}</Text>
-                <Chip value={a.action} />
-              </View>
-
-              <Text style={styles.auditActor}>
-                By: <Text style={{ color: COLORS.text, fontWeight: '700' }}>{author?.full_name || 'System'}</Text> · Table: <Text style={{ color: COLORS.primary }}>{a.table_name}</Text>
-              </Text>
-
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText}>
-                  {a.old_value ? JSON.stringify(a.old_value) + ' → ' : ''}
-                  {JSON.stringify(a.new_value)}
-                </Text>
-              </View>
+    <Screen header={<Header left={<IconButton name="chevL" label="Back" onPress={nav.back} />} />} top={0} gap={16}>
+      <TitleBlock title="Audit log" sub="Every change to records and accounts" />
+      <Pills value={filter} onChange={setFilter} items={[{ key: 'all', label: 'All' }, { key: 'records', label: 'Records' }, { key: 'accounts', label: 'Accounts' }]} />
+      <View>
+        {rows.length === 0 ? <Empty icon="shield">No changes recorded.</Empty> : null}
+        {rows.map((a, i) => (
+          <View key={a.id} style={{ gap: 6, paddingVertical: 14, borderBottomWidth: i === rows.length - 1 ? 0 : 1, borderBottomColor: c.line }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <Txt v="label">{nameOf(db, a.changed_by)}</Txt>
+              <Txt v="caption" color={c.ink3} style={{ fontFamily: font('text', 600) }}>{shortDate(a.changed_at)}</Txt>
             </View>
-          );
-        })}
+            <Txt v="body" style={{ fontSize: 15, lineHeight: 22 }}>{describe(db, a)}</Txt>
+            {diff(a) ? (
+              <View style={{ alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: c.bg }}>
+                <Mono size={13}>{diff(a)}</Mono>
+              </View>
+            ) : null}
+          </View>
+        ))}
       </View>
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  addForm: {
-    backgroundColor: '#0a1a11',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  roleScroll: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 6,
-  },
-  roleOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#16301e',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  roleOptionActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  roleOptionText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  roleOptionTextActive: {
-    color: COLORS.textDark,
-    fontWeight: '700',
-  },
-  userList: {
-    gap: 10,
-    marginTop: 8,
-  },
-  userCard: {
-    backgroundColor: '#0a1a11',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  userName: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  selfTag: {
-    color: COLORS.primary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  userControls: {
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-  },
-  joinedDate: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-  },
-  switchRoleRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 8,
-  },
-  smallRoleBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    backgroundColor: '#132819',
-  },
-  smallRoleBtnActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: 'rgba(155, 207, 106, 0.2)',
-  },
-  smallRoleText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-  },
-  smallRoleTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  auditList: {
-    gap: 10,
-    marginTop: 12,
-  },
-  auditCard: {
-    backgroundColor: '#0a1a11',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  auditTime: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-  },
-  auditActor: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginVertical: 4,
-  },
-  codeBox: {
-    backgroundColor: '#06110a',
-    borderRadius: 6,
-    padding: 8,
-    marginTop: 4,
-  },
-  codeText: {
-    color: '#a8d5ba',
-    fontSize: 11,
-    fontFamily: 'monospace',
-  },
-});

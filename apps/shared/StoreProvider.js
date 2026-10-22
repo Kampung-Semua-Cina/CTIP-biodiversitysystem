@@ -3,11 +3,13 @@ import React, { useRef, useState } from "react";
 import { StoreContext } from "./store.js";
 import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";
 import { nextTagIds } from "./selectors.js";
-import { uid, nowIso } from "./utils.js";
+import { can } from "./permissions.js";
+import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
 
 // Holds the sample database in memory. Every change a page makes goes through
 // one of the actions below, so it is easy to swap each one for a Supabase call.
-export default function StoreProvider({ children }) {
+// deviceId is written on new records ("web" or "mobile").
+export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
   const [userId, setUserId] = useState(null);
@@ -37,9 +39,11 @@ export default function StoreProvider({ children }) {
   const setRole = (key) => setUserId(key === "visitor" ? null : DEMO_USER[key]);
   const logout = () => setUserId(null);
   // Supabase: supabase.auth.signInWithPassword({ email, password }), then read profiles.is_active.
+  // Staff can type their username instead of their email; it is looked up to the email first.
   const login = (email, password) => {
-    const user = db.profiles.find((p) => p.email.toLowerCase() === email.trim().toLowerCase());
-    if (!user || passwords[user.id] !== password) return { ok: false, message: "Email or password is incorrect" };
+    const key = email.trim().toLowerCase();
+    const user = db.profiles.find((p) => p.email.toLowerCase() === key || p.username?.toLowerCase() === key);
+    if (!user || passwords[user.id] !== password) return { ok: false, message: "Email, username or password is incorrect" };
     if (!user.is_active) return { ok: false, message: "This account is turned off. Ask an admin to turn it on." };
     return { ok: true, id: user.id, first: password === DEFAULT_PW };
   };
@@ -55,6 +59,48 @@ export default function StoreProvider({ children }) {
     setPasswords((pw) => ({ ...pw, [user.id]: next }));
     setDb((d) => ({ ...d, audit: [{ ...auditRow("profiles", user.id, "update", null, { password: "changed" }), changed_by: user.id }, ...d.audit] }));
     return { ok: true, id: user.id };
+  };
+
+  /* ---------- own account ---------- */
+  // Usernames: 3-20 lowercase letters, numbers, dots or underscores, unique across all staff.
+  const USERNAME = /^[a-z0-9._]{3,20}$/;
+  const usernameTaken = (name, exceptId) => db.profiles.some((p) => p.id !== exceptId && p.username?.toLowerCase() === name.toLowerCase());
+
+  // Supabase: supabase.from("profiles").update(patch).eq("id", me.id); photo goes to Storage first.
+  const updateProfile = (patch) => {
+    if (!me) return { ok: false, message: "Sign in first" };
+    const clean = { ...patch };
+    if ("full_name" in clean) {
+      clean.full_name = clean.full_name.trim().replace(/\s+/g, " ");
+      if (!clean.full_name) return { ok: false, message: "Enter your name" };
+    }
+    if ("username" in clean) {
+      clean.username = clean.username.trim().toLowerCase();
+      if (!USERNAME.test(clean.username)) return { ok: false, message: "Username needs 3-20 letters, numbers, dots or underscores" };
+      if (usernameTaken(clean.username, me.id)) return { ok: false, message: "This username is already taken" };
+    }
+    if ("phone" in clean) {
+      clean.phone = clean.phone.trim();
+      if (clean.phone && !/^\+?[0-9 -]{7,15}$/.test(clean.phone)) return { ok: false, message: "Enter a valid phone number" };
+    }
+    const changed = Object.keys(clean).filter((k) => clean[k] !== me[k]);
+    if (!changed.length) return { ok: true, unchanged: true };
+    // Photos are big data URLs, so the audit row only says that it changed.
+    const show = (src) => Object.fromEntries(changed.map((k) => [k, k === "avatar_url" ? (src[k] ? "photo" : null) : src[k]]));
+    const row = auditRow("profiles", me.id, "update", show(me), show(clean));
+    setDb((d) => ({ ...d, profiles: d.profiles.map((p) => (p.id === me.id ? { ...p, ...clean } : p)), audit: [row, ...d.audit] }));
+    return { ok: true };
+  };
+
+  // Supabase: re-check the current password with signInWithPassword, then supabase.auth.updateUser({ password }).
+  const changeMyPassword = (current, next) => {
+    if (!me) return { ok: false, message: "Sign in first" };
+    if (passwords[me.id] !== current) return { ok: false, message: "Your current password is incorrect" };
+    if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
+    if (next === current) return { ok: false, message: "Choose a password different from your current one" };
+    setPasswords((pw) => ({ ...pw, [me.id]: next }));
+    setDb((d) => ({ ...d, audit: [auditRow("profiles", me.id, "update", null, { password: "changed" }), ...d.audit] }));
+    return { ok: true };
   };
 
   /* ---------- plants and photos ---------- */
@@ -78,7 +124,7 @@ export default function StoreProvider({ children }) {
     };
     const obs = {
       id: obsId, specimen_id: specimenId, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: "mobile", last_synced_at: now,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
     };
     const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${qr_id} was added.`, "observations", obsId));
     setDb((d) => ({
@@ -91,6 +137,28 @@ export default function StoreProvider({ children }) {
       notifications: [...notes_, ...d.notifications],
       audit: [auditRow("specimens", specimenId, "insert", null, { qr_id }), ...d.audit],
     }));
+  };
+
+  // A return visit to a plant that is already tagged: a new observation of the same specimen.
+  // Supabase: insert into observations (and observation_photos) with a client idempotency key.
+  const addRevisit = ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
+    const obsId = uid();
+    const now = nowIso();
+    const plant = db.plants.find((p) => p.id === specimen_id);
+    const obs = {
+      id: obsId, specimen_id, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
+      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
+    };
+    const added = (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false }));
+    const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${plant?.qr_id || "A plant"} was revisited.`, "observations", obsId));
+    setDb((d) => ({
+      ...d,
+      plants: d.plants.map((p) => (p.id === specimen_id ? { ...p, photos: [...(p.photos || []), ...added] } : p)),
+      observations: [...d.observations, obs],
+      notifications: [...notes_, ...d.notifications],
+      audit: [auditRow("observations", obsId, "insert", null, { specimen_id, status: "synced" }), ...d.audit],
+    }));
+    return obsId;
   };
 
   // The officer confirms which species a tagged plant is (specimens.species_id).
@@ -175,12 +243,54 @@ export default function StoreProvider({ children }) {
     setDb((d) => ({ ...d, species: d.species.map((s) => (s.id === id ? { ...s, is_published: !s.is_published } : s)), audit: [row, ...d.audit] }));
   };
 
-  const deleteSpecies = (id) => {
-    const row = auditRow("species", id, "delete", { is_deleted: false }, { is_deleted: true });
-    setDb((d) => ({ ...d, species: d.species.map((s) => (s.id === id ? { ...s, is_deleted: true } : s)), audit: [row, ...d.audit] }));
+  // Soft delete and undo. Only officers and admins; the API will enforce this too.
+  // Returns false when the role is not allowed.
+  const setSpeciesDeleted = (id, is_deleted) => {
+    if (!can(role, "species")) return false;
+    const sp = db.species.find((s) => s.id === id);
+    const row = auditRow("species", id, is_deleted ? "delete" : "restore",
+      { scientific_name: sp.scientific_name, is_deleted: !is_deleted }, { is_deleted });
+    setDb((d) => ({ ...d, species: d.species.map((s) => (s.id === id ? { ...s, is_deleted } : s)), audit: [row, ...d.audit] }));
+    return true;
+  };
+  const deleteSpecies = (id) => setSpeciesDeleted(id, true);
+  const restoreSpecies = (id) => setSpeciesDeleted(id, false);
+
+  // Saves a species' captioned catalogue photos in the order given; the first is the cover photo.
+  // API (CTIP-46): for each new photo, POST /v1/species/:id/media { content_type, size_bytes, caption, is_primary, sort_order },
+  // then PUT the file to the returned upload.url (species-media/{species_id}/{media_id}).
+  // The API checks the role, file type and size again; Storage rejects anything over its bucket limits.
+  const setSpeciesMedia = (speciesId, list) => {
+    if (!can(role, "species")) return { ok: false, message: "Only officers and admins can change species photos" };
+    const bad = list.map((p) => p.file && photoProblem(p.file)).find(Boolean);
+    if (bad) return { ok: false, message: bad };
+    const k = list.findIndex((p) => !p.caption?.trim());
+    if (k >= 0) return { ok: false, message: `Add a caption to photo ${k + 1}` };
+    if (list.some((p) => p.caption.trim().length > CAPTION_MAX)) return { ok: false, message: `Keep captions under ${CAPTION_MAX} characters` };
+
+    const now = nowIso();
+    const rows = list.map((p, i) => ({
+      id: p.id, species_id: speciesId, url: p.url, caption: p.caption.trim(), credit: p.credit ?? null,
+      is_primary: i === 0, sort_order: i, uploaded_by: p.uploaded_by ?? userId, created_at: p.created_at ?? now,
+    }));
+    const row = auditRow("species_media", speciesId, "update", null, { count: rows.length, added: list.filter((p) => p.file).length });
+    setDb((d) => ({
+      ...d,
+      species_media: [...d.species_media.filter((m) => m.species_id !== speciesId), ...rows],
+      audit: [row, ...d.audit],
+    }));
+    return { ok: true };
   };
 
   /* ---------- users ---------- */
+  // New accounts start with the part of the email before "@" as the username (made unique).
+  const freeUsername = (email) => {
+    const local = email.split("@")[0].toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 16);
+    const base = local.length >= 3 ? local : local + "user";
+    let name = base;
+    for (let n = 2; usernameTaken(name); n++) name = base + n;
+    return name;
+  };
   const addUser = ({ full_name, email, role: newRole }) => {
     if (db.profiles.some((p) => p.email.toLowerCase() === email.trim().toLowerCase())) return false;
     const id = uid();
@@ -189,7 +299,7 @@ export default function StoreProvider({ children }) {
     setPasswords((pw) => ({ ...pw, [id]: DEFAULT_PW }));
     setDb((d) => ({
       ...d,
-      profiles: [...d.profiles, { id, full_name, email: email.trim(), role: newRole, is_active: true, created_at: now }],
+      profiles: [...d.profiles, { id, full_name, username: freeUsername(email), phone: "", avatar_url: null, email: email.trim(), role: newRole, is_active: true, created_at: now }],
       audit: [row, ...d.audit],
     }));
     return true;
@@ -230,7 +340,10 @@ export default function StoreProvider({ children }) {
   const markAllRead = () => setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.user_id === userId ? { ...n, is_read: true } : n)) }));
 
   const generateTags = (count, batch_label) => {
-    const ids = nextTagIds(db.tags, count);
+    // Deleted tags count too, so a number that may already be printed is never handed out again.
+    // Supabase: a database sequence does this.
+    const deleted = db.audit.filter((a) => a.table_name === "qr_tags" && a.action === "delete").map((a) => ({ qr_id: a.record_id }));
+    const ids = nextTagIds([...db.tags, ...deleted], count);
     const now = nowIso();
     setDb((d) => ({
       ...d,
@@ -239,19 +352,29 @@ export default function StoreProvider({ children }) {
     return ids;
   };
 
+  // Only tags never put on a plant can be deleted, so no specimen ever points at a missing tag.
+  const deleteTag = (qr_id) => {
+    const tag = db.tags.find((t) => t.qr_id === qr_id);
+    if (!tag || tag.status !== "unused" || !can(role, "tags")) return false;
+    const row = auditRow("qr_tags", qr_id, "delete", { status: tag.status, batch_label: tag.batch_label }, null);
+    setDb((d) => ({ ...d, tags: d.tags.filter((t) => t.qr_id !== qr_id), audit: [row, ...d.audit] }));
+    return true;
+  };
+
   const retireTag = (qr_id) =>
     setDb((d) => ({ ...d, tags: d.tags.map((t) => (t.qr_id === qr_id ? { ...t, status: "retired" } : t)) }));
 
   const value = {
     db, me, role, toast, notify,
-    setRole, logout, login, signIn, changePassword,
-    setPlantPhotos, addPlant, setPlantSpecies,
+    setRole, logout, login, signIn, changePassword, updateProfile, changeMyPassword,
+    setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
-    saveSpecies, togglePublish, deleteSpecies,
+    saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
-    markRead, markAllRead, generateTags, retireTag,
+    markRead, markAllRead, generateTags, retireTag, deleteTag,
   };
 
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
+  // Written without JSX so the web (Vite) and mobile (Metro) can both load this .js file.
+  return React.createElement(StoreContext.Provider, { value }, children);
 }

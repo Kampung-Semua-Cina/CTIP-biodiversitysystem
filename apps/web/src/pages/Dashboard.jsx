@@ -3,16 +3,16 @@ import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
-import { Chip, Empty } from "../components/Bits.jsx";
-import { useStore } from "../store.js";
-import { can, DASHBOARD_LABEL } from "../permissions.js";
-import { lastVisit, nameOf, visiblePlants } from "../selectors.js";
-import { download, fmtDate, toCsv } from "../utils.js";
+import { Chip, Empty, Sci } from "../components/Bits.jsx";
+import { STATUS_TEXT } from "../../../shared/tokens.js";
+import { useStore } from "../../../shared/store.js";
+import { can, DASHBOARD_LABEL } from "../../../shared/permissions.js";
+import { lastVisit, nameOf, visiblePlants } from "../../../shared/selectors.js";
+import { download, fmtDate, toCsv } from "../../../shared/utils.js";
 import Catalogue from "./Catalogue.jsx";
 import Specimen from "./Specimen.jsx";
 
 const DAY = 86400000;
-const STATUS_TEXT = { approved: "Published", synced: "Needs review", returned: "Returned", queued: "Waiting to sync", draft: "Draft", rejected: "Rejected" };
 
 // Saved views: each is a ready-made filter staff use often. `roles` limits who sees it.
 // Botanists' rows are already only their own (see TaggedTable), so "My records" is everything they get.
@@ -97,19 +97,19 @@ function TaggedTable() {
           <nav className="views" aria-label="Saved views">
             {views.map((v) => (
               <button key={v.key} className={"pill" + (v.key === cur.key ? " on" : "")} aria-pressed={v.key === cur.key} onClick={() => pick(v.key)}>
-                {v.name} <span className="viewcount">{v.count}</span>
+                {v.name} <b>{v.count}</b>
               </button>
             ))}
           </nav>
 
           <div className="pagehead">
             <div>
-              <p className="mute small">{DASHBOARD_LABEL[role]}</p>
+              <p className="overline">{DASHBOARD_LABEL[role]}</p>
               <h1>{cur.name}</h1>
               <p className="mute">{cur.hint}</p>
             </div>
             <div className="row wrap">
-              {cur.key === "review" && cur.count > 0 && <a className="btn" href="#/review">Open review queue</a>}
+              {cur.key === "review" && cur.count > 0 && <a className="btn" href="#/review"><Icon name="clipboard" size={18} /> Open review queue</a>}
               {role === "botanist" && <a className="btn" href="#/add"><Icon name="plus" size={18} /> Add plant</a>}
               <button className="btn ghost" onClick={exportCsv} disabled={!shown.length}><Icon name="download" size={16} /> Export CSV</button>
             </div>
@@ -155,10 +155,10 @@ function TaggedTable() {
                       <td>
                         <span className="cellplant">
                           <Img src={r.photos[0]?.url} alt="" />
-                          <span>{r.name}{r.scientific && <i className="mute small block">{r.scientific}</i>}</span>
+                          <span>{r.name}<Sci block className="small">{r.scientific}</Sci></span>
                         </span>
                       </td>
-                      <td><Chip value={r.status}>{STATUS_TEXT[r.status]}</Chip></td>
+                      <td><Chip value={r.status} /></td>
                       <td>{r.by}</td>
                       <td className="nowrap mute">{r.seen ? fmtDate(r.seen) : "-"}</td>
                       <td className="num">{r.nphotos}</td>
