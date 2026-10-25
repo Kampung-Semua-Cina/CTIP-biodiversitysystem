@@ -4,7 +4,7 @@
 // Leaflet/OpenStreetMap tiles come with CTIP-31; this draws the park outline only.
 import React, { useState } from 'react';
 import { View, Pressable, ScrollView, Text, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, shownCoords } from '../../shared/selectors.js';
@@ -16,6 +16,7 @@ import { mapPoint } from './PlantPage.js';
 export default function MapPage({ nav, params = {} }) {
   const { db, role } = useStore();
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [family, setFamily] = useState('all');
   const [q, setQ] = useState('');
@@ -53,7 +54,7 @@ export default function MapPage({ nav, params = {} }) {
         </View>
       ) : null}
 
-      <SafeAreaView edges={['top']} style={{ gap: 10, paddingHorizontal: 16, paddingTop: 12 }}>
+      <View style={{ gap: 10, paddingHorizontal: 16, paddingTop: 12 + insets.top }}>
         <View style={{ height: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: nav.canGoBack ? 2 : 14, paddingRight: 14, borderRadius: 999, backgroundColor: c.surface, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 3 }}>
           {nav.canGoBack ? <IconButton name="chevL" label="Back" onPress={nav.back} size={22} /> : <Icon name="search" size={20} color={c.ink3} />}
           <TextInput value={q} onChangeText={setQ} placeholder="Search the map" placeholderTextColor={c.ink3} accessibilityLabel="Search the map"
@@ -70,7 +71,7 @@ export default function MapPage({ nav, params = {} }) {
             );
           })}
         </ScrollView>
-      </SafeAreaView>
+      </View>
 
       <View style={{ flex: 1 }} />
 

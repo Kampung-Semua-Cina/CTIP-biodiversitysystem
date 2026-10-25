@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "instructions": "node -e \"console.log('\\n=== WEB PORTAL INSTRUCTIONS ===\\n\\n  npm run dev      Start Vite dev server with Hot Module Replacement (HMR)\\n  npm run start    Alias for npm run dev\\n  npm run build    Build production-ready bundle in dist/\\n  npm run lint     Run ESLint checks on web codebase\\n  npm run preview  Locally preview production build\\n')\"",
+    "help": "npm run instructions",
     "dev": "vite",
+    "start": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

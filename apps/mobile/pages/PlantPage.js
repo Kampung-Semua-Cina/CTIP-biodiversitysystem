@@ -3,7 +3,7 @@
 // forest, what you see after scanning its tag).
 import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Image, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
 import { plantView, visiblePlants, shownCoords, nameOf } from '../../shared/selectors.js';
@@ -56,13 +56,14 @@ function Hero({ photos, height = 260, onBack }) {
 
 function Page({ hero, children }) {
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.surface }}>
+    <View style={{ flex: 1, backgroundColor: c.surface, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
         {hero}
         <View style={{ paddingHorizontal: 20, paddingTop: 20, gap: 22 }}>{children}</View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

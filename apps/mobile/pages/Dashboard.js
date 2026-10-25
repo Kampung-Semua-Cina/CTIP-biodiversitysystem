@@ -4,7 +4,7 @@
 // while the next page arrives.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, nameOf } from '../../shared/selectors.js';
@@ -49,6 +49,7 @@ function ListHeader({ children }) {
 export function SpeciesList({ nav, params = {} }) {
   const { db, role } = useStore();
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const [q, setQ] = useState(params.q || '');
   const [family, setFamily] = useState('all');
   const list = useRef(null);
@@ -104,7 +105,7 @@ export function SpeciesList({ nav, params = {} }) {
   );
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.surface }}>
+    <View style={{ flex: 1, backgroundColor: c.surface, paddingTop: insets.top }}>
       <FlatList
         ref={list}
         data={rows}
@@ -133,7 +134,7 @@ export function SpeciesList({ nav, params = {} }) {
         }
       />
       {letters.length > 1 ? <LetterIndex letters={letters} onJump={jump} /> : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -189,6 +190,7 @@ const FILTERS = [
 export function TaggedPlants({ nav }) {
   const { db, role, me } = useStore();
   const { c } = useTheme();
+  const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
 
@@ -204,7 +206,7 @@ export function TaggedPlants({ nav }) {
   const filters = role === 'botanist' ? FILTERS : FILTERS.filter((f) => f.key !== 'mine');
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: c.surface }}>
+    <View style={{ flex: 1, backgroundColor: c.surface, paddingTop: insets.top }}>
       <FlatList
         data={shown}
         keyExtractor={(p) => p.id}
@@ -237,6 +239,6 @@ export function TaggedPlants({ nav }) {
         ListEmptyComponent={loading ? null : <Empty icon="search">No tagged plants match.</Empty>}
         ListFooterComponent={loading ? <View>{shown.length === 0 ? [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />) : null}<LoadingMore /></View> : null}
       />
-    </SafeAreaView>
+    </View>
   );
 }

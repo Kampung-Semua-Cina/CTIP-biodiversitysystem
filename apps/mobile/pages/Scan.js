@@ -7,7 +7,7 @@
 //   retired or unknown      -> explain, scan again
 import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 import { useStore } from '../../shared/store.js';
@@ -38,6 +38,7 @@ export function lookupTag(db, id) {
 
 export default function Scan({ nav, params = {} }) {
   const { db, role } = useStore();
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code)) : null);
@@ -69,7 +70,7 @@ export default function Scan({ nav, params = {} }) {
         />
       ) : null}
 
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
         <View style={{ height: 56, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 }}>
           <IconButton name="x" label="Close scanner" color={CAMERA_TEXT} onPress={close} />
           {granted && !result ? <IconButton name="torch" label={torch ? 'Turn off torch' : 'Turn on torch'} color={torch ? '#e8bd5c' : CAMERA_TEXT} size={22} onPress={() => setTorch(!torch)} /> : null}
@@ -101,7 +102,7 @@ export default function Scan({ nav, params = {} }) {
             </View>
           </>
         )}
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

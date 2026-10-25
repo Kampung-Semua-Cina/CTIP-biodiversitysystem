@@ -19,8 +19,19 @@
     "react-native-svg": "15.15.4"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android"
+    "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start          Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel         Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel   Alias for npm run tunnel\\n  npm run android        Launch directly on connected Android device or emulator\\n  npm run android:tunnel Launch on Android device with tunnel enabled\\n  npm run ios            Launch on iOS simulator\\n  npm run web            Launch in web browser mode\\n')\"",
+    "help": "npm run instructions",
+    "start": "npx expo start",
+    "tunnel": "npx expo start --tunnel",
+    "start:tunnel": "npx expo start --tunnel",
+    "android": "npx expo start --android",
+    "android:tunnel": "npx expo start --android --tunnel",
+    "ios": "npx expo start --ios",
+    "ios:tunnel": "npx expo start --ios --tunnel",
+    "web": "npx expo start --web"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.3"
+  }
 }
