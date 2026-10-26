@@ -1,16 +1,19 @@
 import { supabaseAnon, supabaseAs } from './supabase.js';
-import { speciesHandlers } from './species.js';
+import { speciesHandlers, applySearch, parseSearch } from './species.js';
 
 // Implemented endpoints, keyed "method path" to match permissions.js.
 // Anything not listed here answers 501 until someone builds it.
 export const handlers = {
+  // Also the botanist's species lookup on mobile (CTIP-26, CTIP-87).
   'get /public/species': async (req, res) => {
-    const { data, error } = await supabaseAnon()
+    const filters = parseSearch(req, res);
+    if (!filters) return;
+    const published = supabaseAnon()
       .from('species')
       .select('id, scientific_name, common_name, family, conservation_status')
       .eq('is_published', true)
-      .eq('is_deleted', false)
-      .order('scientific_name');
+      .eq('is_deleted', false);
+    const { data, error } = await applySearch(published, filters).order('scientific_name');
     if (error) return res.status(500).json({ code: 'DB_ERROR', message: error.message });
     res.json({ data });
   },
