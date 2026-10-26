@@ -1,5 +1,6 @@
 import { supabaseAnon, supabaseAs } from './supabase.js';
 import { speciesHandlers, applySearch, parseSearch } from './species.js';
+import { distributionHandlers } from './distribution.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -61,4 +62,5 @@ export const handlers = {
   },
 
   ...speciesHandlers,
+  ...distributionHandlers,
 };

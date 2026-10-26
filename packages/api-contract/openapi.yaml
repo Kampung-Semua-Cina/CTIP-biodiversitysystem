@@ -66,6 +66,8 @@ tags:
   - name: Notifications
   - name: Reports
     description: File exports for officers and admins
+  - name: Map
+    description: Distribution map data, with endangered locations reduced by role
 
 paths:
 
@@ -1185,6 +1187,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  # -------------------------------------------------------------------- Map
+  /distribution:
+    get:
+      tags: [Map]
+      operationId: getDistribution
+      summary: Plant locations for the distribution map (staff)
+      description: >
+        One point per plant, from its latest approved observation. For an endangered
+        plant (species status endangered / critically endangered, or the specimen's
+        endangered_override), roles other than Officer and Admin get the centre of a
+        0.01 degree grid square (about 1.1 km) instead of the exact spot. The
+        reduction happens in the API; the exact values are never sent (threat T13).
+        Botanists only see their own observations (RLS).
+      parameters:
+        - name: species_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: family
+          in: query
+          description: Exact family name, any case
+          schema: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: Map points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DistributionPoint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 
 components:
 
@@ -1459,6 +1497,24 @@ components:
         is_primary: { type: boolean }
         sort_order: { type: integer }
         created_at: { type: string, format: date-time }
+
+    DistributionPoint:
+      type: object
+      properties:
+        observation_id: { type: string, format: uuid }
+        specimen_id: { type: string, format: uuid }
+        qr_id: { type: string }
+        species_id: { type: [string, 'null'], format: uuid }
+        scientific_name: { type: [string, 'null'] }
+        common_name: { type: [string, 'null'] }
+        family: { type: [string, 'null'] }
+        conservation_status: { type: [string, 'null'] }
+        endangered: { type: boolean }
+        observed_at: { type: string, format: date-time }
+        lat: { type: number, description: "Exact, or the grid-square centre when location_reduced" }
+        lng: { type: number, description: "Exact, or the grid-square centre when location_reduced" }
+        location_reduced: { type: boolean }
+        precision_m: { type: [number, 'null'], description: "GPS accuracy, or 1100 when location_reduced" }
 
     # ---------- specimens
     SpecimenCreate:
