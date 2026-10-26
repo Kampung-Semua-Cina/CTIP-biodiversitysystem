@@ -1,4 +1,5 @@
 import { supabaseAnon, supabaseAs } from './supabase.js';
+import { speciesHandlers } from './species.js';
 
 // Implemented endpoints, keyed "method path" to match permissions.js.
 // Anything not listed here answers 501 until someone builds it.
@@ -23,4 +24,6 @@ export const handlers = {
     if (error) return res.status(500).json({ code: 'DB_ERROR', message: error.message });
     res.json(data);
   },
+
+  ...speciesHandlers,
 };

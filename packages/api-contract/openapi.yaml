@@ -263,12 +263,21 @@ paths:
       tags: [Species]
       operationId: createSpecies
       summary: Create a species (officer/admin)
+      description: >
+        The client may send its own `id`. Sending the same `id` again (for example
+        a retry after a dropped connection) returns the record already saved with
+        200 instead of creating a second one.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SpeciesInput' }
+            schema: { $ref: '#/components/schemas/SpeciesCreate' }
       responses:
+        '200':
+          description: Already created earlier with this id; the saved record is returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
         '201':
           description: Created
           content:
@@ -302,7 +311,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SpeciesInput' }
+            schema: { $ref: '#/components/schemas/SpeciesUpdate' }
       responses:
         '200':
           description: Updated
@@ -311,6 +320,8 @@ paths:
               schema: { $ref: '#/components/schemas/Species' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Species]
       operationId: deleteSpecies
@@ -1342,13 +1353,39 @@ components:
       type: object
       required: [scientific_name]
       properties:
-        scientific_name: { type: string }
-        common_name: { type: string }
-        family: { type: string }
-        genus: { type: string }
-        description: { type: string }
-        conservation_status: { type: string }
-        cultural_significance: { type: string }
+        scientific_name: { type: string, minLength: 1, maxLength: 200 }
+        common_name: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+
+    SpeciesCreate:
+      description: Unknown fields (is_published, created_by, ...) are rejected with 422
+      allOf:
+        - $ref: '#/components/schemas/SpeciesInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Optional client-generated id, used as the idempotency key
+      unevaluatedProperties: false
+
+    SpeciesUpdate:
+      description: Send only the fields to change, at least one. Unknown fields are rejected with 422
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        scientific_name: { type: string, minLength: 1, maxLength: 200 }
+        common_name: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     Species:
       allOf:
