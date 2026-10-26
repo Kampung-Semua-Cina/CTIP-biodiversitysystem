@@ -1,0 +1,78 @@
+import multer from 'multer';
+import { z } from 'zod';
+import { supabaseAs } from './supabase.js';
+import { UUID } from './validate.js';
+import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
+
+// Species photo upload (CTIP-85). The file comes to the API, which checks its
+// real type and size, removes location metadata, and stores it in Supabase
+// Storage as the signed-in user, so the bucket's own rules (Officer/Admin
+// upload, 10 MB, JPEG/PNG/WebP) apply as a second check.
+
+const BUCKET = 'species-media';
+export const MAX_BYTES = 10 * 1024 * 1024; // same as the bucket's file_size_limit
+
+// One file, kept in memory (never written to the API's disk), at most 10 MB.
+const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES, files: 1, fields: 10 } })
+  .single('file');
+
+const MediaFields = z.strictObject({
+  caption: z.string().trim().min(1).max(300).optional(),
+  credit: z.string().trim().min(1).max(200).optional(),
+  is_primary: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  sort_order: z.coerce.number().int().min(0).max(1000).optional(),
+});
+
+const fail = (res, status, code, message) => res.status(status).json({ code, message });
+
+export const speciesMediaHandlers = {
+  // multipart/form-data: file (the image), caption, credit, is_primary, sort_order
+  'post /species/:id/media': async (req, res) => {
+    if (!UUID.test(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'Species not found');
+    try {
+      await new Promise((resolve, reject) => receive(req, res, (err) => (err ? reject(err) : resolve())));
+    } catch (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return fail(res, 413, 'FILE_TOO_LARGE', 'Photos can be at most 10 MB');
+      return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    }
+    if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    const type = detectImageType(req.file.buffer);
+    if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP');
+    const fields = MediaFields.safeParse(req.body ?? {});
+    if (!fields.success) {
+      return res.status(422).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Request body failed validation',
+        details: { fields: fields.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
+      });
+    }
+
+    const db = supabaseAs(req.user);
+    const species = await db.from('species').select('id').eq('id', req.params.id).eq('is_deleted', false).maybeSingle();
+    if (species.error) return fail(res, 500, 'DB_ERROR', species.error.message);
+    if (!species.data) return fail(res, 404, 'NOT_FOUND', 'Species not found');
+
+    // Path convention from supabase/migrations/..._storage.sql: {species_id}/{media_id}.ext
+    const id = crypto.randomUUID();
+    const key = `${req.params.id}/${id}.${EXTENSIONS[type]}`;
+    const stored = await db.storage.from(BUCKET)
+      .upload(key, stripMetadata(req.file.buffer, type), { contentType: type, upsert: false });
+    if (stored.error) return fail(res, 502, 'STORAGE_ERROR', stored.error.message);
+
+    const { is_primary = false, sort_order = 0, ...text } = fields.data;
+    const { data, error } = await db
+      .from('species_media')
+      .insert({ id, species_id: req.params.id, s3_bucket: BUCKET, s3_key: key, ...text, is_primary, sort_order, uploaded_by: req.user.id })
+      .select('id, species_id, caption, credit, is_primary, sort_order, created_at')
+      .single();
+    if (error) {
+      await db.storage.from(BUCKET).remove([key]); // no record, so do not keep the file
+      return fail(res, 500, 'DB_ERROR', error.message);
+    }
+    if (is_primary) {
+      // Only one cover photo per species.
+      await db.from('species_media').update({ is_primary: false }).eq('species_id', req.params.id).neq('id', id);
+    }
+    res.status(201).json({ ...data, url: db.storage.from(BUCKET).getPublicUrl(key).data.publicUrl });
+  },
+};
