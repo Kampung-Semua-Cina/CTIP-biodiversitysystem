@@ -3,12 +3,15 @@ import cors from 'cors';
 import { routes, PUBLIC, SENSOR } from './permissions.js';
 import { requireAuth, allow } from './auth/middleware.js';
 import { handlers as defaultHandlers } from './handlers.js';
+import { requireHttps as httpsOnly } from './https.js';
 
 const notImplemented = (req, res) =>
   res.status(501).json({ code: 'NOT_IMPLEMENTED', message: `${req.method} ${req.path} is not built yet` });
 
-export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [] }) {
+export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [], requireHttps = false, trustProxy = false }) {
   const app = express();
+  app.set('trust proxy', trustProxy);
+  if (requireHttps) app.use(httpsOnly());
   app.use(cors({ origin: corsOrigins }));
   app.use(express.json());
 
