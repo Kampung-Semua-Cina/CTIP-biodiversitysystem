@@ -1,5 +1,5 @@
 // apps/mobile/pages/Login.js
-// Staff sign in. On sample data for now; CTIP-42 swaps login() for Supabase Auth.
+// Staff sign in with Supabase Auth.
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
@@ -18,8 +18,8 @@ export default function SignIn({ nav }) {
   const [error, setError] = useState('');
   const staff = getStaffPageContent(PARK);
 
-  const submit = () => {
-    const res = login(email, password);
+  const submit = async () => {
+    const res = await login(email, password);
     if (!res.ok) return setError(res.message);
     signIn(res.id); // the app then opens this person's first tab
   };

@@ -16,8 +16,8 @@ export default function RoleSwitch({ role, setRole }) {
             <button
               key={r.key}
               role="radio"
-              aria-checked={role === r.key && !authToken}
-              className={role === r.key && !authToken ? "on" : ""}
+              aria-checked={role === r.key}
+              className={role === r.key ? "on" : ""}
               onClick={() => setRole(r.key)}
             >
               {r.label}

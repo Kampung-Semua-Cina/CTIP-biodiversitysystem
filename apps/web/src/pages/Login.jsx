@@ -24,9 +24,9 @@ export default function Login() {
     setNewPw("");
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const res = login(email, pw);
+    const res = await login(email, pw);
     if (!res.ok) return notify(res.message);
     if (res.first) {
       setPending(res.id);
@@ -37,9 +37,9 @@ export default function Login() {
   };
 
   // Used by both the "Change password" form and the first sign-in prompt.
-  const change = (e) => {
+  const change = async (e) => {
     e.preventDefault();
-    const res = changePassword(email, newPw);
+    const res = await changePassword(email, newPw);
     if (!res.ok) return notify(res.message);
     notify("Password changed");
     if (mode === "first") {

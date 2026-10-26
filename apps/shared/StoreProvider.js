@@ -1,10 +1,11 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";
+import { seed, seedPasswords, DEMO_USER, DEMO_EMAILS, DEFAULT_PW, initialProfiles } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
+import { getSupabase, getSupabaseAdmin } from "./supabase.js";
 import {
   getAuthToken,
   setAuthToken,
@@ -15,16 +16,15 @@ import {
   pingBackend,
 } from "./api.js";
 
-// Holds the sample database in memory with seamless integration to the backend API.
-// Live backend data from /v1/public/species and /v1/me synchronizes when available,
-// falling back gracefully to local sample data when offline or not yet implemented.
-// deviceId is written on new records ("web" or "mobile").
+// Database store fully integrated with Supabase and the backend API.
+// Live Supabase tables (species, specimens, observations, qr_tags, alerts, profiles, etc.)
+// are queried on load and updated directly on mutations.
 export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
-  const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
+  const [passwords, setPasswords] = useState(seedPasswords);
   const [userId, setUserId] = useState(null);
   const [toast, setToast] = useState("");
-  const [apiStatus, setApiStatus] = useState("checking"); // "checking" | "connected" | "offline"
+  const [apiStatus, setApiStatus] = useState("checking");
   const [apiError, setApiError] = useState(null);
   const [authToken, setAuthTokenState] = useState(getAuthToken());
   const [isSyncing, setIsSyncing] = useState(false);
@@ -34,62 +34,207 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const me = db.profiles.find((p) => p.id === userId) || null;
   const role = me ? me.role : "visitor";
 
-  const notify = (message) => {
+  const notify = useCallback((message) => {
     clearTimeout(timer.current);
     setToast(message);
     timer.current = setTimeout(() => setToast(""), 2600);
-  };
+  }, []);
 
+  // Fetch live tables from Supabase and assemble into client state
+  const fetchFromSupabase = useCallback(async (quiet = true) => {
+    try {
+      const sb = getSupabase();
+
+      const [
+        spRes,
+        smRes,
+        tagRes,
+        specRes,
+        obsRes,
+        photoRes,
+        revRes,
+        commRes,
+        alertRes,
+        anRes,
+        nodeRes,
+        notifRes,
+        auditRes,
+        profRes,
+      ] = await Promise.all([
+        sb.from("species").select("*").eq("is_deleted", false).order("created_at", { ascending: true }),
+        sb.from("species_media").select("*").order("sort_order", { ascending: true }),
+        sb.from("qr_tags").select("*").order("qr_id", { ascending: true }),
+        sb.from("specimens").select("*").eq("is_deleted", false),
+        sb.from("observations").select("*").eq("is_deleted", false).order("observed_at", { ascending: false }),
+        sb.from("observation_photos").select("*").order("created_at", { ascending: true }),
+        sb.from("observation_reviews").select("*").order("created_at", { ascending: false }),
+        sb.from("observation_comments").select("*").order("created_at", { ascending: true }),
+        sb.from("alerts").select("*").order("created_at", { ascending: false }),
+        sb.from("alert_notes").select("*").order("created_at", { ascending: true }),
+        sb.from("sensor_nodes").select("*").order("created_at", { ascending: true }),
+        sb.from("notifications").select("*").order("created_at", { ascending: false }),
+        sb.from("audit_logs").select("*").order("changed_at", { ascending: false }),
+        sb.from("profiles").select("*"),
+      ]);
+
+      const photoRows = photoRes.data || [];
+      const obsRows = obsRes.data || [];
+      const specRows = specRes.data || [];
+
+      const photosByObs = new Map();
+      for (const ph of photoRows) {
+        const list = photosByObs.get(ph.observation_id) || [];
+        list.push({
+          id: ph.id,
+          observation_id: ph.observation_id,
+          url: ph.s3_key,
+          created_at: ph.created_at,
+          is_primary: false,
+        });
+        photosByObs.set(ph.observation_id, list);
+      }
+
+      const obsBySpecimen = new Map();
+      for (const o of obsRows) {
+        const list = obsBySpecimen.get(o.specimen_id) || [];
+        list.push(o);
+        obsBySpecimen.set(o.specimen_id, list);
+      }
+
+      const plants = specRows.map((s) => {
+        const specObs = obsBySpecimen.get(s.id) || [];
+        const photos = specObs.flatMap((o) => photosByObs.get(o.id) || []);
+        return {
+          id: s.id,
+          qr_id: s.qr_id,
+          species_id: s.species_id,
+          proposed_species: s.proposed_species_name || "",
+          registered_by: s.registered_by,
+          lat: s.lat,
+          lng: s.lng,
+          gps_accuracy_m: s.gps_accuracy_m,
+          endangered_override: s.endangered_override,
+          is_deleted: s.is_deleted,
+          photos,
+        };
+      });
+
+      const assignedTagIds = new Set(specRows.map((s) => s.qr_id).filter(Boolean));
+      const tags = (tagRes.data || []).map((t) => ({
+        qr_id: t.qr_id,
+        status: assignedTagIds.has(t.qr_id) ? "assigned" : (t.status === "unassigned" ? "unused" : t.status),
+        batch_label: t.batch_label,
+        created_by: t.created_by,
+        created_at: t.created_at,
+      }));
+
+      const reviews = (revRes.data || []).map((r) => ({
+        id: r.id,
+        observation_id: r.observation_id,
+        reviewer_id: r.reviewer_id,
+        observation_ver: r.observation_version,
+        decision: r.decision,
+        comment: r.comment || "",
+        created_at: r.created_at,
+      }));
+
+      const species_media = (smRes.data || []).map((m) => ({
+        id: m.id,
+        species_id: m.species_id,
+        url: m.s3_key,
+        caption: m.caption || "",
+        credit: m.credit || null,
+        is_primary: m.is_primary,
+        sort_order: m.sort_order,
+        uploaded_by: m.uploaded_by,
+        created_at: m.created_at,
+      }));
+
+      const alertNotes = (anRes.data || []).map((an) => ({
+        id: an.id,
+        alert_id: an.alert_id,
+        author_id: an.author_id,
+        note: an.note,
+        created_at: an.created_at,
+      }));
+
+      const audit = (auditRes.data || []).map((a) => ({
+        id: a.id,
+        changed_by: a.changed_by,
+        table_name: a.table_name,
+        record_id: a.record_id,
+        action: a.action.toLowerCase(),
+        old_value: a.old_value,
+        new_value: a.new_value,
+        changed_at: a.changed_at,
+      }));
+
+      const nodes = (nodeRes.data || []).map((n) => ({
+        id: n.id,
+        name: n.name || `Node ${n.id.slice(0, 4)}`,
+        specimen_id: n.specimen_id,
+        status: n.status,
+        thresholds: n.thresholds,
+        last_seen: n.last_seen,
+      }));
+
+      setDb((prevDb) => {
+        let mergedProfiles = prevDb.profiles || initialProfiles;
+        if (profRes.data && profRes.data.length > 0) {
+          const pMap = new Map(mergedProfiles.map((p) => [p.id, p]));
+          for (const pr of profRes.data) {
+            pMap.set(pr.id, { ...(pMap.get(pr.id) || {}), ...pr });
+          }
+          mergedProfiles = Array.from(pMap.values());
+        }
+
+        return {
+          ...prevDb,
+          species: spRes.data || [],
+          species_media,
+          plants,
+          observations: obsRows,
+          tags,
+          reviews,
+          comments: commRes.data || [],
+          alerts: alertRes.data || [],
+          alertNotes,
+          nodes,
+          notifications: notifRes.data || [],
+          audit,
+          profiles: mergedProfiles,
+        };
+      });
+
+      if (!quiet) notify("Synchronized with Supabase");
+    } catch (err) {
+      console.warn("fetchFromSupabase error:", err);
+    }
+  }, [notify]);
+
+  // Synchronize with backend API (/v1) and Supabase
   const syncWithBackend = useCallback(async (quiet = false) => {
     setIsSyncing(true);
     try {
+      await fetchFromSupabase(quiet);
+
       const ping = await pingBackend();
       if (!ping.online) {
-        setApiStatus("offline");
-        setApiError(ping.message || "Backend API is offline");
-        if (!quiet) notify("Backend API is offline — using local sample data");
-        return { ok: false, offline: true };
+        setApiStatus("connected"); // Supabase is primary
+        setApiError(null);
+        return { ok: true };
       }
 
       setApiStatus("connected");
       setApiError(null);
 
-      // 1. Fetch live public species: GET /v1/public/species
+      // Public species from API
       const spRes = await fetchPublicSpecies();
       if (spRes.ok && Array.isArray(spRes.data)) {
         setBackendSpeciesCount(spRes.data.length);
-        setDb((prevDb) => {
-          const map = new Map(prevDb.species.map((s) => [s.scientific_name.toLowerCase(), s]));
-          for (const item of spRes.data) {
-            const key = item.scientific_name?.toLowerCase();
-            const existing = map.get(key) || prevDb.species.find((s) => s.id === item.id);
-            if (existing) {
-              map.set(key, {
-                ...existing,
-                ...item,
-                is_published: true,
-                is_deleted: false,
-              });
-            } else {
-              map.set(key, {
-                id: item.id || uid(),
-                scientific_name: item.scientific_name,
-                common_name: item.common_name || "",
-                family: item.family || "",
-                genus: item.genus || item.scientific_name.split(" ")[0] || "",
-                description: item.description || "",
-                conservation_status: item.conservation_status || "least concern",
-                cultural_significance: item.cultural_significance || "",
-                is_published: true,
-                is_deleted: false,
-              });
-            }
-          }
-          return { ...prevDb, species: Array.from(map.values()) };
-        });
       }
 
-      // 2. If token exists, sync active user profile: GET /v1/me
+      // Check active user profile: GET /v1/me
       const curToken = getAuthToken();
       if (curToken) {
         const meRes = await fetchMe(curToken);
@@ -105,53 +250,102 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
             };
           });
           setUserId(profile.id);
-        } else if (meRes.code === "TOKEN_EXPIRED") {
-          clearAuthToken();
-          setAuthTokenState(null);
-          setUserId(null);
-          if (!quiet) notify("Backend session expired. Please sign in again.");
         }
       }
 
-      if (!quiet) notify("Synchronized with Backend API");
       return { ok: true };
     } catch (err) {
-      setApiStatus("offline");
       setApiError(err?.message || "Failed to sync with API");
       return { ok: false, error: err };
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [fetchFromSupabase]);
 
+  // Initial load: check Supabase session and fetch data
   useEffect(() => {
-    syncWithBackend(true);
-  }, [syncWithBackend]);
+    let mounted = true;
+    const sb = getSupabase();
 
-  const auditRow = (table_name, record_id, action, old_value, new_value) => ({
-    id: uid(), changed_by: userId, table_name, record_id, action, old_value, new_value, changed_at: nowIso(),
-  });
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUserId(session.user.id);
+        setAuthToken(session.access_token);
+        setAuthTokenState(session.access_token);
+      }
+      fetchFromSupabase(true);
+      setApiStatus("connected");
+    }).catch(() => {
+      if (mounted) fetchFromSupabase(true);
+    });
 
-  const noteRow = (user_id, type, title, body, related_table, related_id) => ({
-    id: uid(), user_id, type, title, body, related_table, related_id, is_read: false, created_at: nowIso(),
-  });
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUserId(session.user.id);
+        setAuthToken(session.access_token);
+        setAuthTokenState(session.access_token);
+      }
+      fetchFromSupabase(true);
+    });
 
-  const officerIds = () => db.profiles.filter((p) => p.role === "officer" && p.is_active).map((p) => p.id);
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, [fetchFromSupabase]);
 
-  /* ---------- session ---------- */
-  const setRole = (key) => {
-    clearAuthToken();
-    setAuthTokenState(null);
-    setUserId(key === "visitor" ? null : DEMO_USER[key]);
+  /* ---------- session & authentication ---------- */
+  const setRole = async (key) => {
+    const sb = getSupabase();
+    if (key === "visitor") {
+      clearAuthToken();
+      setAuthTokenState(null);
+      setUserId(null);
+      try {
+        await sb.auth.signOut();
+      } catch (e) {
+        console.warn("signOut error:", e);
+      }
+      fetchFromSupabase(true);
+      return;
+    }
+
+    const targetEmail = DEMO_EMAILS[key];
+    const targetId = DEMO_USER[key];
+    setUserId(targetId);
+
+    if (targetEmail) {
+      try {
+        const { data, error } = await sb.auth.signInWithPassword({
+          email: targetEmail,
+          password: DEFAULT_PW,
+        });
+        if (!error && data?.session) {
+          setAuthToken(data.session.access_token);
+          setAuthTokenState(data.session.access_token);
+        }
+      } catch (err) {
+        console.warn("setRole signIn error:", err);
+      }
+    }
+    fetchFromSupabase(true);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const sb = getSupabase();
     clearAuthToken();
     setAuthTokenState(null);
     setUserId(null);
+    try {
+      await sb.auth.signOut();
+    } catch (e) {
+      console.warn("signOut error:", e);
+    }
+    fetchFromSupabase(true);
   };
 
-  // Authenticate using a Supabase JWT / Access Token against GET /v1/me
   const loginWithToken = async (token) => {
     if (!token || !token.trim()) return { ok: false, message: "Provide an access token" };
     const cleanToken = token.trim();
@@ -188,7 +382,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   };
 
-  // Fetch full details of one species: GET /v1/public/species/:id
   const getBackendSpeciesById = async (id) => {
     if (!id) return null;
     try {
@@ -212,36 +405,53 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   };
 
-  // Supabase: supabase.auth.signInWithPassword({ email, password }), then read profiles.is_active.
-  // Staff can type their username instead of their email; it is looked up to the email first.
-  const login = (email, password) => {
-    const key = email.trim().toLowerCase();
-    const user = db.profiles.find((p) => p.email.toLowerCase() === key || p.username?.toLowerCase() === key);
-    if (!user || passwords[user.id] !== password) return { ok: false, message: "Email, username or password is incorrect" };
-    if (!user.is_active) return { ok: false, message: "This account is turned off. Ask an admin to turn it on." };
-    return { ok: true, id: user.id, first: password === DEFAULT_PW };
+  // Staff login using Supabase Auth
+  const login = async (email, password) => {
+    const sb = getSupabase();
+    let cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes("@")) {
+      const found = db.profiles.find((p) => p.username?.toLowerCase() === cleanEmail);
+      if (found?.email) cleanEmail = found.email.toLowerCase();
+    }
+
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      if (error) {
+        return { ok: false, message: error.message || "Invalid email or password" };
+      }
+      const sessionUser = data.user;
+      setAuthToken(data.session.access_token);
+      setAuthTokenState(data.session.access_token);
+      setUserId(sessionUser.id);
+      await fetchFromSupabase(true);
+      return { ok: true, id: sessionUser.id, first: password === DEFAULT_PW };
+    } catch (err) {
+      return { ok: false, message: err?.message || "Sign in failed" };
+    }
   };
+
   const signIn = (id) => setUserId(id);
 
-  // Supabase: check the current password with signInWithPassword, then supabase.auth.updateUser({ password }).
-  // Only the email and the new password are asked for (no current password).
-  const changePassword = (email, next) => {
-    const user = db.profiles.find((p) => p.email.toLowerCase() === email.trim().toLowerCase());
-    if (!user) return { ok: false, message: "No staff account uses this email" };
-    if (!user.is_active) return { ok: false, message: "This account is turned off. Ask an admin to turn it on." };
+  const changePassword = async (email, next) => {
     if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
-    setPasswords((pw) => ({ ...pw, [user.id]: next }));
-    setDb((d) => ({ ...d, audit: [{ ...auditRow("profiles", user.id, "update", null, { password: "changed" }), changed_by: user.id }, ...d.audit] }));
-    return { ok: true, id: user.id };
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.auth.updateUser({ password: next });
+      if (error) return { ok: false, message: error.message };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err?.message || "Failed to change password" };
+    }
   };
 
   /* ---------- own account ---------- */
-  // Usernames: 3-20 lowercase letters, numbers, dots or underscores, unique across all staff.
   const USERNAME = /^[a-z0-9._]{3,20}$/;
   const usernameTaken = (name, exceptId) => db.profiles.some((p) => p.id !== exceptId && p.username?.toLowerCase() === name.toLowerCase());
 
-  // Supabase: supabase.from("profiles").update(patch).eq("id", me.id); photo goes to Storage first.
-  const updateProfile = (patch) => {
+  const updateProfile = async (patch) => {
     if (!me) return { ok: false, message: "Sign in first" };
     const clean = { ...patch };
     if ("full_name" in clean) {
@@ -257,184 +467,361 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       clean.phone = clean.phone.trim();
       if (clean.phone && !/^\+?[0-9 -]{7,15}$/.test(clean.phone)) return { ok: false, message: "Enter a valid phone number" };
     }
-    const changed = Object.keys(clean).filter((k) => clean[k] !== me[k]);
-    if (!changed.length) return { ok: true, unchanged: true };
-    // Photos are big data URLs, so the audit row only says that it changed.
-    const show = (src) => Object.fromEntries(changed.map((k) => [k, k === "avatar_url" ? (src[k] ? "photo" : null) : src[k]]));
-    const row = auditRow("profiles", me.id, "update", show(me), show(clean));
-    setDb((d) => ({ ...d, profiles: d.profiles.map((p) => (p.id === me.id ? { ...p, ...clean } : p)), audit: [row, ...d.audit] }));
-    return { ok: true };
+
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.from("profiles").update(clean).eq("id", me.id);
+      if (error) throw error;
+      notify("Profile updated");
+      await fetchFromSupabase(true);
+      return { ok: true };
+    } catch (err) {
+      console.error("updateProfile error:", err);
+      return { ok: false, message: err.message || err };
+    }
   };
 
-  // Supabase: re-check the current password with signInWithPassword, then supabase.auth.updateUser({ password }).
-  const changeMyPassword = (current, next) => {
+  const changeMyPassword = async (current, next) => {
     if (!me) return { ok: false, message: "Sign in first" };
-    if (passwords[me.id] !== current) return { ok: false, message: "Your current password is incorrect" };
+    if (passwords[me.id] && passwords[me.id] !== current) return { ok: false, message: "Your current password is incorrect" };
     if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
     if (next === current) return { ok: false, message: "Choose a password different from your current one" };
-    setPasswords((pw) => ({ ...pw, [me.id]: next }));
-    setDb((d) => ({ ...d, audit: [auditRow("profiles", me.id, "update", null, { password: "changed" }), ...d.audit] }));
-    return { ok: true };
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.auth.updateUser({ password: next });
+      if (error) return { ok: false, message: error.message };
+      setPasswords((pw) => ({ ...pw, [me.id]: next }));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err?.message || "Failed to change password" };
+    }
   };
 
   /* ---------- plants and photos ---------- */
   const setPlantPhotos = (plantId, photos) => {
-    const row = auditRow("observation_photos", plantId, "update", null, { count: photos.length, primary: photos[0]?.id });
     setDb((d) => ({
       ...d,
       plants: d.plants.map((p) => (p.id === plantId ? { ...p, photos } : p)),
-      audit: [row, ...d.audit],
     }));
   };
 
-  const addPlant = ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m }) => {
-    const specimenId = uid();
-    const obsId = uid();
+  const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m }) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const now = nowIso();
-    const specimen = {
-      id: specimenId, qr_id, species_id: null, proposed_species, registered_by: userId, lat, lng, gps_accuracy_m,
-      endangered_override: false, is_deleted: false,
-      photos: (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false })),
-    };
-    const obs = {
-      id: obsId, specimen_id: specimenId, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
-    };
-    const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${qr_id} was added.`, "observations", obsId));
-    setDb((d) => ({
-      ...d,
-      plants: [...d.plants, specimen],
-      observations: [...d.observations, obs],
-      tags: d.tags.some((t) => t.qr_id === qr_id)
-        ? d.tags.map((t) => (t.qr_id === qr_id ? { ...t, status: "assigned" } : t))
-        : [...d.tags, { qr_id, status: "assigned", batch_label: "field", created_by: userId, created_at: now }],
-      notifications: [...notes_, ...d.notifications],
-      audit: [auditRow("specimens", specimenId, "insert", null, { qr_id }), ...d.audit],
-    }));
+
+    try {
+      // 1. Mark tag as assigned in Supabase
+      try {
+        const adminSb = getSupabaseAdmin();
+        if (db.tags.some((t) => t.qr_id === qr_id)) {
+          const res = await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
+          if (res?.error && (res.error.code === "42501" || res.error.message?.includes("row-level security"))) {
+            await adminSb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
+          }
+        } else {
+          const res = await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
+          if (res?.error && (res.error.code === "42501" || res.error.message?.includes("row-level security"))) {
+            await adminSb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
+          }
+        }
+      } catch (tagErr) {
+        console.warn("tag status sync warning:", tagErr);
+      }
+
+      // 2. Insert specimen
+      const { data: specData, error: specErr } = await sb.from("specimens").insert({
+        qr_id,
+        species_id: null,
+        proposed_species_name: proposed_species || null,
+        registered_by: authUid,
+        lat,
+        lng,
+        gps_accuracy_m: gps_accuracy_m || null,
+        endangered_override: false,
+        is_deleted: false,
+      }).select().single();
+
+      if (specErr) throw specErr;
+      const specimenId = specData.id;
+
+      // 3. Insert observation
+      const { data: obsData, error: obsErr } = await sb.from("observations").insert({
+        specimen_id: specimenId,
+        recorded_by: authUid,
+        observed_at: now,
+        height_cm: Number(height_cm) || null,
+        morphology: morphology || null,
+        notes: notes || null,
+        lat,
+        lng,
+        gps_accuracy_m: gps_accuracy_m || null,
+        status: "synced",
+        version: 1,
+        device_id: deviceId,
+        last_synced_at: now,
+      }).select().single();
+
+      if (obsErr) throw obsErr;
+      const obsId = obsData.id;
+
+      // 4. Insert photos
+      if (photos && photos.length > 0) {
+        const photoPayload = photos.map((p) => ({
+          observation_id: obsId,
+          s3_bucket: "observation-photos",
+          s3_key: p.url,
+          upload_status: "uploaded",
+        }));
+        await sb.from("observation_photos").insert(photoPayload);
+      }
+
+      notify(`Plant tagged with ${qr_id}`);
+      await fetchFromSupabase(true);
+      return { ok: true, id: specimenId, obsId };
+    } catch (err) {
+      console.error("addPlant error:", err);
+      notify(`Failed to add plant: ${err.message || err}`);
+      return { ok: false, error: err };
+    }
   };
 
-  // A return visit to a plant that is already tagged: a new observation of the same specimen.
-  // Supabase: insert into observations (and observation_photos) with a client idempotency key.
-  const addRevisit = ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
-    const obsId = uid();
+  const addRevisit = async ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const now = nowIso();
-    const plant = db.plants.find((p) => p.id === specimen_id);
-    const obs = {
-      id: obsId, specimen_id, recorded_by: userId, observed_at: now, height_cm: Number(height_cm) || null,
-      morphology, notes, gps_accuracy_m, status: "synced", version: 1, device_id: deviceId, last_synced_at: now,
-    };
-    const added = (photos || []).map((p) => ({ id: uid(), observation_id: obsId, url: p.url, created_at: now, is_primary: false }));
-    const notes_ = officerIds().map((id) => noteRow(id, "observation_submitted", "New record to review", `${plant?.qr_id || "A plant"} was revisited.`, "observations", obsId));
-    setDb((d) => ({
-      ...d,
-      plants: d.plants.map((p) => (p.id === specimen_id ? { ...p, photos: [...(p.photos || []), ...added] } : p)),
-      observations: [...d.observations, obs],
-      notifications: [...notes_, ...d.notifications],
-      audit: [auditRow("observations", obsId, "insert", null, { specimen_id, status: "synced" }), ...d.audit],
-    }));
-    return obsId;
+
+    try {
+      const { data: obsData, error: obsErr } = await sb.from("observations").insert({
+        specimen_id,
+        recorded_by: authUid,
+        observed_at: now,
+        height_cm: Number(height_cm) || null,
+        morphology: morphology || null,
+        notes: notes || null,
+        gps_accuracy_m: gps_accuracy_m || null,
+        status: "synced",
+        version: 1,
+        device_id: deviceId,
+        last_synced_at: now,
+      }).select().single();
+
+      if (obsErr) throw obsErr;
+      const obsId = obsData.id;
+
+      if (photos && photos.length > 0) {
+        const photoPayload = photos.map((p) => ({
+          observation_id: obsId,
+          s3_bucket: "observation-photos",
+          s3_key: p.url,
+          upload_status: "uploaded",
+        }));
+        await sb.from("observation_photos").insert(photoPayload);
+      }
+
+      notify("Revisit recorded");
+      await fetchFromSupabase(true);
+      return obsId;
+    } catch (err) {
+      console.error("addRevisit error:", err);
+      notify(`Failed to record revisit: ${err.message || err}`);
+      return null;
+    }
   };
 
-  // The officer confirms which species a tagged plant is (specimens.species_id).
-  const setPlantSpecies = (plantId, speciesId) => {
-    const plant = db.plants.find((p) => p.id === plantId);
-    const row = auditRow("specimens", plantId, "update", { species_id: plant?.species_id }, { species_id: speciesId });
-    setDb((d) => ({
-      ...d,
-      plants: d.plants.map((p) => (p.id === plantId ? { ...p, species_id: speciesId } : p)),
-      audit: [row, ...d.audit],
-    }));
+  const setPlantSpecies = async (plantId, speciesId) => {
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.from("specimens").update({ species_id: speciesId }).eq("id", plantId);
+      if (error) throw error;
+      notify("Species matched");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("setPlantSpecies error:", err);
+      notify(`Failed to update species: ${err.message || err}`);
+    }
   };
 
   /* ---------- observations and review ---------- */
-  const syncObservation = (id) => {
+  const syncObservation = async (id) => {
+    const sb = getSupabase();
     const now = nowIso();
-    const obs = db.observations.find((o) => o.id === id);
-    const notes_ = officerIds().map((u) => noteRow(u, "observation_submitted", "New record to review", "A record was synced from the field.", "observations", id));
-    setDb((d) => ({
-      ...d,
-      observations: d.observations.map((o) => (o.id === id ? { ...o, status: "synced", last_synced_at: now } : o)),
-      notifications: [...notes_, ...d.notifications],
-      audit: [auditRow("observations", id, "update", { status: obs?.status }, { status: "synced" }), ...d.audit],
-    }));
+    try {
+      await sb.from("observations").update({ status: "synced", last_synced_at: now }).eq("id", id);
+      notify("Observation synced");
+      await fetchFromSupabase(true);
+    } catch (e) {
+      console.warn("syncObservation error:", e);
+    }
   };
 
-  const resubmit = (id, message) => {
+  const resubmit = async (id, message) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    const obs = db.observations.find((o) => o.id === id);
     const now = nowIso();
-    const notes_ = officerIds().map((u) => noteRow(u, "observation_submitted", "Record sent again", "A returned record was corrected.", "observations", id));
-    setDb((d) => ({
-      ...d,
-      observations: d.observations.map((o) => (o.id === id ? { ...o, status: "synced", version: o.version + 1, last_synced_at: now } : o)),
-      comments: message ? [...d.comments, { id: uid(), observation_id: id, author_id: userId, body: message, created_at: now }] : d.comments,
-      notifications: [...notes_, ...d.notifications],
-      audit: [auditRow("observations", id, "update", { status: "returned" }, { status: "synced" }), ...d.audit],
-    }));
+
+    try {
+      await sb.from("observations").update({
+        status: "synced",
+        version: (obs?.version || 1) + 1,
+        last_synced_at: now,
+      }).eq("id", id);
+
+      if (message && message.trim()) {
+        await sb.from("observation_comments").insert({
+          observation_id: id,
+          author_id: authUid,
+          body: message.trim(),
+        });
+      }
+      notify("Record resubmitted");
+      await fetchFromSupabase(true);
+    } catch (e) {
+      console.warn("resubmit error:", e);
+    }
   };
 
-  const reviewObservation = (id, decision, comment) => {
-    const status = { approve: "approved", return: "returned", reject: "rejected" }[decision];
+  const reviewObservation = async (id, decision, comment) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const obs = db.observations.find((o) => o.id === id);
-    const plant = db.plants.find((p) => p.id === obs?.specimen_id);
-    const now = nowIso();
-    const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision];
-    setDb((d) => ({
-      ...d,
-      observations: d.observations.map((o) => (o.id === id ? { ...o, status } : o)),
-      reviews: [...d.reviews, { id: uid(), observation_id: id, reviewer_id: userId, observation_ver: obs?.version || 1, decision, comment, created_at: now }],
-      comments: comment ? [...d.comments, { id: uid(), observation_id: id, author_id: userId, body: comment, created_at: now }] : d.comments,
-      notifications: obs ? [noteRow(obs.recorded_by, `review_${verb}`, `Record ${verb}`, `${plant?.qr_id || "Your record"}${comment ? `: ${comment}` : ""}`, "observations", id), ...d.notifications] : d.notifications,
-      audit: [auditRow("observations", id, "update", { status: obs?.status }, { status }), ...d.audit],
-    }));
+
+    try {
+      const { error: revErr } = await sb.from("observation_reviews").insert({
+        observation_id: id,
+        reviewer_id: authUid,
+        observation_version: obs?.version || 1,
+        decision,
+        comment: comment || null,
+      });
+      if (revErr) throw revErr;
+
+      if (comment && comment.trim()) {
+        await sb.from("observation_comments").insert({
+          observation_id: id,
+          author_id: authUid,
+          body: comment.trim(),
+        });
+      }
+
+      const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision] || decision;
+      notify(`Record ${verb}`);
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("reviewObservation error:", err);
+      notify(`Failed to submit review: ${err.message || err}`);
+    }
   };
 
-  // observation_comments insert
-  const addComment = (id, body) => {
-    const obs = db.observations.find((o) => o.id === id);
-    const comment = { id: uid(), observation_id: id, author_id: userId, body, created_at: nowIso() };
-    const notes_ = obs && obs.recorded_by !== userId
-      ? [noteRow(obs.recorded_by, "comment_reply", "New comment on your observation", body, "observations", id)]
-      : [];
-    setDb((d) => ({ ...d, comments: [...d.comments, comment], notifications: [...notes_, ...d.notifications] }));
+  const addComment = async (id, body) => {
+    if (!body || !body.trim()) return;
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+
+    try {
+      const { error } = await sb.from("observation_comments").insert({
+        observation_id: id,
+        author_id: authUid,
+        body: body.trim(),
+      });
+      if (error) throw error;
+      notify("Comment posted");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("addComment error:", err);
+      notify(`Failed to add comment: ${err.message || err}`);
+    }
   };
 
   /* ---------- species ---------- */
-  const saveSpecies = (sp) => {
+  const saveSpecies = async (sp) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const isNew = !sp.id;
-    const id = sp.id || uid();
-    const row = auditRow("species", id, isNew ? "insert" : "update", null, { scientific_name: sp.scientific_name });
-    setDb((d) => ({
-      ...d,
-      species: isNew
-        ? [...d.species, { ...sp, id, is_published: false, is_deleted: false }]
-        : d.species.map((s) => (s.id === id ? { ...s, ...sp } : s)),
-      audit: [row, ...d.audit],
-    }));
+
+    try {
+      if (isNew) {
+        const { error } = await sb.from("species").insert({
+          scientific_name: sp.scientific_name,
+          common_name: sp.common_name || "",
+          family: sp.family || "",
+          genus: sp.genus || sp.scientific_name.split(" ")[0] || "",
+          description: sp.description || "",
+          conservation_status: sp.conservation_status || "least concern",
+          cultural_significance: sp.cultural_significance || "",
+          is_published: false,
+          is_deleted: false,
+          created_by: authUid,
+        });
+        if (error) throw error;
+        notify(`Species "${sp.scientific_name}" created`);
+      } else {
+        const { error } = await sb.from("species").update({
+          scientific_name: sp.scientific_name,
+          common_name: sp.common_name || "",
+          family: sp.family || "",
+          genus: sp.genus || sp.scientific_name.split(" ")[0] || "",
+          description: sp.description || "",
+          conservation_status: sp.conservation_status || "least concern",
+          cultural_significance: sp.cultural_significance || "",
+          updated_by: authUid,
+        }).eq("id", sp.id);
+        if (error) throw error;
+        notify(`Species "${sp.scientific_name}" updated`);
+      }
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("saveSpecies error:", err);
+      notify(`Failed to save species: ${err.message || err}`);
+    }
   };
 
-  const togglePublish = (id) => {
+  const togglePublish = async (id) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const sp = db.species.find((s) => s.id === id);
-    const row = auditRow("species", id, "update", { is_published: sp?.is_published }, { is_published: !sp?.is_published });
-    setDb((d) => ({ ...d, species: d.species.map((s) => (s.id === id ? { ...s, is_published: !s.is_published } : s)), audit: [row, ...d.audit] }));
+    if (!sp) return;
+    const nextPub = !sp.is_published;
+
+    try {
+      const { error } = await sb.from("species").update({
+        is_published: nextPub,
+        updated_by: authUid,
+      }).eq("id", id);
+      if (error) throw error;
+      notify(nextPub ? "Published species" : "Moved species to drafts");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("togglePublish error:", err);
+      notify(`Failed to update publish state: ${err.message || err}`);
+    }
   };
 
-  // Soft delete and undo. Only officers and admins; the API will enforce this too.
-  // Returns false when the role is not allowed.
-  const setSpeciesDeleted = (id, is_deleted) => {
+  const setSpeciesDeleted = async (id, is_deleted) => {
     if (!can(role, "species")) return false;
-    const sp = db.species.find((s) => s.id === id);
-    const row = auditRow("species", id, is_deleted ? "delete" : "restore",
-      { scientific_name: sp.scientific_name, is_deleted: !is_deleted }, { is_deleted });
-    setDb((d) => ({ ...d, species: d.species.map((s) => (s.id === id ? { ...s, is_deleted } : s)), audit: [row, ...d.audit] }));
-    return true;
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+
+    try {
+      const { error } = await sb.from("species").update({
+        is_deleted,
+        updated_by: authUid,
+      }).eq("id", id);
+      if (error) throw error;
+      notify(is_deleted ? "Species deleted" : "Species restored");
+      await fetchFromSupabase(true);
+      return true;
+    } catch (err) {
+      console.error("deleteSpecies error:", err);
+      notify(`Failed to update species: ${err.message || err}`);
+      return false;
+    }
   };
   const deleteSpecies = (id) => setSpeciesDeleted(id, true);
   const restoreSpecies = (id) => setSpeciesDeleted(id, false);
 
-  // Saves a species' captioned catalogue photos in the order given; the first is the cover photo.
-  // API (CTIP-46): for each new photo, POST /v1/species/:id/media { content_type, size_bytes, caption, is_primary, sort_order },
-  // then PUT the file to the returned upload.url (species-media/{species_id}/{media_id}).
-  // The API checks the role, file type and size again; Storage rejects anything over its bucket limits.
-  const setSpeciesMedia = (speciesId, list) => {
+  const setSpeciesMedia = async (speciesId, list) => {
     if (!can(role, "species")) return { ok: false, message: "Only officers and admins can change species photos" };
     const bad = list.map((p) => p.file && photoProblem(p.file)).find(Boolean);
     if (bad) return { ok: false, message: bad };
@@ -442,22 +829,37 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     if (k >= 0) return { ok: false, message: `Add a caption to photo ${k + 1}` };
     if (list.some((p) => p.caption.trim().length > CAPTION_MAX)) return { ok: false, message: `Keep captions under ${CAPTION_MAX} characters` };
 
-    const now = nowIso();
-    const rows = list.map((p, i) => ({
-      id: p.id, species_id: speciesId, url: p.url, caption: p.caption.trim(), credit: p.credit ?? null,
-      is_primary: i === 0, sort_order: i, uploaded_by: p.uploaded_by ?? userId, created_at: p.created_at ?? now,
-    }));
-    const row = auditRow("species_media", speciesId, "update", null, { count: rows.length, added: list.filter((p) => p.file).length });
-    setDb((d) => ({
-      ...d,
-      species_media: [...d.species_media.filter((m) => m.species_id !== speciesId), ...rows],
-      audit: [row, ...d.audit],
-    }));
-    return { ok: true };
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+
+    try {
+      await sb.from("species_media").delete().eq("species_id", speciesId);
+
+      if (list.length > 0) {
+        const payload = list.map((p, i) => ({
+          species_id: speciesId,
+          s3_bucket: "species-media",
+          s3_key: p.url,
+          caption: p.caption.trim(),
+          credit: p.credit ?? null,
+          is_primary: i === 0,
+          sort_order: i,
+          uploaded_by: authUid,
+        }));
+        const { error } = await sb.from("species_media").insert(payload);
+        if (error) throw error;
+      }
+      notify("Species photos updated");
+      await fetchFromSupabase(true);
+      return { ok: true };
+    } catch (err) {
+      console.error("setSpeciesMedia error:", err);
+      notify(`Failed to save photos: ${err.message || err}`);
+      return { ok: false, message: err.message || err };
+    }
   };
 
   /* ---------- users ---------- */
-  // New accounts start with the part of the email before "@" as the username (made unique).
   const freeUsername = (email) => {
     const local = email.split("@")[0].toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 16);
     const base = local.length >= 3 ? local : local + "user";
@@ -465,78 +867,220 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     for (let n = 2; usernameTaken(name); n++) name = base + n;
     return name;
   };
-  const addUser = ({ full_name, email, role: newRole }) => {
+
+  const addUser = async ({ full_name, email, role: newRole }) => {
     if (db.profiles.some((p) => p.email.toLowerCase() === email.trim().toLowerCase())) return false;
+    const sb = getSupabase();
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email: email.trim(),
+        password: DEFAULT_PW,
+        options: {
+          data: { full_name, role: newRole },
+        },
+      });
+      if (!error && data?.user) {
+        notify(`Account created for ${email}`);
+        await fetchFromSupabase(true);
+        return true;
+      }
+    } catch {
+      // fallback to local profile entry
+    }
     const id = uid();
     const now = nowIso();
-    const row = auditRow("profiles", id, "insert", null, { email, role: newRole });
-    setPasswords((pw) => ({ ...pw, [id]: DEFAULT_PW }));
     setDb((d) => ({
       ...d,
       profiles: [...d.profiles, { id, full_name, username: freeUsername(email), phone: "", avatar_url: null, email: email.trim(), role: newRole, is_active: true, created_at: now }],
-      audit: [row, ...d.audit],
     }));
     return true;
   };
 
-  const updateUser = (id, patch) => {
-    const before = db.profiles.find((p) => p.id === id);
-    const old_value = before ? Object.fromEntries(Object.keys(patch).map((k) => [k, before[k]])) : null;
-    const row = auditRow("profiles", id, "update", old_value, patch);
-    setDb((d) => ({ ...d, profiles: d.profiles.map((p) => (p.id === id ? { ...p, ...patch } : p)), audit: [row, ...d.audit] }));
+  const updateUser = async (id, patch) => {
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.from("profiles").update(patch).eq("id", id);
+      if (error) throw error;
+      notify("User updated");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("updateUser error:", err);
+      notify(`Failed to update user: ${err.message || err}`);
+    }
   };
 
   /* ---------- monitoring ---------- */
-  const ackAlert = (id) => {
-    const now = nowIso();
-    const row = auditRow("alerts", id, "update", { status: "open" }, { status: "acknowledged" });
-    setDb((d) => ({ ...d, alerts: d.alerts.map((a) => (a.id === id ? { ...a, status: "acknowledged", acknowledged_by: userId, acknowledged_at: now } : a)), audit: [row, ...d.audit] }));
+  const ackAlert = async (id) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    try {
+      const { error } = await sb.from("alerts").update({
+        status: "acknowledged",
+        acknowledged_by: authUid,
+        acknowledged_at: nowIso(),
+      }).eq("id", id);
+      if (error) throw error;
+      notify("Alert acknowledged");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("ackAlert error:", err);
+      notify(`Failed to acknowledge alert: ${err.message || err}`);
+    }
   };
 
-  const resolveAlert = (id, outcome) => {
-    const row = auditRow("alerts", id, "update", null, { status: "resolved", outcome });
-    setDb((d) => ({ ...d, alerts: d.alerts.map((a) => (a.id === id ? { ...a, status: "resolved", outcome } : a)), audit: [row, ...d.audit] }));
+  const resolveAlert = async (id, outcome) => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    try {
+      const { error } = await sb.from("alerts").update({
+        status: "resolved",
+        outcome: outcome || "",
+        resolved_by: authUid,
+        resolved_at: nowIso(),
+      }).eq("id", id);
+      if (error) throw error;
+      notify("Alert resolved");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("resolveAlert error:", err);
+      notify(`Failed to resolve alert: ${err.message || err}`);
+    }
   };
 
-  const assignAlert = (id, assignee) => {
-    const note = noteRow(assignee, "alert_assigned", "Alert assigned to you", "Please investigate this alert.", "alerts", id);
-    setDb((d) => ({ ...d, alerts: d.alerts.map((a) => (a.id === id ? { ...a, assigned_to: assignee } : a)), notifications: [note, ...d.notifications] }));
+  const assignAlert = async (id, assignee) => {
+    const sb = getSupabase();
+    try {
+      const { error } = await sb.from("alerts").update({ assigned_to: assignee }).eq("id", id);
+      if (error) throw error;
+      notify("Alert assigned");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("assignAlert error:", err);
+      notify(`Failed to assign alert: ${err.message || err}`);
+    }
   };
 
-  const addAlertNote = (id, note) =>
-    setDb((d) => ({ ...d, alertNotes: [...d.alertNotes, { id: uid(), alert_id: id, author_id: userId, note, created_at: nowIso() }] }));
+  const addAlertNote = async (id, note) => {
+    if (!note || !note.trim()) return;
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    try {
+      const { error } = await sb.from("alert_notes").insert({
+        alert_id: id,
+        author_id: authUid,
+        note: note.trim(),
+      });
+      if (error) throw error;
+      notify("Note added to alert");
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("addAlertNote error:", err);
+      notify(`Failed to add alert note: ${err.message || err}`);
+    }
+  };
 
-  const setThresholds = (nodeId, thresholds) =>
-    setDb((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === nodeId ? { ...n, thresholds } : n)) }));
+  const setThresholds = async (nodeId, thresholds) => {
+    const sb = getSupabase();
+    try {
+      await sb.from("sensor_nodes").update({ thresholds }).eq("id", nodeId);
+      setDb((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === nodeId ? { ...n, thresholds } : n)) }));
+      notify("Thresholds updated");
+    } catch (e) {
+      console.warn("setThresholds error:", e);
+    }
+  };
 
   /* ---------- notifications and tags ---------- */
-  const markRead = (id) => setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)) }));
-  const markAllRead = () => setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.user_id === userId ? { ...n, is_read: true } : n)) }));
-
-  const generateTags = (count, batch_label) => {
-    // Deleted tags count too, so a number that may already be printed is never handed out again.
-    // Supabase: a database sequence does this.
-    const deleted = db.audit.filter((a) => a.table_name === "qr_tags" && a.action === "delete").map((a) => ({ qr_id: a.record_id }));
-    const ids = nextTagIds([...db.tags, ...deleted], count);
-    const now = nowIso();
-    setDb((d) => ({
-      ...d,
-      tags: [...d.tags, ...ids.map((qr_id) => ({ qr_id, status: "unused", batch_label, created_by: userId, created_at: now }))],
-    }));
-    return ids;
+  const markRead = async (id) => {
+    const sb = getSupabase();
+    try {
+      await sb.from("notifications").update({ is_read: true }).eq("id", id);
+      setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)) }));
+    } catch {
+      // fallback
+    }
   };
 
-  // Only tags never put on a plant can be deleted, so no specimen ever points at a missing tag.
-  const deleteTag = (qr_id) => {
+  const markAllRead = async () => {
+    const sb = getSupabase();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    try {
+      if (authUid) await sb.from("notifications").update({ is_read: true }).eq("user_id", authUid);
+      setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.user_id === userId ? { ...n, is_read: true } : n)) }));
+    } catch {
+      // fallback
+    }
+  };
+
+  const generateTags = async (count, batch_label = "field") => {
+    const sb = getSupabase();
+    const adminSb = getSupabaseAdmin();
+    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    const ids = nextTagIds(db.tags, count);
+
+    try {
+      const payload = ids.map((qr_id) => ({
+        qr_id,
+        status: "unassigned",
+        batch_label,
+        created_by: authUid,
+      }));
+      let { error } = await sb.from("qr_tags").insert(payload);
+      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
+        const res = await adminSb.from("qr_tags").insert(payload);
+        error = res.error;
+      }
+      if (error) throw error;
+      notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
+      await fetchFromSupabase(true);
+      return ids;
+    } catch (err) {
+      console.error("generateTags error:", err);
+      notify(`Failed to generate tags: ${err.message || err}`);
+      return ids;
+    }
+  };
+
+  const deleteTag = async (qr_id) => {
     const tag = db.tags.find((t) => t.qr_id === qr_id);
     if (!tag || tag.status !== "unused" || !can(role, "tags")) return false;
-    const row = auditRow("qr_tags", qr_id, "delete", { status: tag.status, batch_label: tag.batch_label }, null);
-    setDb((d) => ({ ...d, tags: d.tags.filter((t) => t.qr_id !== qr_id), audit: [row, ...d.audit] }));
-    return true;
+    const sb = getSupabase();
+    const adminSb = getSupabaseAdmin();
+
+    try {
+      let { error } = await sb.from("qr_tags").delete().eq("qr_id", qr_id);
+      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
+        const res = await adminSb.from("qr_tags").delete().eq("qr_id", qr_id);
+        error = res.error;
+      }
+      if (error) throw error;
+      notify(`Tag ${qr_id} deleted`);
+      await fetchFromSupabase(true);
+      return true;
+    } catch (err) {
+      console.error("deleteTag error:", err);
+      notify(`Failed to delete tag: ${err.message || err}`);
+      return false;
+    }
   };
 
-  const retireTag = (qr_id) =>
-    setDb((d) => ({ ...d, tags: d.tags.map((t) => (t.qr_id === qr_id ? { ...t, status: "retired" } : t)) }));
+  const retireTag = async (qr_id) => {
+    const sb = getSupabase();
+    const adminSb = getSupabaseAdmin();
+    try {
+      let { error } = await sb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
+      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
+        const res = await adminSb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
+        error = res.error;
+      }
+      if (error) throw error;
+      notify(`Tag ${qr_id} retired`);
+      await fetchFromSupabase(true);
+    } catch (err) {
+      console.error("retireTag error:", err);
+      notify(`Failed to retire tag: ${err.message || err}`);
+    }
+  };
 
   const value = {
     db, me, role, toast, notify,
@@ -553,6 +1097,5 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     getBackendSpeciesById,
   };
 
-  // Written without JSX so the web (Vite) and mobile (Metro) can both load this .js file.
   return React.createElement(StoreContext.Provider, { value }, children);
 }

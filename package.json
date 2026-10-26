@@ -16,5 +16,8 @@
     "api": "npm --prefix services/api run dev",
     "api:start": "npm --prefix services/api run start",
     "api:test": "npm --prefix services/api run test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
   }
 }
