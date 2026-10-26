@@ -75,9 +75,14 @@ paths:
       tags: [Public]
       operationId: listPublicSpecies
       summary: List published species (visitor catalogue)
+      description: Also the botanist's species lookup on mobile, since GET /species is Officer/Admin only.
       security: []
       parameters:
         - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Family'
+        - $ref: '#/components/parameters/ConservationStatus'
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -92,6 +97,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/PublicSpecies' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /public/species/{id}:
     get:
@@ -242,6 +248,10 @@ paths:
       summary: List all species incl. unpublished (staff)
       parameters:
         - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Family'
+        - $ref: '#/components/parameters/ConservationStatus'
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
         - name: is_published
           in: query
           schema: { type: boolean }
@@ -259,6 +269,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Species' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Species]
       operationId: createSpecies
@@ -1211,8 +1222,28 @@ components:
     Search:
       name: q
       in: query
-      description: Search scientific or common name
-      schema: { type: string }
+      description: Part of the scientific or common name, any case. Letters, numbers, spaces and . ' - × only
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    Family:
+      name: family
+      in: query
+      description: Exact family name, any case
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    ConservationStatus:
+      name: conservation_status
+      in: query
+      description: Exact conservation status, any case
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    CreatedFrom:
+      name: created_from
+      in: query
+      description: Added on or after this day (UTC)
+      schema: { type: string, format: date }
+    CreatedTo:
+      name: created_to
+      in: query
+      description: Added on or before this day (UTC)
+      schema: { type: string, format: date }
     ReportFormat:
       name: format
       in: query
