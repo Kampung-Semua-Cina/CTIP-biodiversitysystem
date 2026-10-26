@@ -2,6 +2,7 @@ import { supabaseAnon, supabaseAs } from './supabase.js';
 import { speciesHandlers, applySearch, parseSearch } from './species.js';
 import { distributionHandlers } from './distribution.js';
 import { speciesMediaHandlers } from './speciesMedia.js';
+import { observationHandlers } from './observations.js';
 
 // Implemented endpoints, keyed "method path" to match permissions.js.
 // Anything not listed here answers 501 until someone builds it.
@@ -33,4 +34,5 @@ export const handlers = {
   ...speciesHandlers,
   ...distributionHandlers,
   ...speciesMediaHandlers,
+  ...observationHandlers,
 };

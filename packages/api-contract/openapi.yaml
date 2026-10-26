@@ -535,10 +535,17 @@ paths:
       tags: [Observations]
       operationId: listObservations
       summary: List observations (botanists see their own; staff see all)
+      description: >
+        Officer review queue: `status=pending` (the same as `synced`, "Needs review"
+        in the apps), oldest first. Botanists get only the observations they
+        recorded, so they can follow the status of each submission.
       parameters:
         - name: status
           in: query
-          schema: { $ref: '#/components/schemas/ObservationStatus' }
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ObservationStatus'
+              - { type: string, const: pending, description: Same as synced }
         - name: specimen_id
           in: query
           schema: { type: string, format: uuid }
@@ -556,6 +563,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Observation' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Observations]
       operationId: createObservation
@@ -706,16 +714,22 @@ paths:
         - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Review history
+          description: Review history, oldest first (every decision with reviewer and time)
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Review' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Reviews]
       operationId: reviewObservation
-      summary: Approve, return or reject an observation (officer/admin)
+      summary: Approve, return (request changes) or reject an observation (officer/admin)
+      description: >
+        Only an observation waiting for review (status synced) can be reviewed, and
+        only at the version the reviewer looked at. The checks and the decision happen
+        in one locked database step (public.review_observation), so a botanist's edit
+        or a second reviewer cannot slip in between.
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -730,11 +744,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Review' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: observation_version is stale (botanist edited it since)
+          description: >
+            VERSION_CONFLICT when observation_version is stale (botanist edited it since),
+            WRONG_STATUS when the observation is not waiting for review (draft, or already reviewed)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /observations/{id}/comments:
     get:
@@ -1641,10 +1659,11 @@ components:
     ReviewCreate:
       type: object
       required: [decision, observation_version]
+      additionalProperties: false
       properties:
         decision: { $ref: '#/components/schemas/ReviewDecision' }
-        observation_version: { type: integer, description: Version the reviewer looked at }
-        comment: { type: string, description: Required when decision is return or reject }
+        observation_version: { type: integer, minimum: 1, description: Version the reviewer looked at }
+        comment: { type: string, minLength: 1, maxLength: 2000, description: The reason. Required when decision is return or reject }
 
     Review:
       type: object
