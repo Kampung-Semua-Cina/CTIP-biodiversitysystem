@@ -1,4 +1,5 @@
 import { supabaseAnon, supabaseAs } from './supabase.js';
+import { speciesHandlers } from './species.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,4 +56,6 @@ export const handlers = {
     if (error) return res.status(500).json({ code: 'DB_ERROR', message: error.message });
     res.json(data);
   },
+
+  ...speciesHandlers,
 };
