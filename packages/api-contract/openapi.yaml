@@ -387,34 +387,49 @@ paths:
                 items: { $ref: '#/components/schemas/SpeciesMedia' }
     post:
       tags: [Species, Photos]
-      operationId: createSpeciesMediaUpload
-      summary: Start a species image upload (returns signed upload URL)
+      operationId: uploadSpeciesMedia
+      summary: Upload a species photo with a caption (officer/admin)
+      description: >
+        The file is sent to the API, which checks its real type from the file's
+        bytes (JPEG, PNG or WebP) and its size (at most 10 MB), removes location
+        and other metadata (EXIF, XMP, text chunks), then stores it in the public
+        species-media bucket as {species_id}/{media_id}.{ext}. Setting is_primary
+        makes this the only cover photo of the species.
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              allOf:
-                - $ref: '#/components/schemas/UploadRequest'
-                - type: object
-                  properties:
-                    caption: { type: string }
-                    credit: { type: string }
-                    is_primary: { type: boolean }
-                    sort_order: { type: integer }
+              type: object
+              required: [file]
+              additionalProperties: false
+              properties:
+                file: { type: string, format: binary, description: "JPEG, PNG or WebP, at most 10 MB" }
+                caption: { type: string, minLength: 1, maxLength: 300 }
+                credit: { type: string, minLength: 1, maxLength: 200 }
+                is_primary: { type: boolean, default: false }
+                sort_order: { type: integer, minimum: 0, maximum: 1000, default: 0 }
       responses:
         '201':
-          description: Upload slot created
+          description: Stored
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  media: { $ref: '#/components/schemas/SpeciesMedia' }
-                  upload: { $ref: '#/components/schemas/UploadTicket' }
+              schema: { $ref: '#/components/schemas/SpeciesMedia' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: File larger than 10 MB (FILE_TOO_LARGE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '415':
+          description: Not a JPEG, PNG or WebP image (UNSUPPORTED_FILE_TYPE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # --------------------------------------------------------------- Specimens
   /specimens:
