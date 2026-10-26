@@ -214,9 +214,26 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 
 /* Prototype-only bar above the navbar: which role the site is shown as. */
 .protobar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px var(--s-3);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px var(--s-3);
   padding: 6px var(--s-4); font-size: 13px; color: var(--ink2); background: var(--sunken); border-bottom: 1px solid var(--line);
 }
+.protobar-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--s-3); }
+.protobar-right { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.api-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600; line-height: 1.4; border: 1px solid var(--line);
+}
+.api-badge.on { background: rgba(46, 125, 50, 0.12); color: #2e7d32; border-color: rgba(46, 125, 50, 0.3); }
+.api-badge.off { background: rgba(120, 144, 156, 0.12); color: var(--ink3); border-color: var(--line); }
+.api-badge.syncing { background: rgba(2, 136, 209, 0.12); color: #0288d1; border-color: rgba(2, 136, 209, 0.3); }
+.api-badge.session { background: rgba(103, 58, 183, 0.12); color: #673ab7; border-color: rgba(103, 58, 183, 0.3); }
+.protobar-sync {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); color: var(--ink2);
+  cursor: pointer; padding: 4px 8px; display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.protobar-sync:hover { background: var(--hover); color: var(--ink); }
+.protobar-sync:disabled { opacity: 0.5; cursor: not-allowed; }
 .roleswitch { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); }
 .roleswitch button {
   min-height: 32px; padding: 3px 14px; border: 0; border-radius: var(--r-pill);
@@ -749,12 +766,175 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .plantdot { position: absolute; width: 16px; height: 16px; padding: 0; transform: translate(-50%, -50%); border: 2px solid var(--surface); border-radius: 50%; cursor: pointer; }
 .plantdot:hover { transform: translate(-50%, -50%) scale(1.25); }
 .plantdot.on { transform: translate(-50%, -50%) scale(1.5); z-index: 2; box-shadow: 0 0 0 3px var(--ink); }
+
+/* Leaflet map styles and custom pins */
+.custom-pin-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+.pin-container {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.pin-body {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  background-color: var(--pin-color, #10b981);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s ease;
+}
+.pin-container.selected .pin-body {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.45), 0 4px 10px rgba(0, 0, 0, 0.5);
+  transform: scale(1.15);
+  z-index: 1000;
+}
+.pulse-ring {
+  display: none;
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--pin-color, #10b981);
+  opacity: 0.8;
+  pointer-events: none;
+  animation: pulseAnim 1.6s infinite ease-out;
+}
+.pin-container.selected .pulse-ring {
+  display: block;
+}
+@keyframes pulseAnim {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+.map-tools {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.tool-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font: 700 var(--t-caption-size) / 1 var(--f-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1));
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background var(--motion-fast, 120ms) ease, transform var(--motion-fast, 120ms) ease, border-color var(--motion-fast, 120ms) ease;
+}
+.tool-btn:hover {
+  background: var(--raised);
+  border-color: var(--acc);
+}
+.tool-btn:active {
+  transform: scale(0.96);
+}
+.tool-btn.active {
+  background: var(--acc);
+  color: var(--on-acc);
+  border-color: var(--acc);
+}
+.tool-btn.active svg {
+  stroke: var(--on-acc);
+}
+.tool-btn svg {
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+/* User Actual Location Beacon */
+.user-loc-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+.user-loc-container {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.user-loc-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1c7ed6;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+.user-loc-pulse {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(28, 126, 214, 0.28);
+  border: 1.5px solid rgba(28, 126, 214, 0.6);
+  pointer-events: none;
+  animation: userPulseAnim 2s infinite ease-out;
+}
+@keyframes userPulseAnim {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.leaflet-control-zoom {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--r-control, 10px) !important;
+  overflow: hidden;
+  box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1)) !important;
+}
+.leaflet-control-zoom a {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-bottom: 1px solid var(--line) !important;
+  font-family: var(--f-text) !important;
+  font-weight: 700 !important;
+}
+.leaflet-control-zoom a:hover {
+  background: var(--raised) !important;
+}
+.leaflet-control-attribution {
+  font-family: var(--f-mono, "JetBrains Mono"), monospace !important;
+  font-size: 11px !important;
+  background: var(--surface) !important;
+  opacity: 0.9 !important;
+  color: var(--ink3) !important;
+  border-top-left-radius: 6px;
+  padding: 3px 8px !important;
+}
+.leaflet-control-attribution a {
+  color: var(--ink2) !important;
+  text-decoration: none;
+}
 .maplegend { margin-top: 14px; padding: var(--s-3) var(--s-4); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--raised); }
 .maplegend h3 { margin: 0 0 var(--s-1); font-size: var(--t-label-size); }
 .maplegend p { margin: 0; }
 .legend { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
 .fam { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: 600 var(--t-caption-size) var(--f-text); cursor: pointer; }
-.fam.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.fam.on { background: var(--acc); color: var(--on-acc); border-color: var(--acc); font-weight: 700; }
+.fam.on i { border-color: var(--on-acc); }
 .fam i, .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); vertical-align: -1px; }
 .site .maplink { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--acc); font-weight: 700; }
 

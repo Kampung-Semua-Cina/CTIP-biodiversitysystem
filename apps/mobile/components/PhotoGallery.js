@@ -33,11 +33,7 @@ export default function PhotoGallery({ photos = [], canEdit = false, onEdit }) {
           resizeMode="cover"
         />
 
-        {activeIdx === 0 && (
-          <View style={styles.primaryBadge}>
-            <Text style={styles.primaryBadgeText}>★ Primary</Text>
-          </View>
-        )}
+
 
         {canEdit && (
           <TouchableOpacity style={styles.editIconBtn} onPress={onEdit}>
@@ -67,7 +63,7 @@ export default function PhotoGallery({ photos = [], canEdit = false, onEdit }) {
             >
               <Image source={{ uri: p.url }} style={styles.thumbnailImg} />
               <Text style={styles.thumbnailNum}>{idx + 1}</Text>
-              {idx === 0 && <View style={styles.thumbPrimaryDot} />}
+
             </TouchableOpacity>
           ))}
         </ScrollView>

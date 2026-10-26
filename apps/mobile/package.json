@@ -11,12 +11,14 @@
     "expo-camera": "^57.0.6",
     "expo-font": "~57.0.4",
     "expo-image-picker": "^57.0.20",
+    "expo-location": "~57.0.22",
     "expo-status-bar": "~57.0.1",
     "lucide-react-native": "^1.59.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-svg": "15.15.4"
+    "react-native-svg": "15.15.4",
+    "react-native-webview": "13.16.1"
   },
   "scripts": {
     "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start          Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel         Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel   Alias for npm run tunnel\\n  npm run android        Launch directly on connected Android device or emulator\\n  npm run android:tunnel Launch on Android device with tunnel enabled\\n  npm run ios            Launch on iOS simulator\\n  npm run web            Launch in web browser mode\\n')\"",

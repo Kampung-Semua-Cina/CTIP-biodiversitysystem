@@ -15,7 +15,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // Everyone can open it. Visitors only get published species. Conservation status shows on every
 // card (Daun design language); only staff get the conservation filter.
 export default function Catalogue() {
-  const { db, role } = useStore();
+  const { db, role, apiStatus, isSyncing, refreshFromBackend, backendSpeciesCount } = useStore();
   const staff = can(role, "pending");
   const [q, setQ] = useState("");
   const [family, setFamily] = useState("all");
@@ -49,9 +49,21 @@ export default function Catalogue() {
       <div className="pagehead">
         <div>
           <h1>Plants of Niah</h1>
-          <p className="mute">{plural(all.length, "species", "species")} · {plural(tagged, "tagged plant", "tagged plants")} across the park</p>
+          <p className="mute">
+            {plural(all.length, "species", "species")} · {plural(tagged, "tagged plant", "tagged plants")} across the park
+            {apiStatus === "connected" && (
+              <span className="api-badge on" style={{ marginLeft: 8 }} title="Synchronized with GET /v1/public/species">
+                <Icon name="cloud" size={12} /> {backendSpeciesCount > 0 ? `${backendSpeciesCount} from API` : "Live API"}
+              </span>
+            )}
+          </p>
         </div>
-        <a className="btn ghost" href="#/map"><Icon name="map" size={18} /> Show plants on the map</a>
+        <div className="row wrap gap-s">
+          <button className="btn ghost" onClick={refreshFromBackend} disabled={isSyncing} title="Sync species catalogue with API">
+            <Icon name="refresh" size={16} /> {isSyncing ? "Syncing..." : "Sync API"}
+          </button>
+          <a className="btn ghost" href="#/map"><Icon name="map" size={18} /> Show plants on the map</a>
+        </div>
       </div>
 
       <div className="toolbar">

@@ -6,7 +6,7 @@ import { useStore } from "../../../shared/store.js";
 import { themeVars, useThemeMode } from "../theme.js";
 import { Navbar, Drawer, BottomBar, Footer } from "./Chrome.jsx";
 import RoleSwitch from "./RoleSwitch.jsx";
-import PageView from "./PageView.jsx";
+import RouteView from "./RouteView.jsx";
 
 export default function Site() {
   const { seg, arg } = useRoute();
@@ -44,7 +44,7 @@ export default function Site() {
 
       {/* key: each page change remounts <main>, which replays its entrance animation */}
       <main id="main" key={seg + "/" + arg}>
-        <PageView seg={seg} arg={arg} role={role} />
+        <RouteView seg={seg} arg={arg} role={role} />
       </main>
 
       <BottomBar role={role} seg={seg} unread={unread} />

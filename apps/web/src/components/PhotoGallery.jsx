@@ -41,7 +41,6 @@ export default function PhotoGallery({ photos, canEdit, onEdit }) {
             <button className="nav" style={{ right: 8 }} onClick={() => go(1)} aria-label="Next photo"><Icon name="chevR" /></button>
           </>
         )}
-        {cur === 0 && <span className="primary-badge"><Icon name="star" size={13} /> Primary</span>}
         {canEdit && <button className="edit" onClick={onEdit} aria-label="Edit photos"><Icon name="pencil" size={18} /></button>}
       </div>
       {photos[cur].caption && <p className="caption">{photos[cur].caption}</p>}
@@ -51,7 +50,6 @@ export default function PhotoGallery({ photos, canEdit, onEdit }) {
             <button key={p.id} className={"thumbnail" + (k === cur ? " on" : "")} onClick={() => setI(k)} aria-label={`Show photo ${k + 1}`}>
               <Img src={p.url} />
               <span>{k + 1}</span>
-              {k === 0 && <i className="dot-primary" title="Primary photo" />}
             </button>
           ))}
         </div>

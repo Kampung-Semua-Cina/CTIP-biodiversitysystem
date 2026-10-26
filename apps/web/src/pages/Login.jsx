@@ -9,7 +9,9 @@ import { PasswordInput } from "../components/Bits.jsx";
 // The same page lets staff change their password with just their email and a new password.
 // After a first sign-in with the default password, staff are asked to choose a new one.
 export default function Login() {
-  const { login, signIn, changePassword, notify } = useStore();
+  const { login, signIn, changePassword, notify, loginWithToken, apiStatus } = useStore();
+  const [tokenInput, setTokenInput] = useState("");
+  const [isTokenBusy, setIsTokenBusy] = useState(false);
   const [mode, setMode] = useState("signin"); // signin | change | first
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -47,6 +49,16 @@ export default function Login() {
     switchTo("signin");
   };
 
+  const submitToken = async (e) => {
+    e.preventDefault();
+    setIsTokenBusy(true);
+    const res = await loginWithToken(tokenInput);
+    setIsTokenBusy(false);
+    if (res.ok) {
+      go("/dashboard");
+    }
+  };
+
   const skip = () => {
     signIn(pending);
     go("/dashboard");
@@ -71,7 +83,42 @@ export default function Login() {
           <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
           <div className="row wrap gap-top">
             <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("token")}><Icon name="shield" size={18} /> Sign in with API token</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Change password</button>
+          </div>
+          <p className="mute small" style={{ marginTop: 12 }}>
+            Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
+          </p>
+        </form>
+      )}
+
+      {mode === "token" && (
+        <form onSubmit={submitToken}>
+          <h1>API Token Sign In</h1>
+          <p className="mute">
+            Authenticate directly with your Supabase Bearer token. Your identity and permissions will be verified via <code>GET /v1/me</code>.
+          </p>
+          <label>
+            Supabase Access Token (JWT)
+            <textarea
+              rows={4}
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="eyJhbGciOi..."
+              required
+              style={{ fontFamily: "monospace", fontSize: 13, resize: "vertical" }}
+            />
+          </label>
+          <p className="mute small">
+            Endpoint: <code>/v1/me</code> · Header: <code>Authorization: Bearer &lt;token&gt;</code>
+          </p>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit" disabled={isTokenBusy}>
+              <Icon name="check" size={18} /> {isTokenBusy ? "Verifying token..." : "Verify & Sign In"}
+            </button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>
+              <Icon name="chevL" size={18} /> Back to email sign in
+            </button>
           </div>
         </form>
       )}

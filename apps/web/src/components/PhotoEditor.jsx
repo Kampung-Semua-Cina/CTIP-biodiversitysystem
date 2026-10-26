@@ -74,10 +74,8 @@ export default function PhotoEditor({ photos, onSave, onClose, captions = false,
               >
                 <Img src={p.url} alt={p.caption || ""} />
                 <span className="num">{k + 1}</span>
-                {k === 0 && <span className="primary-badge"><Icon name="star" size={12} /></span>}
                 <div className="acts">
                   <button onClick={() => move(k, k - 1)} disabled={k === 0} aria-label="Move earlier"><Icon name="chevL" size={15} /></button>
-                  <button onClick={() => move(k, 0)} disabled={k === 0} aria-label="Make primary"><Icon name="star" size={15} /></button>
                   <button onClick={() => move(k, k + 1)} disabled={k === list.length - 1} aria-label="Move later"><Icon name="chevR" size={15} /></button>
                   <button onClick={() => setList(list.filter((x) => x.id !== p.id))} disabled={list.length <= min} aria-label="Remove photo"><Icon name="trash" size={15} /></button>
                 </div>

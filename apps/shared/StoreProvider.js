@@ -1,19 +1,34 @@
 // apps/shared/StoreProvider.js
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
 import { seed, seedPasswords, DEMO_USER, DEFAULT_PW } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
+import {
+  getAuthToken,
+  setAuthToken,
+  clearAuthToken,
+  fetchPublicSpecies,
+  fetchPublicSpeciesById,
+  fetchMe,
+  pingBackend,
+} from "./api.js";
 
-// Holds the sample database in memory. Every change a page makes goes through
-// one of the actions below, so it is easy to swap each one for a Supabase call.
+// Holds the sample database in memory with seamless integration to the backend API.
+// Live backend data from /v1/public/species and /v1/me synchronizes when available,
+// falling back gracefully to local sample data when offline or not yet implemented.
 // deviceId is written on new records ("web" or "mobile").
 export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [passwords, setPasswords] = useState(seedPasswords); // stands in for Supabase Auth
   const [userId, setUserId] = useState(null);
   const [toast, setToast] = useState("");
+  const [apiStatus, setApiStatus] = useState("checking"); // "checking" | "connected" | "offline"
+  const [apiError, setApiError] = useState(null);
+  const [authToken, setAuthTokenState] = useState(getAuthToken());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [backendSpeciesCount, setBackendSpeciesCount] = useState(0);
   const timer = useRef(null);
 
   const me = db.profiles.find((p) => p.id === userId) || null;
@@ -24,6 +39,94 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     setToast(message);
     timer.current = setTimeout(() => setToast(""), 2600);
   };
+
+  const syncWithBackend = useCallback(async (quiet = false) => {
+    setIsSyncing(true);
+    try {
+      const ping = await pingBackend();
+      if (!ping.online) {
+        setApiStatus("offline");
+        setApiError(ping.message || "Backend API is offline");
+        if (!quiet) notify("Backend API is offline — using local sample data");
+        return { ok: false, offline: true };
+      }
+
+      setApiStatus("connected");
+      setApiError(null);
+
+      // 1. Fetch live public species: GET /v1/public/species
+      const spRes = await fetchPublicSpecies();
+      if (spRes.ok && Array.isArray(spRes.data)) {
+        setBackendSpeciesCount(spRes.data.length);
+        setDb((prevDb) => {
+          const map = new Map(prevDb.species.map((s) => [s.scientific_name.toLowerCase(), s]));
+          for (const item of spRes.data) {
+            const key = item.scientific_name?.toLowerCase();
+            const existing = map.get(key) || prevDb.species.find((s) => s.id === item.id);
+            if (existing) {
+              map.set(key, {
+                ...existing,
+                ...item,
+                is_published: true,
+                is_deleted: false,
+              });
+            } else {
+              map.set(key, {
+                id: item.id || uid(),
+                scientific_name: item.scientific_name,
+                common_name: item.common_name || "",
+                family: item.family || "",
+                genus: item.genus || item.scientific_name.split(" ")[0] || "",
+                description: item.description || "",
+                conservation_status: item.conservation_status || "least concern",
+                cultural_significance: item.cultural_significance || "",
+                is_published: true,
+                is_deleted: false,
+              });
+            }
+          }
+          return { ...prevDb, species: Array.from(map.values()) };
+        });
+      }
+
+      // 2. If token exists, sync active user profile: GET /v1/me
+      const curToken = getAuthToken();
+      if (curToken) {
+        const meRes = await fetchMe(curToken);
+        if (meRes.ok && meRes.data) {
+          const profile = meRes.data;
+          setDb((prevDb) => {
+            const exists = prevDb.profiles.some((p) => p.id === profile.id);
+            return {
+              ...prevDb,
+              profiles: exists
+                ? prevDb.profiles.map((p) => (p.id === profile.id ? { ...p, ...profile } : p))
+                : [...prevDb.profiles, profile],
+            };
+          });
+          setUserId(profile.id);
+        } else if (meRes.code === "TOKEN_EXPIRED") {
+          clearAuthToken();
+          setAuthTokenState(null);
+          setUserId(null);
+          if (!quiet) notify("Backend session expired. Please sign in again.");
+        }
+      }
+
+      if (!quiet) notify("Synchronized with Backend API");
+      return { ok: true };
+    } catch (err) {
+      setApiStatus("offline");
+      setApiError(err?.message || "Failed to sync with API");
+      return { ok: false, error: err };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncWithBackend(true);
+  }, [syncWithBackend]);
 
   const auditRow = (table_name, record_id, action, old_value, new_value) => ({
     id: uid(), changed_by: userId, table_name, record_id, action, old_value, new_value, changed_at: nowIso(),
@@ -36,8 +139,79 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const officerIds = () => db.profiles.filter((p) => p.role === "officer" && p.is_active).map((p) => p.id);
 
   /* ---------- session ---------- */
-  const setRole = (key) => setUserId(key === "visitor" ? null : DEMO_USER[key]);
-  const logout = () => setUserId(null);
+  const setRole = (key) => {
+    clearAuthToken();
+    setAuthTokenState(null);
+    setUserId(key === "visitor" ? null : DEMO_USER[key]);
+  };
+
+  const logout = () => {
+    clearAuthToken();
+    setAuthTokenState(null);
+    setUserId(null);
+  };
+
+  // Authenticate using a Supabase JWT / Access Token against GET /v1/me
+  const loginWithToken = async (token) => {
+    if (!token || !token.trim()) return { ok: false, message: "Provide an access token" };
+    const cleanToken = token.trim();
+    setIsSyncing(true);
+    try {
+      const res = await fetchMe(cleanToken);
+      if (!res.ok) {
+        const msg = res.message || "Failed to authenticate with backend API";
+        notify(msg);
+        return { ok: false, message: msg, code: res.code };
+      }
+      const profile = res.data;
+      setAuthToken(cleanToken);
+      setAuthTokenState(cleanToken);
+      setDb((prevDb) => {
+        const exists = prevDb.profiles.some((p) => p.id === profile.id);
+        return {
+          ...prevDb,
+          profiles: exists
+            ? prevDb.profiles.map((p) => (p.id === profile.id ? { ...p, ...profile } : p))
+            : [...prevDb.profiles, profile],
+        };
+      });
+      setUserId(profile.id);
+      setApiStatus("connected");
+      notify(`Signed in as ${profile.full_name || profile.email} (${profile.role})`);
+      return { ok: true, profile };
+    } catch (err) {
+      const msg = err?.message || "Error connecting to backend API";
+      notify(msg);
+      return { ok: false, message: msg };
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Fetch full details of one species: GET /v1/public/species/:id
+  const getBackendSpeciesById = async (id) => {
+    if (!id) return null;
+    try {
+      const res = await fetchPublicSpeciesById(id);
+      if (res.ok && res.data) {
+        const detail = res.data;
+        setDb((prevDb) => {
+          const updatedSpecies = prevDb.species.map((s) => (s.id === detail.id ? { ...s, ...detail } : s));
+          let updatedMedia = prevDb.species_media;
+          if (Array.isArray(detail.media) && detail.media.length > 0) {
+            const otherMedia = prevDb.species_media.filter((m) => m.species_id !== detail.id);
+            updatedMedia = [...otherMedia, ...detail.media];
+          }
+          return { ...prevDb, species: updatedSpecies, species_media: updatedMedia };
+        });
+        return detail;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   // Supabase: supabase.auth.signInWithPassword({ email, password }), then read profiles.is_active.
   // Staff can type their username instead of their email; it is looked up to the email first.
   const login = (email, password) => {
@@ -373,6 +547,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,
+    apiStatus, apiError, authToken, isSyncing, backendSpeciesCount,
+    refreshFromBackend: () => syncWithBackend(false),
+    loginWithToken,
+    getBackendSpeciesById,
   };
 
   // Written without JSX so the web (Vite) and mobile (Metro) can both load this .js file.

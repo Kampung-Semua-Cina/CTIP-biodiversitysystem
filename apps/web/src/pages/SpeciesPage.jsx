@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
@@ -14,7 +14,13 @@ const MORE = 12;
 
 // One species: what it is, where it grows, and every tagged plant of it.
 export default function SpeciesPage({ id }) {
-  const { db, role, setSpeciesMedia, notify } = useStore();
+  const { db, role, setSpeciesMedia, notify, getBackendSpeciesById, apiStatus } = useStore();
+
+  useEffect(() => {
+    if (apiStatus === "connected" && id) {
+      getBackendSpeciesById(id);
+    }
+  }, [id, apiStatus, getBackendSpeciesById]);
   const staff = can(role, "pending");
   const [limit, setLimit] = useState(MORE);
   const [editing, setEditing] = useState(false);
