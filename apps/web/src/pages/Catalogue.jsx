@@ -108,7 +108,7 @@ export default function Catalogue() {
               <li key={s.id}>
                 <PlantCard href={"#/plants/" + s.id} photo={s.photo} family={s.family} name={s.name} scientific={s.scientific_name}
                   conservation={s.conservation_status}
-                  foot={plural(s.plants.length, "tagged plant", "tagged plants") + (!staff && s.endangered && s.plants.length > 0 ? " · locations hidden" : "")}>
+                  foot={plural(s.plants.length, "tagged plant", "tagged plants") + (!staff && s.endangered ? " · locations hidden" : "")}>
                   {staff && !s.is_published && <Chip value="draft">Not published</Chip>}
                 </PlantCard>
               </li>

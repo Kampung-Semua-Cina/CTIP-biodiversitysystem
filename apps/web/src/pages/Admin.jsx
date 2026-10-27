@@ -5,7 +5,6 @@ import Icon from "../components/Icon.jsx";
 import { Chip } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { ROLE_LABEL } from "../../../shared/permissions.js";
-import { DEFAULT_PW } from "../../../shared/data.js";
 import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
 
 // Admin page for accounts. Botanists and officers are registered here, not by themselves.
@@ -13,13 +12,18 @@ export function Users() {
   const { db, me, addUser, updateUser, notify } = useStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [newRole, setNewRole] = useState("botanist");
 
-  const add = (e) => {
+  const add = async (e) => {
     e.preventDefault();
-    if (!addUser({ full_name: name.trim(), email, role: newRole })) return notify("This email already has an account");
+    const res = await addUser({ full_name: name.trim(), email, role: newRole, password: password || undefined });
+    if (res === false || res?.ok === false) {
+      return notify(res?.message || "This email already has an account");
+    }
     setName("");
     setEmail("");
+    setPassword("");
     notify("Account added");
   };
 
@@ -32,6 +36,7 @@ export function Users() {
         <div className="row wrap">
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label>Temporary Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Supabase auth password" /></label>
           <label>Role
             <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
               {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
@@ -39,7 +44,7 @@ export function Users() {
           </label>
           <button className="btn" type="submit"><Icon name="plus" size={18} /> Add account</button>
         </div>
-        <p className="mute small">Default password: <span className="mono">{DEFAULT_PW}</span>. Give it to them yourself; they are asked to change it the first time they sign in, and can change it later from the login page.</p>
+        <p className="mute small">Accounts authenticate directly via Supabase Auth. Staff can also reset their password using the login page.</p>
       </form>
 
       <div className="tablewrap">

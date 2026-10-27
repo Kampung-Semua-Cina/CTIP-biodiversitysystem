@@ -13,19 +13,20 @@ const latest = (rows) => rows[rows.length - 1];
 // Order on the page: summary, open alerts, nodes, readings for the chosen node, alert history.
 export default function SensorOverview() {
   const { db, setThresholds, notify } = useStore();
-  const [nodeId, setNodeId] = useState(db.nodes[0].id);
+  const [nodeId, setNodeId] = useState(db.nodes?.[0]?.id || null);
   const [tab, setTab] = useState("acknowledged");
 
-  const node = db.nodes.find((n) => n.id === nodeId);
-  const data = db.telemetry[node.id] || [];
+  const node = db.nodes?.find((n) => n.id === nodeId) || db.nodes?.[0] || null;
+  const data = node ? db.telemetry[node.id] || [] : [];
   const plantOf = (n) => plantView(db, db.plants.find((p) => p.id === n.specimen_id));
   const byNewest = (a, b) => b.created_at.localeCompare(a.created_at);
   const open = db.alerts.filter((a) => a.status === "open").sort(byNewest);
   const history = db.alerts.filter((a) => a.status !== "open" && (tab === "all" || a.status === tab)).sort(byNewest);
-  const online = db.nodes.filter((n) => n.status === "active").length;
+  const online = (db.nodes || []).filter((n) => n.status === "active").length;
 
   const saveLimits = (e) => {
     e.preventDefault();
+    if (!node) return;
     const f = new FormData(e.target);
     setThresholds(node.id, { temp_max: Number(f.get("temp_max")), moisture_min: Number(f.get("moisture_min")) });
     notify("Limits saved");
@@ -57,45 +58,53 @@ export default function SensorOverview() {
 
       <section className="gap-section-s" aria-labelledby="nodes">
         <h2 id="nodes">Sensor nodes</h2>
-        <div className="grid g3">
-          {db.nodes.map((n) => {
-            const last = latest(db.telemetry[n.id] || []);
-            const up = n.status === "active";
-            return (
-              <button key={n.id} className={"glass nodecard" + (n.id === node.id ? " on" : "") + (up ? "" : " down")} aria-pressed={n.id === node.id} onClick={() => setNodeId(n.id)}>
-                <span className="row between"><b>{n.name}</b><span className={"dotstatus " + (up ? "up" : "off")}>{up ? "Online" : label(n.status)}</span></span>
-                <small className="mute">{plantOf(n).name} · <Mono>{plantOf(n).qr_id}</Mono></small>
-                {up && last ? (
-                  <span className="row"><span><Mono>{last.temperature}°C</Mono> temp</span><span><Mono>{last.soil_moisture}%</Mono> soil</span></span>
-                ) : (
-                  <span className="warntext"><b>No data since {fmtDateTime(n.last_seen)}</b></span>
-                )}
-                <small className="mute">{up ? `Updated ${fmtDateTime(n.last_seen)}` : "Check the node's battery or Wi-Fi"}</small>
-              </button>
-            );
-          })}
-        </div>
+        {db.nodes.length === 0 ? (
+          <div className="glass pad"><Empty icon="shield">No sensor nodes have been registered yet.</Empty></div>
+        ) : (
+          <div className="grid g3">
+            {db.nodes.map((n) => {
+              const last = latest(db.telemetry[n.id] || []);
+              const up = n.status === "active";
+              return (
+                <button key={n.id} className={"glass nodecard" + (n.id === node?.id ? " on" : "") + (up ? "" : " down")} aria-pressed={n.id === node?.id} onClick={() => setNodeId(n.id)}>
+                  <span className="row between"><b>{n.name}</b><span className={"dotstatus " + (up ? "up" : "off")}>{up ? "Online" : label(n.status)}</span></span>
+                  <small className="mute">{plantOf(n).name} · <Mono>{plantOf(n).qr_id}</Mono></small>
+                  {up && last ? (
+                    <span className="row"><span><Mono>{last.temperature}°C</Mono> temp</span><span><Mono>{last.soil_moisture}%</Mono> soil</span></span>
+                  ) : (
+                    <span className="warntext"><b>No data since {fmtDateTime(n.last_seen)}</b></span>
+                  )}
+                  <small className="mute">{up ? `Updated ${fmtDateTime(n.last_seen)}` : "Check the node's battery or Wi-Fi"}</small>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
-      <section className="glass pad gap-section-s" aria-labelledby="readings">
-        <div className="row between wrap">
-          <h2 id="readings">{node.name} readings</h2>
-          <span className="mute small row"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" className="spark-limit" /></svg> alert limit</span>
-        </div>
-        <div className="charts">
-          <Sparkline title="Temperature" unit="°C" values={data.map((d) => d.temperature)} limit={node.thresholds.temp_max} />
-          <Sparkline title="Soil moisture" unit="%" values={data.map((d) => d.soil_moisture)} limit={node.thresholds.moisture_min} />
-        </div>
+      {node && (
+        <section className="glass pad gap-section-s" aria-labelledby="readings">
+          <div className="row between wrap">
+            <h2 id="readings">{node.name} readings</h2>
+            <span className="mute small row"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" className="spark-limit" /></svg> alert limit</span>
+          </div>
+          <div className="charts">
+            <Sparkline title="Temperature" unit="°C" values={data.map((d) => d.temperature)} limit={node.thresholds?.temp_max} />
+            <Sparkline title="Soil moisture" unit="%" values={data.map((d) => d.soil_moisture)} limit={node.thresholds?.moisture_min} />
+          </div>
 
-        <details className="limits">
-          <summary>Alert limits for {node.name} · {node.thresholds.temp_max}°C max, {node.thresholds.moisture_min}% soil min</summary>
-          <form key={node.id} className="row wrap" onSubmit={saveLimits}>
-            <label>Temperature max (°C)<input name="temp_max" type="number" step="0.5" defaultValue={node.thresholds.temp_max} /></label>
-            <label>Soil moisture min (%)<input name="moisture_min" type="number" step="1" defaultValue={node.thresholds.moisture_min} /></label>
-            <button className="btn ghost" type="submit"><Icon name="check" size={18} /> Save limits</button>
-          </form>
-        </details>
-      </section>
+          {node.thresholds && (
+            <details className="limits">
+              <summary>Alert limits for {node.name} · {node.thresholds.temp_max}°C max, {node.thresholds.moisture_min}% soil min</summary>
+              <form key={node.id} className="row wrap" onSubmit={saveLimits}>
+                <label>Temperature max (°C)<input name="temp_max" type="number" step="0.5" defaultValue={node.thresholds.temp_max} /></label>
+                <label>Soil moisture min (%)<input name="moisture_min" type="number" step="1" defaultValue={node.thresholds.moisture_min} /></label>
+                <button className="btn ghost" type="submit"><Icon name="check" size={18} /> Save limits</button>
+              </form>
+            </details>
+          )}
+        </section>
+      )}
 
       <section className="gap-section-s" aria-labelledby="history">
         <h2 id="history">Alert history</h2>

@@ -2,7 +2,7 @@
 // Plant map: every plant this role may see as a pin on OpenStreetMap / Leaflet.
 // Endangered plants have no pin for visitors (their location is protected, CTIP-71).
 // Aligned to the Daun design language with Lucide line icons, search, and live user tracking.
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Img from "../components/Img.jsx";
 import Icon from "../components/Icon.jsx";
 import { Mono, Sci } from "../components/Bits.jsx";
@@ -13,16 +13,58 @@ import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../sha
 import { MAP_BOUNDS } from "../../../shared/mapConfig.js";
 
 export default function MapPage({ arg }) {
-  const { db, role } = useStore();
+  const { db, role, getDistributionPoints } = useStore();
+  const [apiDistribution, setApiDistribution] = useState(null);
   const [picked, setPicked] = useState(null);
   const [only, setOnly] = useState(null); // family picked in the legend, or null for all
   const [q, setQ] = useState("");
   const staff = can(role, "pending");
 
-  const plants = visiblePlants(db, role);
+  // Fetch API-sanitized distribution coordinates (CTIP-88: snaps endangered coordinates to ~1.1km grid for non-officers)
+  useEffect(() => {
+    let active = true;
+    if (getDistributionPoints) {
+      getDistributionPoints().then((res) => {
+        if (active && res?.ok && res.source === "api" && Array.isArray(res.points)) {
+          setApiDistribution(res.points);
+        }
+      }).catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [getDistributionPoints, role]);
+
+  const plants = useMemo(() => {
+    if (apiDistribution) {
+      return apiDistribution.map((pt) => {
+        const local = db.plants.find((p) => p.id === pt.specimen_id || p.qr_id === pt.qr_id);
+        return {
+          id: pt.specimen_id,
+          qr_id: pt.qr_id,
+          name: pt.common_name || local?.name || pt.scientific_name || "Unknown plant",
+          scientific: pt.scientific_name || local?.scientific || "",
+          species: {
+            id: pt.species_id,
+            scientific_name: pt.scientific_name,
+            common_name: pt.common_name,
+            family: pt.family,
+            conservation_status: pt.conservation_status,
+          },
+          photos: local?.photos || [],
+          endangered: pt.endangered,
+          location_reduced: pt.location_reduced,
+          lat: pt.lat,
+          lng: pt.lng,
+        };
+      });
+    }
+    return visiblePlants(db, role);
+  }, [apiDistribution, db, role]);
+
   const colors = useMemo(() => familyColors(db.species, plants), [db.species, plants]);
   const families = useMemo(
-    () => [...new Set(plants.map((p) => p.species?.family).filter(Boolean))].sort(),
+    () => [...new Set(plants.map((p) => familyOf(p)).filter(Boolean))].sort(),
     [plants],
   );
 
@@ -31,10 +73,15 @@ export default function MapPage({ arg }) {
     const s = plants
       .filter((p) => !only || familyOf(p) === only)
       .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].join(" ").toLowerCase().includes(needle))
-      .map((p) => ({ p, c: shownCoords(p, role) }));
+      .map((p) => {
+        if (apiDistribution) {
+          return { p, c: (p.lat != null && p.lng != null) ? { lat: p.lat, lng: p.lng } : null };
+        }
+        return { p, c: shownCoords(p, role) };
+      });
     const m = s.filter((x) => x.c);
     return { onMap: m, hidden: s.length - m.length };
-  }, [plants, only, needle, role]);
+  }, [plants, only, needle, role, apiDistribution]);
 
   const selId = picked || arg;
   const sel = onMap.find((x) => x.p.qr_id === selId || x.p.id === selId) || onMap[0];
@@ -135,7 +182,7 @@ export default function MapPage({ arg }) {
             <b>{sel.p.name}</b>
             {sel.p.scientific ? <Sci block className="small">{sel.p.scientific}</Sci> : <Mono className="block">{sel.p.qr_id}</Mono>}
             <small className="mute block">
-              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>
+              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>{sel.p.location_reduced ? " (approximate ~1.1km area)" : ""}
             </small>
           </span>
           <a className="btn" href={"#/tag/" + sel.p.qr_id}>

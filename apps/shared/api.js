@@ -190,6 +190,34 @@ export async function fetchMe(token) {
 }
 
 /**
+ * Submit an observation review: POST /v1/observations/:id/reviews
+ * (CTIP-86 locked review endpoint with transactional RPC).
+ */
+export async function submitReviewApi({ observationId, decision, version = 1, comment, token }) {
+  return apiFetch(`/observations/${encodeURIComponent(observationId)}/reviews`, {
+    method: "POST",
+    token,
+    body: {
+      decision,
+      observation_version: version,
+      comment: comment || undefined,
+    },
+  });
+}
+
+/**
+ * Fetch distribution map points: GET /v1/distribution
+ * (CTIP-88: snaps endangered plant coordinates to ~1.1km grid for non-officers).
+ */
+export async function fetchDistribution({ speciesId, family, token } = {}) {
+  const query = new URLSearchParams();
+  if (speciesId) query.set("species_id", speciesId);
+  if (family) query.set("family", family);
+  const qStr = query.toString();
+  return apiFetch(`/distribution${qStr ? `?${qStr}` : ""}`, { token });
+}
+
+/**
  * Check if the backend API server is reachable and active.
  */
 export async function pingBackend() {

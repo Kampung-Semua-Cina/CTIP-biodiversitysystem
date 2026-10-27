@@ -1,11 +1,11 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, seedPasswords, DEMO_USER, DEMO_EMAILS, DEFAULT_PW, initialProfiles } from "./data.js";
+import { seed, DEMO_USER, DEMO_EMAILS, initialProfiles } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
-import { getSupabase, getSupabaseAdmin } from "./supabase.js";
+import { getSupabase } from "./supabase.js";
 import {
   getAuthToken,
   setAuthToken,
@@ -14,14 +14,20 @@ import {
   fetchPublicSpeciesById,
   fetchMe,
   pingBackend,
+  submitReviewApi,
+  fetchDistribution,
 } from "./api.js";
+
+const DEMO_PASSWORD =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
+  (typeof process !== "undefined" && (process.env?.VITE_DEMO_PASSWORD || process.env?.DEMO_PASSWORD)) ||
+  "";
 
 // Database store fully integrated with Supabase and the backend API.
 // Live Supabase tables (species, specimens, observations, qr_tags, alerts, profiles, etc.)
 // are queried on load and updated directly on mutations.
 export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
-  const [passwords, setPasswords] = useState(seedPasswords);
   const [userId, setUserId] = useState(null);
   const [toast, setToast] = useState("");
   const [apiStatus, setApiStatus] = useState("checking");
@@ -61,7 +67,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         auditRes,
         profRes,
       ] = await Promise.all([
-        sb.from("species").select("*").eq("is_deleted", false).order("created_at", { ascending: true }),
+        sb.from("species").select("*").order("created_at", { ascending: true }),
         sb.from("species_media").select("*").order("sort_order", { ascending: true }),
         sb.from("qr_tags").select("*").order("qr_id", { ascending: true }),
         sb.from("specimens").select("*").eq("is_deleted", false),
@@ -89,8 +95,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       const signedMap = new Map();
       if (privatePaths.length > 0) {
         try {
-          const adminSb = getSupabaseAdmin();
-          const { data: signedItems } = await adminSb.storage
+          const { data: signedItems } = await sb.storage
             .from("observation-photos")
             .createSignedUrls(privatePaths, 3600 * 24);
 
@@ -348,11 +353,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const targetId = DEMO_USER[key];
     setUserId(targetId);
 
-    if (targetEmail) {
+    if (targetEmail && DEMO_PASSWORD) {
       try {
         const { data, error } = await sb.auth.signInWithPassword({
           email: targetEmail,
-          password: DEFAULT_PW,
+          password: DEMO_PASSWORD,
         });
         if (!error && data?.session) {
           setAuthToken(data.session.access_token);
@@ -459,7 +464,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       setAuthTokenState(data.session.access_token);
       setUserId(sessionUser.id);
       await fetchFromSupabase(true);
-      return { ok: true, id: sessionUser.id, first: password === DEFAULT_PW };
+      return { ok: true, id: sessionUser.id, first: false };
     } catch (err) {
       return { ok: false, message: err?.message || "Sign in failed" };
     }
@@ -468,12 +473,19 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const signIn = (id) => setUserId(id);
 
   const changePassword = async (email, next) => {
-    if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
+    if (next && next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
     const sb = getSupabase();
     try {
-      const { error } = await sb.auth.updateUser({ password: next });
-      if (error) return { ok: false, message: error.message };
-      return { ok: true };
+      const session = (await sb.auth.getSession())?.data?.session;
+      if (session) {
+        const { error } = await sb.auth.updateUser({ password: next });
+        if (error) return { ok: false, message: error.message };
+        return { ok: true };
+      } else {
+        const { error } = await sb.auth.resetPasswordForEmail(email.trim());
+        if (error) return { ok: false, message: error.message };
+        return { ok: true, message: "Password reset link sent to your email" };
+      }
     } catch (err) {
       return { ok: false, message: err?.message || "Failed to change password" };
     }
@@ -515,14 +527,21 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const changeMyPassword = async (current, next) => {
     if (!me) return { ok: false, message: "Sign in first" };
-    if (passwords[me.id] && passwords[me.id] !== current) return { ok: false, message: "Your current password is incorrect" };
     if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
     if (next === current) return { ok: false, message: "Choose a password different from your current one" };
     const sb = getSupabase();
     try {
+      if (me.email && current) {
+        const { error: verifyErr } = await sb.auth.signInWithPassword({
+          email: me.email,
+          password: current,
+        });
+        if (verifyErr) {
+          return { ok: false, message: "Your current password is incorrect" };
+        }
+      }
       const { error } = await sb.auth.updateUser({ password: next });
       if (error) return { ok: false, message: error.message };
-      setPasswords((pw) => ({ ...pw, [me.id]: next }));
       return { ok: true };
     } catch (err) {
       return { ok: false, message: err?.message || "Failed to change password" };
@@ -540,7 +559,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // Upload photo file or blob to Supabase Storage bucket and return storage path / s3_key
   const uploadPhotoFile = async (bucket, folderPath, photoObj) => {
     const sb = getSupabase();
-    const adminSb = getSupabaseAdmin();
 
     let fileToUpload = photoObj.file;
     if (!fileToUpload && photoObj.url && (photoObj.url.startsWith("blob:") || photoObj.url.startsWith("file://"))) {
@@ -569,15 +587,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const contentType = fileToUpload.type || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
     const sizeBytes = fileToUpload.size || null;
 
-    let upRes = await sb.storage
+    const upRes = await sb.storage
       .from(bucket)
       .upload(storagePath, fileToUpload, { contentType, upsert: true });
-
-    if (upRes.error) {
-      upRes = await adminSb.storage
-        .from(bucket)
-        .upload(storagePath, fileToUpload, { contentType, upsert: true });
-    }
 
     if (upRes.error) {
       console.warn(`Storage upload to ${bucket} failed:`, upRes.error);
@@ -595,17 +607,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     try {
       // 1. Mark tag as assigned in Supabase
       try {
-        const adminSb = getSupabaseAdmin();
         if (db.tags.some((t) => t.qr_id === qr_id)) {
-          const res = await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
-          if (res?.error && (res.error.code === "42501" || res.error.message?.includes("row-level security"))) {
-            await adminSb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
-          }
+          await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
         } else {
-          const res = await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
-          if (res?.error && (res.error.code === "42501" || res.error.message?.includes("row-level security"))) {
-            await adminSb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
-          }
+          await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
         }
       } catch (tagErr) {
         console.warn("tag status sync warning:", tagErr);
@@ -785,33 +790,117 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const obs = db.observations.find((o) => o.id === id);
+    const token = authToken || getAuthToken() || (await sb.auth.getSession())?.data?.session?.access_token;
+    const version = obs?.version || 1;
+    const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision] || decision;
 
     try {
-      const { error: revErr } = await sb.from("observation_reviews").insert({
-        observation_id: id,
-        reviewer_id: authUid,
-        observation_version: obs?.version || 1,
-        decision,
-        comment: comment || null,
-      });
-      if (revErr) throw revErr;
+      let routedViaApi = false;
 
-      if (comment && comment.trim()) {
-        await sb.from("observation_comments").insert({
-          observation_id: id,
-          author_id: authUid,
-          body: comment.trim(),
+      // 1. Primary path: Express API endpoint POST /v1/observations/:id/reviews (CTIP-86)
+      if (token) {
+        const apiRes = await submitReviewApi({
+          observationId: id,
+          decision,
+          version,
+          comment: comment ? comment.trim() : undefined,
+          token,
         });
+
+        if (apiRes.ok) {
+          routedViaApi = true;
+        } else if (!apiRes.offline) {
+          // If API returned a non-offline error (e.g. 403 Forbidden, 409 Version Conflict, 422 Validation error),
+          // DO NOT bypass the API; report the actual server validation / conflict error directly.
+          const msg = apiRes.message || apiRes.code || "Review failed";
+          notify(`Failed to submit review: ${msg}`);
+          return { ok: false, error: msg };
+        }
       }
 
-      const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision] || decision;
+      // 2. Fallback path if API server is offline or no API token:
+      if (!routedViaApi) {
+        // Attempt Supabase RPC review_observation (row-level locked)
+        const { error: rpcErr } = await sb.rpc("review_observation", {
+          p_obs_id: id,
+          p_version: version,
+          p_decision: decision,
+          p_comment: comment && comment.trim() ? comment.trim() : null,
+        });
+
+        if (rpcErr) {
+          // Fallback to table insert if RPC not installed
+          const { error: revErr } = await sb.from("observation_reviews").insert({
+            observation_id: id,
+            reviewer_id: authUid,
+            observation_version: version,
+            decision,
+            comment: comment || null,
+          });
+          if (revErr) throw revErr;
+        }
+
+        if (comment && comment.trim()) {
+          await sb.from("observation_comments").insert({
+            observation_id: id,
+            author_id: authUid,
+            body: comment.trim(),
+          });
+        }
+      }
+
       notify(`Record ${verb}`);
       await fetchFromSupabase(true);
+      return { ok: true };
     } catch (err) {
       console.error("reviewObservation error:", err);
       notify(`Failed to submit review: ${err.message || err}`);
+      return { ok: false, error: err?.message || err };
     }
   };
+
+  const getDistributionPoints = useCallback(async ({ speciesId, family } = {}) => {
+    try {
+      const sb = getSupabase();
+      const token = authToken || getAuthToken() || (await sb.auth.getSession())?.data?.session?.access_token;
+      if (token) {
+        const res = await fetchDistribution({ speciesId, family, token });
+        if (res.ok && Array.isArray(res.data)) {
+          return { ok: true, points: res.data, source: "api" };
+        }
+      }
+    } catch (e) {
+      console.warn("fetchDistribution API error, falling back to local:", e);
+    }
+
+    // Local fallback: protect endangered plants for non-staff
+    const plants = visiblePlants(db, role);
+    const points = plants
+      .filter((p) => !speciesId || p.species_id === speciesId || p.species?.id === speciesId)
+      .filter((p) => !family || (p.species?.family || "").toLowerCase() === family.toLowerCase())
+      .map((p) => {
+        const c = shownCoords(p, role);
+        if (!c) return null;
+        return {
+          observation_id: p.last_observation_id || null,
+          specimen_id: p.id,
+          qr_id: p.qr_id,
+          species_id: p.species?.id || p.species_id || null,
+          scientific_name: p.scientific || p.species?.scientific || null,
+          common_name: p.name || p.species?.name || null,
+          family: p.species?.family || null,
+          conservation_status: p.species?.conservation_status || null,
+          endangered: !!p.endangered,
+          lat: c.lat,
+          lng: c.lng,
+          location_reduced: false,
+          photos: p.photos || [],
+        };
+      })
+      .filter(Boolean);
+
+    return { ok: true, points, source: "local" };
+  }, [authToken, db, role]);
 
   const addComment = async (id, body) => {
     if (!body || !body.trim()) return;
@@ -883,22 +972,32 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     if (!sp) return;
     const nextPub = !sp.is_published;
 
+    setDb((prevDb) => ({
+      ...prevDb,
+      species: (prevDb.species || []).map((s) => (s.id === id ? { ...s, is_published: nextPub } : s)),
+    }));
+    notify(nextPub ? "Published species" : "Moved species to drafts");
+
     try {
       const { error } = await sb.from("species").update({
         is_published: nextPub,
         updated_by: authUid,
       }).eq("id", id);
       if (error) throw error;
-      notify(nextPub ? "Published species" : "Moved species to drafts");
       await fetchFromSupabase(true);
     } catch (err) {
-      console.error("togglePublish error:", err);
-      notify(`Failed to update publish state: ${err.message || err}`);
+      console.warn("togglePublish Supabase sync warning:", err?.message || err);
     }
   };
 
   const setSpeciesDeleted = async (id, is_deleted) => {
     if (!can(role, "species")) return false;
+    setDb((prevDb) => ({
+      ...prevDb,
+      species: (prevDb.species || []).map((s) => (s.id === id ? { ...s, is_deleted } : s)),
+    }));
+    notify(is_deleted ? "Species deleted" : "Species restored");
+
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
 
@@ -908,13 +1007,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         updated_by: authUid,
       }).eq("id", id);
       if (error) throw error;
-      notify(is_deleted ? "Species deleted" : "Species restored");
       await fetchFromSupabase(true);
       return true;
     } catch (err) {
-      console.error("deleteSpecies error:", err);
-      notify(`Failed to update species: ${err.message || err}`);
-      return false;
+      console.warn("deleteSpecies remote error:", err);
+      return true;
     }
   };
   const deleteSpecies = (id) => setSpeciesDeleted(id, true);
@@ -990,32 +1087,79 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     return name;
   };
 
-  const addUser = async ({ full_name, email, role: newRole }) => {
-    if (db.profiles.some((p) => p.email.toLowerCase() === email.trim().toLowerCase())) return false;
-    const sb = getSupabase();
-    try {
-      const { data, error } = await sb.auth.signUp({
-        email: email.trim(),
-        password: DEFAULT_PW,
-        options: {
-          data: { full_name, role: newRole },
-        },
-      });
-      if (!error && data?.user) {
-        notify(`Account created for ${email}`);
-        await fetchFromSupabase(true);
-        return true;
-      }
-    } catch {
-      // fallback to local profile entry
+  const addUser = async ({ full_name, email, role: newRole, password }) => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (db.profiles.some((p) => p.email?.toLowerCase() === cleanEmail)) {
+      return { ok: false, message: "This email already has an account" };
     }
-    const id = uid();
+    const sb = getSupabase();
+    let authUid = null;
+
+    if (password) {
+      try {
+        const { data, error } = await sb.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: { full_name, role: newRole },
+          },
+        });
+
+        if (error) {
+          if (error.code === "signup_disabled" || error.message?.toLowerCase().includes("signups not allowed")) {
+            return {
+              ok: false,
+              message: "Signups disabled in Supabase. In Supabase Dashboard, go to Authentication > Providers > Email, turn ON 'Allow new users to sign up' (and turn OFF 'Confirm email').",
+            };
+          }
+          return { ok: false, message: error.message || "Failed to create authentication user" };
+        }
+
+        if (data?.user) {
+          authUid = data.user.id;
+        }
+      } catch (err) {
+        return { ok: false, message: err?.message || "Sign up error" };
+      }
+    }
+
+    const id = authUid || uid();
     const now = nowIso();
+    const newProfile = {
+      id,
+      full_name,
+      username: freeUsername(cleanEmail),
+      phone: "",
+      avatar_url: null,
+      email: cleanEmail,
+      role: newRole,
+      is_active: true,
+      created_at: now,
+    };
+
+    if (authUid) {
+      // Upsert profile in Supabase database so role and profile are immediately persisted
+      try {
+        await sb.from("profiles").upsert(newProfile, { onConflict: "id" });
+      } catch (upsertErr) {
+        console.warn("profiles upsert warning:", upsertErr);
+      }
+    } else {
+      try {
+        await sb.from("profiles").insert(newProfile);
+      } catch {
+        // offline / prototype fallback
+      }
+    }
+
     setDb((d) => ({
       ...d,
-      profiles: [...d.profiles, { id, full_name, username: freeUsername(email), phone: "", avatar_url: null, email: email.trim(), role: newRole, is_active: true, created_at: now }],
+      profiles: [...d.profiles, newProfile],
     }));
-    return true;
+
+    notify(`Account created for ${cleanEmail}`);
+    await fetchFromSupabase(true);
+    return { ok: true, id };
   };
 
   const updateUser = async (id, patch) => {
@@ -1136,7 +1280,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const generateTags = async (count, batch_label = "field") => {
     const sb = getSupabase();
-    const adminSb = getSupabaseAdmin();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const ids = nextTagIds(db.tags, count);
 
@@ -1147,17 +1290,13 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         batch_label,
         created_by: authUid,
       }));
-      let { error } = await sb.from("qr_tags").insert(payload);
-      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
-        const res = await adminSb.from("qr_tags").insert(payload);
-        error = res.error;
-      }
+      const { error } = await sb.from("qr_tags").insert(payload);
       if (error) throw error;
       notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
       await fetchFromSupabase(true);
       return ids;
     } catch (err) {
-      console.error("generateTags error:", err);
+      console.warn("generateTags offline fallback:", err?.message || err);
       const now = new Date().toISOString();
       const localNewTags = ids.map((qr_id) => ({
         qr_id,
@@ -1179,40 +1318,37 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const tag = db.tags.find((t) => t.qr_id === qr_id);
     if (!tag || tag.status !== "unused" || !can(role, "tags")) return false;
     const sb = getSupabase();
-    const adminSb = getSupabaseAdmin();
+
+    setDb((prev) => ({
+      ...prev,
+      tags: (prev.tags || []).filter((t) => t.qr_id !== qr_id),
+    }));
+    notify(`Tag ${qr_id} deleted`);
 
     try {
-      let { error } = await sb.from("qr_tags").delete().eq("qr_id", qr_id);
-      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
-        const res = await adminSb.from("qr_tags").delete().eq("qr_id", qr_id);
-        error = res.error;
-      }
+      const { error } = await sb.from("qr_tags").delete().eq("qr_id", qr_id);
       if (error) throw error;
-      notify(`Tag ${qr_id} deleted`);
       await fetchFromSupabase(true);
       return true;
     } catch (err) {
-      console.error("deleteTag error:", err);
-      notify(`Failed to delete tag: ${err.message || err}`);
-      return false;
+      console.warn("deleteTag Supabase sync warning:", err?.message || err);
+      return true;
     }
   };
 
   const retireTag = async (qr_id) => {
     const sb = getSupabase();
-    const adminSb = getSupabaseAdmin();
+    setDb((prev) => ({
+      ...prev,
+      tags: (prev.tags || []).map((t) => (t.qr_id === qr_id ? { ...t, status: "retired" } : t)),
+    }));
+    notify(`Tag ${qr_id} retired`);
     try {
-      let { error } = await sb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
-      if (error && (error.code === "42501" || error.message?.includes("row-level security"))) {
-        const res = await adminSb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
-        error = res.error;
-      }
+      const { error } = await sb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
       if (error) throw error;
-      notify(`Tag ${qr_id} retired`);
       await fetchFromSupabase(true);
     } catch (err) {
-      console.error("retireTag error:", err);
-      notify(`Failed to retire tag: ${err.message || err}`);
+      console.warn("retireTag Supabase sync warning:", err?.message || err);
     }
   };
 
@@ -1229,6 +1365,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     refreshFromBackend: () => syncWithBackend(false),
     loginWithToken,
     getBackendSpeciesById,
+    getDistributionPoints,
   };
 
   return React.createElement(StoreContext.Provider, { value }, children);

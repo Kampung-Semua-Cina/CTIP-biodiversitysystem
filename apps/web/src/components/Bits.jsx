@@ -22,9 +22,10 @@ export function PasswordInput(props) {
 
 // Round profile picture, or the person's initials when they have no photo.
 export function Avatar({ user, large }) {
+  const name = user?.full_name || user?.email || user?.username || "?";
   return (
     <span className={"avatar" + (large ? " lg" : "")} aria-hidden="true">
-      {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : initials(user?.full_name)}
+      {user?.avatar_url ? <img src={user.avatar_url} alt="" /> : initials(name)}
     </span>
   );
 }

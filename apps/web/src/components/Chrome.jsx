@@ -131,13 +131,13 @@ function AccountMenu({ me, seg, unread, onLogout }) {
           <Avatar user={me} />
           {unread > 0 && <b className={"badge" + (open ? " gone" : "")} aria-hidden="true">{unread}</b>}
         </span>
-        <span className="whoname"><b>{me.full_name}</b><small>{ROLE_LABEL[me.role]}</small></span>
+        <span className="whoname"><b>{me.full_name || me.email || me.username}</b><small>{ROLE_LABEL[me.role] || me.role}</small></span>
         <Icon name="chevD" size={16} />
       </button>
       <div id="accountmenu" className={"menu" + (open ? " open" : "")}>
         <div className="menuhead">
           <Avatar user={me} />
-          <span className="whoname"><b>{me.full_name}</b><small>@{me.username} · {ROLE_LABEL[me.role]}</small></span>
+          <span className="whoname"><b>{me.full_name || me.email || me.username}</b><small>@{me.username || me.email?.split("@")[0]} · {ROLE_LABEL[me.role] || me.role}</small></span>
         </div>
         <a href="#/account" onClick={close}><Icon name="settings" size={20} /> Account settings</a>
         <a href="#/notifications" onClick={close}>
@@ -256,7 +256,7 @@ export function Footer({ role, mode, onMode }) {
         <div className="footbar">
           <span>
             © 2026 {SITE} · A CTIP project
-            {me && <> · Signed in as <b>{me.full_name}</b> ({ROLE_LABEL[me.role]})</>}
+            {me && <> · Signed in as <b>{me.full_name || me.email}</b> ({ROLE_LABEL[me.role] || me.role})</>}
           </span>
           <span className="footactions">
             <ThemeSwitch mode={mode} onMode={onMode} />

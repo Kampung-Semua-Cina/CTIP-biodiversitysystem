@@ -1,18 +1,7 @@
 // apps/shared/data.js
 // Database schema constants, staff profiles, and clean initial store state.
 
-// Password given to every new account. Admins see it on the Users page; the login page does not show it.
-export const DEFAULT_PW = "Niah@1234";
-
-// Sign-in passwords, keyed by profiles.id.
-export const seedPasswords = {
-  "b8372536-a1c4-41d6-8b14-d700b6379949": DEFAULT_PW, // admin123456@gmail.com
-  "a6a215b0-2b03-4f0e-9a1d-52da140525a4": DEFAULT_PW, // officer123@gmail.com
-  "b534e73d-1431-43c5-8383-5c68cee64b96": DEFAULT_PW, // botanist123@gmail.com
-  "f444107e-6519-4dfc-aff1-40724daf634d": DEFAULT_PW, // test123@gmail.com
-};
-
-// Demo sign-in used by the "View as" switch: role key -> profiles.id
+// Demo user identifier mapping used by the "View as" switch: role key -> profiles.id
 export const DEMO_USER = {
   botanist: "b534e73d-1431-43c5-8383-5c68cee64b96",
   officer: "a6a215b0-2b03-4f0e-9a1d-52da140525a4",

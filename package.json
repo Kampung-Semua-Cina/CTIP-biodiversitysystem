@@ -13,6 +13,8 @@
     "web": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint",
+    "test:agent": "npm --prefix apps/web run test:agent",
+    "test:agent:ui": "npm --prefix apps/web run test:agent:ui",
     "api": "npm --prefix services/api run dev",
     "api:start": "npm --prefix services/api run start",
     "api:test": "npm --prefix services/api run test"

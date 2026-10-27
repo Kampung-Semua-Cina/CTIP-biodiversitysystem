@@ -1,22 +1,25 @@
 // apps/shared/supabase.js
 import { createClient } from "@supabase/supabase-js";
 
-// Read from Vite environment variables with fallback to configured project credentials
-const SUPABASE_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL)
-  || "https://cgtvoirktzqjqaosslfh.supabase.co";
+// Read exclusively from environment variables with zero hardcoded credentials
+const SUPABASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) ||
+  (typeof process !== "undefined" && (process.env?.EXPO_PUBLIC_SUPABASE_URL || process.env?.SUPABASE_URL || process.env?.VITE_SUPABASE_URL)) ||
+  "";
 
-const SUPABASE_ANON_KEY = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY)
-  || "sb_publishable_gbGnDBj09s7kG_5VJfgaNw_n8ICe-zY";
-
-const SUPABASE_SECRET_KEY = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_SECRET_KEY)
-  || "sb_secret_eRIvLWVz-JSSZ4gSvzPIgA_J6UZUpgt";
+const SUPABASE_ANON_KEY =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== "undefined" && (process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY || process.env?.SUPABASE_PUBLISHABLE_KEY || process.env?.VITE_SUPABASE_ANON_KEY)) ||
+  "";
 
 let supabaseClient = null;
-let supabaseAdmin = null;
 
 export function getSupabase() {
   if (!supabaseClient) {
-    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.warn("Supabase credentials missing: check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.");
+    }
+    supabaseClient = createClient(SUPABASE_URL || "https://placeholder.supabase.co", SUPABASE_ANON_KEY || "placeholder-anon-key", {
       auth: {
         persistSession: typeof window !== "undefined",
         autoRefreshToken: true,
@@ -26,16 +29,4 @@ export function getSupabase() {
   return supabaseClient;
 }
 
-export function getSupabaseAdmin() {
-  if (!supabaseAdmin) {
-    supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-  }
-  return supabaseAdmin;
-}
-
-export { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SECRET_KEY };
+export { SUPABASE_URL, SUPABASE_ANON_KEY };
