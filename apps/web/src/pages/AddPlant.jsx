@@ -21,6 +21,7 @@ export default function AddPlant() {
   const [photos, setPhotos] = useState([]);
   const [spot, setSpot] = useState({ lat: 3.8031, lng: 113.7762, acc: null });
   const [printing, setPrinting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const unused = db.tags.filter((t) => t.status === "unused");
 
@@ -32,9 +33,15 @@ export default function AddPlant() {
     e.target.value = "";
   };
 
-  const generate = () => {
-    const [id] = generateTags(1, "field");
-    setQr(id);
+  const generate = async () => {
+    try {
+      const ids = await generateTags(1, "field");
+      if (ids && ids.length > 0) {
+        setQr(ids[0]);
+      }
+    } catch (err) {
+      console.error("Failed to generate tag:", err);
+    }
   };
 
   const locate = () => {
@@ -46,21 +53,32 @@ export default function AddPlant() {
   };
 
   const onPhotos = (e) => {
-    const added = [...e.target.files].map((f) => ({ url: URL.createObjectURL(f) }));
+    const files = [...e.target.files];
+    const added = files.map((f) => ({
+      file: f,
+      url: URL.createObjectURL(f),
+      name: f.name,
+      type: f.type,
+      size: f.size,
+    }));
     setPhotos([...photos, ...added]);
     e.target.value = "";
   };
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
     if (!qr) return notify("Choose or generate a QR tag first");
     if (!photos.length) return notify("Add at least one photo");
-    addPlant({
+    setSaving(true);
+    const res = await addPlant({
       qr_id: qr, proposed_species: guess, morphology, height_cm: height, notes, photos,
       lat: spot.lat, lng: spot.lng, gps_accuracy_m: spot.acc ?? 10,
     });
-    notify("Plant sent for review");
-    go("/records");
+    setSaving(false);
+    if (res?.ok !== false) {
+      notify("Plant sent for review");
+      go("/records");
+    }
   };
 
   return (
@@ -109,7 +127,11 @@ export default function AddPlant() {
           <span className="mute"><Mono>{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}</Mono>{spot.acc ? ` ±${spot.acc} m` : ""}</span>
         </div>
 
-        <p className="gap-top"><button className="btn" type="submit"><Icon name="send" size={18} /> Send for review</button></p>
+        <p className="gap-top">
+          <button className="btn" type="submit" disabled={saving}>
+            <Icon name={saving ? "refresh" : "send"} size={18} /> {saving ? "Uploading & saving..." : "Send for review"}
+          </button>
+        </p>
       </form>
 
       {/* Same print setup as the QR tags page (size, label or A4, copies), with only this tag in it. */}

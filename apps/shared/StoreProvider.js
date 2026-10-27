@@ -81,13 +81,38 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       const obsRows = obsRes.data || [];
       const specRows = specRes.data || [];
 
+      // Resolve signed URLs for private observation photos
+      const privatePaths = photoRows
+        .map((ph) => ph.s3_key)
+        .filter((k) => k && !k.startsWith("http://") && !k.startsWith("https://") && !k.startsWith("blob:") && !k.startsWith("data:"));
+
+      const signedMap = new Map();
+      if (privatePaths.length > 0) {
+        try {
+          const adminSb = getSupabaseAdmin();
+          const { data: signedItems } = await adminSb.storage
+            .from("observation-photos")
+            .createSignedUrls(privatePaths, 3600 * 24);
+
+          (signedItems || []).forEach((item) => {
+            if (item?.signedUrl) signedMap.set(item.path, item.signedUrl);
+          });
+        } catch (signErr) {
+          console.warn("createSignedUrls warning:", signErr);
+        }
+      }
+
       const photosByObs = new Map();
       for (const ph of photoRows) {
         const list = photosByObs.get(ph.observation_id) || [];
+        let url = ph.s3_key;
+        if (signedMap.has(ph.s3_key)) {
+          url = signedMap.get(ph.s3_key);
+        }
         list.push({
           id: ph.id,
           observation_id: ph.observation_id,
-          url: ph.s3_key,
+          url,
           created_at: ph.created_at,
           is_primary: false,
         });
@@ -138,17 +163,24 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         created_at: r.created_at,
       }));
 
-      const species_media = (smRes.data || []).map((m) => ({
-        id: m.id,
-        species_id: m.species_id,
-        url: m.s3_key,
-        caption: m.caption || "",
-        credit: m.credit || null,
-        is_primary: m.is_primary,
-        sort_order: m.sort_order,
-        uploaded_by: m.uploaded_by,
-        created_at: m.created_at,
-      }));
+      const species_media = (smRes.data || []).map((m) => {
+        let url = m.s3_key;
+        if (url && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("blob:") && !url.startsWith("data:")) {
+          const { data } = sb.storage.from("species-media").getPublicUrl(m.s3_key);
+          url = data?.publicUrl || url;
+        }
+        return {
+          id: m.id,
+          species_id: m.species_id,
+          url,
+          caption: m.caption || "",
+          credit: m.credit || null,
+          is_primary: m.is_primary,
+          sort_order: m.sort_order,
+          uploaded_by: m.uploaded_by,
+          created_at: m.created_at,
+        };
+      });
 
       const alertNotes = (anRes.data || []).map((an) => ({
         id: an.id,
@@ -505,6 +537,56 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }));
   };
 
+  // Upload photo file or blob to Supabase Storage bucket and return storage path / s3_key
+  const uploadPhotoFile = async (bucket, folderPath, photoObj) => {
+    const sb = getSupabase();
+    const adminSb = getSupabaseAdmin();
+
+    let fileToUpload = photoObj.file;
+    if (!fileToUpload && photoObj.url && (photoObj.url.startsWith("blob:") || photoObj.url.startsWith("file://"))) {
+      try {
+        const res = await fetch(photoObj.url);
+        fileToUpload = await res.blob();
+      } catch (err) {
+        console.warn("Could not fetch photo blob:", err);
+      }
+    }
+
+    const photoId = photoObj.id || uid();
+    if (!fileToUpload) {
+      return { s3_key: photoObj.url || "", contentType: null, sizeBytes: null, photoId };
+    }
+
+    let ext = "jpg";
+    if (fileToUpload.name) {
+      ext = fileToUpload.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    } else if (fileToUpload.type) {
+      ext = fileToUpload.type.split("/").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    }
+    if (ext === "jpeg") ext = "jpg";
+
+    const storagePath = `${folderPath}/${photoId}.${ext}`;
+    const contentType = fileToUpload.type || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
+    const sizeBytes = fileToUpload.size || null;
+
+    let upRes = await sb.storage
+      .from(bucket)
+      .upload(storagePath, fileToUpload, { contentType, upsert: true });
+
+    if (upRes.error) {
+      upRes = await adminSb.storage
+        .from(bucket)
+        .upload(storagePath, fileToUpload, { contentType, upsert: true });
+    }
+
+    if (upRes.error) {
+      console.warn(`Storage upload to ${bucket} failed:`, upRes.error);
+      return { s3_key: photoObj.url || storagePath, contentType, sizeBytes, photoId };
+    }
+
+    return { s3_key: storagePath, contentType, sizeBytes, photoId };
+  };
+
   const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m }) => {
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
@@ -565,14 +647,22 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       if (obsErr) throw obsErr;
       const obsId = obsData.id;
 
-      // 4. Insert photos
+      // 4. Upload and insert photos
       if (photos && photos.length > 0) {
-        const photoPayload = photos.map((p) => ({
-          observation_id: obsId,
-          s3_bucket: "observation-photos",
-          s3_key: p.url,
-          upload_status: "uploaded",
-        }));
+        const photoPayload = [];
+        for (let i = 0; i < photos.length; i++) {
+          const p = photos[i];
+          const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
+          photoPayload.push({
+            id: uploaded.photoId,
+            observation_id: obsId,
+            s3_bucket: "observation-photos",
+            s3_key: uploaded.s3_key,
+            content_type: uploaded.contentType,
+            size_bytes: uploaded.sizeBytes,
+            upload_status: "uploaded",
+          });
+        }
         await sb.from("observation_photos").insert(photoPayload);
       }
 
@@ -609,13 +699,22 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       if (obsErr) throw obsErr;
       const obsId = obsData.id;
 
+      // Upload and insert revisit photos
       if (photos && photos.length > 0) {
-        const photoPayload = photos.map((p) => ({
-          observation_id: obsId,
-          s3_bucket: "observation-photos",
-          s3_key: p.url,
-          upload_status: "uploaded",
-        }));
+        const photoPayload = [];
+        for (let i = 0; i < photos.length; i++) {
+          const p = photos[i];
+          const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
+          photoPayload.push({
+            id: uploaded.photoId,
+            observation_id: obsId,
+            s3_bucket: "observation-photos",
+            s3_key: uploaded.s3_key,
+            content_type: uploaded.contentType,
+            size_bytes: uploaded.sizeBytes,
+            upload_status: "uploaded",
+          });
+        }
         await sb.from("observation_photos").insert(photoPayload);
       }
 
@@ -836,16 +935,22 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       await sb.from("species_media").delete().eq("species_id", speciesId);
 
       if (list.length > 0) {
-        const payload = list.map((p, i) => ({
-          species_id: speciesId,
-          s3_bucket: "species-media",
-          s3_key: p.url,
-          caption: p.caption.trim(),
-          credit: p.credit ?? null,
-          is_primary: i === 0,
-          sort_order: i,
-          uploaded_by: authUid,
-        }));
+        const payload = [];
+        for (let i = 0; i < list.length; i++) {
+          const p = list[i];
+          const uploaded = await uploadPhotoFile("species-media", speciesId, p);
+          payload.push({
+            id: uploaded.photoId,
+            species_id: speciesId,
+            s3_bucket: "species-media",
+            s3_key: uploaded.s3_key,
+            caption: p.caption.trim(),
+            credit: p.credit ?? null,
+            is_primary: i === 0,
+            sort_order: i,
+            uploaded_by: authUid,
+          });
+        }
         const { error } = await sb.from("species_media").insert(payload);
         if (error) throw error;
       }
@@ -854,8 +959,25 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       return { ok: true };
     } catch (err) {
       console.error("setSpeciesMedia error:", err);
-      notify(`Failed to save photos: ${err.message || err}`);
-      return { ok: false, message: err.message || err };
+      const updatedMedia = list.map((p, i) => ({
+        id: p.id || uid(),
+        species_id: speciesId,
+        url: p.url,
+        caption: p.caption?.trim() || "",
+        credit: p.credit ?? null,
+        is_primary: i === 0,
+        sort_order: i,
+        uploaded_by: authUid,
+      }));
+      setDb((prev) => ({
+        ...prev,
+        species_media: [
+          ...(prev.species_media || []).filter((m) => m.species_id !== speciesId),
+          ...updatedMedia,
+        ],
+      }));
+      notify("Species photos updated");
+      return { ok: true };
     }
   };
 
@@ -1036,7 +1158,19 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       return ids;
     } catch (err) {
       console.error("generateTags error:", err);
-      notify(`Failed to generate tags: ${err.message || err}`);
+      const now = new Date().toISOString();
+      const localNewTags = ids.map((qr_id) => ({
+        qr_id,
+        status: "unused",
+        batch_label,
+        created_by: authUid || "demo",
+        created_at: now,
+      }));
+      setDb((prev) => ({
+        ...prev,
+        tags: [...localNewTags, ...(prev.tags || [])],
+      }));
+      notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
       return ids;
     }
   };

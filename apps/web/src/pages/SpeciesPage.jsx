@@ -7,7 +7,7 @@ import PhotoEditor from "../components/PhotoEditor.jsx";
 import { Chip, Empty, Mono } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
-import { lastVisit, mappable, speciesCatalogue } from "../../../shared/selectors.js";
+import { lastVisit, mappable, speciesCatalogue, speciesObservationPhotos } from "../../../shared/selectors.js";
 import { fmtDate } from "../../../shared/utils.js";
 
 const MORE = 12;
@@ -38,7 +38,8 @@ export default function SpeciesPage({ id }) {
   }
 
   // The species' own captioned photos. Until it has some, up to 3 photos from each tagged plant.
-  const photos = s.media.length ? s.media : s.plants.flatMap((p) => p.photos.slice(0, 3)).slice(0, 12);
+  const obsPhotos = speciesObservationPhotos(db, s.id);
+  const photos = s.media.length > 0 ? s.media : obsPhotos;
   const savePhotos = (list) => {
     const r = setSpeciesMedia(s.id, list);
     notify(r.ok ? "Photos saved" : r.message);
@@ -119,7 +120,7 @@ export default function SpeciesPage({ id }) {
         )}
       </section>
 
-      {editing && <PhotoEditor photos={s.media} captions min={0} onClose={() => setEditing(false)} onSave={savePhotos} />}
+      {editing && <PhotoEditor photos={s.media} observationPhotos={obsPhotos} captions min={0} onClose={() => setEditing(false)} onSave={savePhotos} />}
 
       {related.length > 0 && (
         <section className="gap-section-s" aria-labelledby="related">

@@ -89,7 +89,7 @@ small.sci, .sci.small { font-size: var(--t-sci-size); line-height: var(--t-sci-l
 :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 
 /* ---------- 2. Header, footer, menus ---------- */
-.top { position: sticky; top: 0; z-index: 20; background: var(--chrome); border-bottom: 1px solid var(--line); }
+.top { position: sticky; top: 0; z-index: 100; background: var(--chrome); border-bottom: 1px solid var(--line); }
 .topinner { max-width: var(--page-max); margin: 0 auto; padding: var(--s-3) var(--gutter); display: flex; align-items: center; gap: var(--s-3) 28px; }
 .logo { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-family: var(--f-display); font-weight: 700; font-size: 20px; line-height: 24px; color: var(--ink); }
 .logo img { width: 36px; height: 36px; border-radius: var(--r-control); }
@@ -170,7 +170,7 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 
 /* Footer: a wave edge, then the brand and link columns, then a thin bottom bar.
    Solid like every other surface; the wave line is the ordinary border colour. */
-.foot { flex-shrink: 0; margin-top: var(--s-5); color: var(--ink2); font-size: var(--t-small-size); }
+.foot { position: relative; z-index: 10; flex-shrink: 0; margin-top: var(--s-5); color: var(--ink2); font-size: var(--t-small-size); }
 .footwave { display: block; width: 100%; height: 40px; margin-bottom: -1px; }
 .footwave .fill { fill: var(--chrome); }
 .footwave .edge { fill: none; stroke: var(--line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -207,7 +207,7 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 .totop .icon { transform: rotate(180deg); }
 
 .toast {
-  position: fixed; bottom: var(--s-5); left: 50%; transform: translateX(-50%); z-index: 60; max-width: calc(100% - 32px);
+  position: fixed; bottom: var(--s-5); left: 50%; transform: translateX(-50%); z-index: 250; max-width: calc(100% - 32px);
   padding: var(--s-3) 18px; border-radius: var(--r-card); background: var(--ink); color: var(--surface);
   font-weight: 700; font-size: var(--t-label-size); box-shadow: var(--shadow);
 }
@@ -242,7 +242,7 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 .roleswitch button:hover { background: var(--raised); }
 .roleswitch button.on { background: var(--acc); color: var(--on-acc); font-weight: 700; }
 
-.scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
+.scrim { position: fixed; inset: 0; z-index: 200; background: var(--scrim); }
 .drawer {
   position: absolute; top: 0; bottom: 0; left: 0; width: 280px; padding: var(--s-4); overflow-y: auto;
   display: flex; flex-direction: column; gap: 2px; border-radius: 0 var(--r-sheet) var(--r-sheet) 0; background: var(--surface);
@@ -418,7 +418,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .shellcard > h2:first-child, .shellcard > .row:first-child h2 { font-size: var(--t-title1-size); line-height: var(--t-title1-line); }
 
 /* Popups */
-.modal { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--s-4); background: var(--scrim); overflow-y: auto; }
+.modal { position: fixed; inset: 0; z-index: 220; display: grid; place-items: center; padding: var(--s-4); background: var(--scrim); overflow-y: auto; }
 .pop { width: min(520px, 100%); padding: var(--s-5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sheet); box-shadow: var(--shadow); }
 .pop.wide { width: min(680px, 100%); }
 .pop.xl { width: min(980px, 100%); }
@@ -768,6 +768,11 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .plantdot.on { transform: translate(-50%, -50%) scale(1.5); z-index: 2; box-shadow: 0 0 0 3px var(--ink); }
 
 /* Leaflet map styles and custom pins */
+.leaflet-map-wrapper, .minimap {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
 .custom-pin-wrap {
   background: transparent !important;
   border: none !important;
@@ -994,7 +999,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
   .toast { bottom: 96px; }
   /* Five-slot bottom bar, the same model as the field app. The role's main job is the raised centre button. */
   .bottom {
-    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; align-items: flex-end; justify-content: space-around;
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; align-items: flex-end; justify-content: space-around;
     padding: 6px 0 calc(8px + env(safe-area-inset-bottom)); background: var(--chrome); border-top: 1px solid var(--line);
   }
   .bottom a { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 56px; padding: 2px 6px; font-size: 12px; font-weight: 600; color: var(--ink2); }

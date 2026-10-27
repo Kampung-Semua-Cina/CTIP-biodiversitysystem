@@ -108,6 +108,44 @@ export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0
 export const speciesMedia = (db, speciesId) =>
   db.species_media.filter((m) => m.species_id === speciesId).sort((a, b) => a.sort_order - b.sort_order);
 
+// Observation photos for one species across all its tagged specimens.
+export function speciesObservationPhotos(db, speciesId) {
+  if (!speciesId || !db?.plants) return [];
+  const species = db.species?.find((s) => s.id === speciesId);
+  const matchingPlants = (db.plants || []).filter((p) => {
+    if (p.is_deleted) return false;
+    if (p.species_id === speciesId) return true;
+    if (species && p.proposed_species) {
+      const prop = p.proposed_species.trim().toLowerCase();
+      if (species.scientific_name && prop === species.scientific_name.toLowerCase()) return true;
+      if (species.common_name && prop === species.common_name.toLowerCase()) return true;
+    }
+    return false;
+  });
+
+  const photos = [];
+  const seen = new Set();
+  for (const plant of matchingPlants) {
+    for (const ph of plant.photos || []) {
+      const key = ph.url || ph.id;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        photos.push({
+          id: ph.id,
+          observation_id: ph.observation_id || null,
+          url: ph.url,
+          created_at: ph.created_at || "",
+          plant_qr: plant.qr_id,
+          plant_name: plant.name,
+          caption: ph.caption || (plant.qr_id ? `Observation from ${plant.qr_id}` : "Field observation"),
+          is_primary: false,
+        });
+      }
+    }
+  }
+  return photos;
+}
+
 // One entry per species for the catalogue, with the tagged plants this role can see.
 // Visitors only get published species. Staff also see unpublished ones.
 export function speciesCatalogue(db, role) {
@@ -117,12 +155,13 @@ export function speciesCatalogue(db, role) {
     .map((s) => {
       const mine = plants.filter((p) => p.species_id === s.id);
       const media = speciesMedia(db, s.id);
+      const obsPhotos = speciesObservationPhotos(db, s.id);
       return {
         ...s,
         name: s.common_name || s.scientific_name,
         plants: mine,
         media,
-        photo: media[0]?.url || mine.find((p) => p.photos.length)?.photos[0]?.url || null,
+        photo: media[0]?.url || obsPhotos[0]?.url || mine.find((p) => p.photos?.length)?.photos[0]?.url || null,
         endangered: s.conservation_status === "endangered",
       };
     });

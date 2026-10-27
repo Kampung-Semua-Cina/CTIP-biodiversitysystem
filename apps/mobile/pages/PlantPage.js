@@ -166,6 +166,13 @@ export function TaggedPlant({ nav, params }) {
       {where ? <Section title="Where it is"><MiniMap height={140} dots={[{ ...mapPoint(where), selected: true }]} /></Section> : null}
       <View style={{ gap: 8 }}>
         {role === 'botanist' ? <Button label="Record a revisit" icon="plus" onPress={() => nav.go('revisit', { qr: p.qr_id })} /> : null}
+        {role === 'officer' && (obs.find((o) => o.status === 'synced') || lastObs) ? (
+          <Button
+            label={obs.find((o) => o.status === 'synced') ? "Review record (Action needed)" : "Review decisions"}
+            icon="clipboard"
+            onPress={() => nav.go('reviewItem', { id: (obs.find((o) => o.status === 'synced') || lastObs).id })}
+          />
+        ) : null}
         {p.species ? <Button label="About this species" kind="secondary" icon="leaf" onPress={() => nav.go('species', { id: p.species.id })} /> : null}
       </View>
     </Page>

@@ -7,7 +7,7 @@ import { Chip, Empty, Modal } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
-import { speciesMedia } from "../../../shared/selectors.js";
+import { speciesMedia, speciesObservationPhotos } from "../../../shared/selectors.js";
 
 const BLANK = {
   scientific_name: "", common_name: "", family: "", genus: "", description: "",
@@ -135,13 +135,35 @@ export default function Species() {
             </label>
             <label>Description<textarea rows="3" value={form.description} onChange={set("description")} /></label>
             <label>Cultural significance<textarea rows="2" value={form.cultural_significance} onChange={set("cultural_significance")} /></label>
-            <p className="gap-top"><button className="btn" type="submit"><Icon name="check" size={18} /> Save species</button></p>
+            <div className="row wrap gap-top" style={{ alignItems: "center" }}>
+              <button className="btn" type="submit"><Icon name="check" size={18} /> Save species</button>
+              {form.id && (
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    const target = form;
+                    setForm(null);
+                    setPhotosOf(target);
+                  }}
+                >
+                  <Icon name="camera" size={18} /> Manage species &amp; observation photos
+                </button>
+              )}
+            </div>
           </form>
         </Modal>
       )}
 
       {photosOf && (
-        <PhotoEditor photos={speciesMedia(db, photosOf.id)} captions min={0} onClose={() => setPhotosOf(null)} onSave={savePhotos} />
+        <PhotoEditor
+          photos={speciesMedia(db, photosOf.id)}
+          observationPhotos={speciesObservationPhotos(db, photosOf.id)}
+          captions
+          min={0}
+          onClose={() => setPhotosOf(null)}
+          onSave={savePhotos}
+        />
       )}
 
       {removing && (

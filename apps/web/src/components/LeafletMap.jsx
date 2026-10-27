@@ -279,6 +279,8 @@ export default function LeafletMap({
       className={`leaflet-map-wrapper ${className}`}
       style={{
         position: "relative",
+        zIndex: 1,
+        isolation: "isolate",
         height,
         width: "100%",
         borderRadius: "var(--r-card, 14px)",
