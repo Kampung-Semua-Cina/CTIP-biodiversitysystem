@@ -66,6 +66,8 @@ tags:
   - name: Notifications
   - name: Reports
     description: File exports for officers and admins
+  - name: Map
+    description: Distribution map data, with endangered locations reduced by role
 
 paths:
 
@@ -75,9 +77,14 @@ paths:
       tags: [Public]
       operationId: listPublicSpecies
       summary: List published species (visitor catalogue)
+      description: Also the botanist's species lookup on mobile, since GET /species is Officer/Admin only.
       security: []
       parameters:
         - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Family'
+        - $ref: '#/components/parameters/ConservationStatus'
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -92,6 +99,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/PublicSpecies' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /public/species/{id}:
     get:
@@ -242,6 +250,10 @@ paths:
       summary: List all species incl. unpublished (staff)
       parameters:
         - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Family'
+        - $ref: '#/components/parameters/ConservationStatus'
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
         - name: is_published
           in: query
           schema: { type: boolean }
@@ -259,16 +271,26 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Species' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Species]
       operationId: createSpecies
       summary: Create a species (officer/admin)
+      description: >
+        The client may send its own `id`. Sending the same `id` again (for example
+        a retry after a dropped connection) returns the record already saved with
+        200 instead of creating a second one.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SpeciesInput' }
+            schema: { $ref: '#/components/schemas/SpeciesCreate' }
       responses:
+        '200':
+          description: Already created earlier with this id; the saved record is returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
         '201':
           description: Created
           content:
@@ -302,7 +324,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SpeciesInput' }
+            schema: { $ref: '#/components/schemas/SpeciesUpdate' }
       responses:
         '200':
           description: Updated
@@ -311,6 +333,8 @@ paths:
               schema: { $ref: '#/components/schemas/Species' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Species]
       operationId: deleteSpecies
@@ -363,34 +387,49 @@ paths:
                 items: { $ref: '#/components/schemas/SpeciesMedia' }
     post:
       tags: [Species, Photos]
-      operationId: createSpeciesMediaUpload
-      summary: Start a species image upload (returns signed upload URL)
+      operationId: uploadSpeciesMedia
+      summary: Upload a species photo with a caption (officer/admin)
+      description: >
+        The file is sent to the API, which checks its real type from the file's
+        bytes (JPEG, PNG or WebP) and its size (at most 10 MB), removes location
+        and other metadata (EXIF, XMP, text chunks), then stores it in the public
+        species-media bucket as {species_id}/{media_id}.{ext}. Setting is_primary
+        makes this the only cover photo of the species.
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              allOf:
-                - $ref: '#/components/schemas/UploadRequest'
-                - type: object
-                  properties:
-                    caption: { type: string }
-                    credit: { type: string }
-                    is_primary: { type: boolean }
-                    sort_order: { type: integer }
+              type: object
+              required: [file]
+              additionalProperties: false
+              properties:
+                file: { type: string, format: binary, description: "JPEG, PNG or WebP, at most 10 MB" }
+                caption: { type: string, minLength: 1, maxLength: 300 }
+                credit: { type: string, minLength: 1, maxLength: 200 }
+                is_primary: { type: boolean, default: false }
+                sort_order: { type: integer, minimum: 0, maximum: 1000, default: 0 }
       responses:
         '201':
-          description: Upload slot created
+          description: Stored
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  media: { $ref: '#/components/schemas/SpeciesMedia' }
-                  upload: { $ref: '#/components/schemas/UploadTicket' }
+              schema: { $ref: '#/components/schemas/SpeciesMedia' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: File larger than 10 MB (FILE_TOO_LARGE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '415':
+          description: Not a JPEG, PNG or WebP image (UNSUPPORTED_FILE_TYPE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # --------------------------------------------------------------- Specimens
   /specimens:
@@ -496,10 +535,17 @@ paths:
       tags: [Observations]
       operationId: listObservations
       summary: List observations (botanists see their own; staff see all)
+      description: >
+        Officer review queue: `status=pending` (the same as `synced`, "Needs review"
+        in the apps), oldest first. Botanists get only the observations they
+        recorded, so they can follow the status of each submission.
       parameters:
         - name: status
           in: query
-          schema: { $ref: '#/components/schemas/ObservationStatus' }
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/ObservationStatus'
+              - { type: string, const: pending, description: Same as synced }
         - name: specimen_id
           in: query
           schema: { type: string, format: uuid }
@@ -517,6 +563,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Observation' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Observations]
       operationId: createObservation
@@ -667,16 +714,22 @@ paths:
         - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Review history
+          description: Review history, oldest first (every decision with reviewer and time)
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Review' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Reviews]
       operationId: reviewObservation
-      summary: Approve, return or reject an observation (officer/admin)
+      summary: Approve, return (request changes) or reject an observation (officer/admin)
+      description: >
+        Only an observation waiting for review (status synced) can be reviewed, and
+        only at the version the reviewer looked at. The checks and the decision happen
+        in one locked database step (public.review_observation), so a botanist's edit
+        or a second reviewer cannot slip in between.
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -691,11 +744,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Review' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: observation_version is stale (botanist edited it since)
+          description: >
+            VERSION_CONFLICT when observation_version is stale (botanist edited it since),
+            WRONG_STATUS when the observation is not waiting for review (draft, or already reviewed)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /observations/{id}/comments:
     get:
@@ -1163,6 +1220,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  # -------------------------------------------------------------------- Map
+  /distribution:
+    get:
+      tags: [Map]
+      operationId: getDistribution
+      summary: Plant locations for the distribution map (staff)
+      description: >
+        One point per plant, from its latest approved observation. For an endangered
+        plant (species status endangered / critically endangered, or the specimen's
+        endangered_override), roles other than Officer and Admin get the centre of a
+        0.01 degree grid square (about 1.1 km) instead of the exact spot. The
+        reduction happens in the API; the exact values are never sent (threat T13).
+        Botanists only see their own observations (RLS).
+      parameters:
+        - name: species_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: family
+          in: query
+          description: Exact family name, any case
+          schema: { type: string, maxLength: 100 }
+      responses:
+        '200':
+          description: Map points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DistributionPoint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 
 components:
 
@@ -1200,8 +1293,28 @@ components:
     Search:
       name: q
       in: query
-      description: Search scientific or common name
-      schema: { type: string }
+      description: Part of the scientific or common name, any case. Letters, numbers, spaces and . ' - × only
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    Family:
+      name: family
+      in: query
+      description: Exact family name, any case
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    ConservationStatus:
+      name: conservation_status
+      in: query
+      description: Exact conservation status, any case
+      schema: { type: string, maxLength: 100, pattern: "^[\\p{L}\\p{N} .'\\-×]+$" }
+    CreatedFrom:
+      name: created_from
+      in: query
+      description: Added on or after this day (UTC)
+      schema: { type: string, format: date }
+    CreatedTo:
+      name: created_to
+      in: query
+      description: Added on or before this day (UTC)
+      schema: { type: string, format: date }
     ReportFormat:
       name: format
       in: query
@@ -1342,13 +1455,39 @@ components:
       type: object
       required: [scientific_name]
       properties:
-        scientific_name: { type: string }
-        common_name: { type: string }
-        family: { type: string }
-        genus: { type: string }
-        description: { type: string }
-        conservation_status: { type: string }
-        cultural_significance: { type: string }
+        scientific_name: { type: string, minLength: 1, maxLength: 200 }
+        common_name: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+
+    SpeciesCreate:
+      description: Unknown fields (is_published, created_by, ...) are rejected with 422
+      allOf:
+        - $ref: '#/components/schemas/SpeciesInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Optional client-generated id, used as the idempotency key
+      unevaluatedProperties: false
+
+    SpeciesUpdate:
+      description: Send only the fields to change, at least one. Unknown fields are rejected with 422
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        scientific_name: { type: string, minLength: 1, maxLength: 200 }
+        common_name: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+        family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+        description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
+        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     Species:
       allOf:
@@ -1391,6 +1530,24 @@ components:
         is_primary: { type: boolean }
         sort_order: { type: integer }
         created_at: { type: string, format: date-time }
+
+    DistributionPoint:
+      type: object
+      properties:
+        observation_id: { type: string, format: uuid }
+        specimen_id: { type: string, format: uuid }
+        qr_id: { type: string }
+        species_id: { type: [string, 'null'], format: uuid }
+        scientific_name: { type: [string, 'null'] }
+        common_name: { type: [string, 'null'] }
+        family: { type: [string, 'null'] }
+        conservation_status: { type: [string, 'null'] }
+        endangered: { type: boolean }
+        observed_at: { type: string, format: date-time }
+        lat: { type: number, description: "Exact, or the grid-square centre when location_reduced" }
+        lng: { type: number, description: "Exact, or the grid-square centre when location_reduced" }
+        location_reduced: { type: boolean }
+        precision_m: { type: [number, 'null'], description: "GPS accuracy, or 1100 when location_reduced" }
 
     # ---------- specimens
     SpecimenCreate:
@@ -1502,10 +1659,11 @@ components:
     ReviewCreate:
       type: object
       required: [decision, observation_version]
+      additionalProperties: false
       properties:
         decision: { $ref: '#/components/schemas/ReviewDecision' }
-        observation_version: { type: integer, description: Version the reviewer looked at }
-        comment: { type: string, description: Required when decision is return or reject }
+        observation_version: { type: integer, minimum: 1, description: Version the reviewer looked at }
+        comment: { type: string, minLength: 1, maxLength: 2000, description: The reason. Required when decision is return or reject }
 
     Review:
       type: object

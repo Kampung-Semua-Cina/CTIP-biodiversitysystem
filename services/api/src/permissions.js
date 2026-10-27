@@ -56,6 +56,9 @@ export const routes = [
   ['post', '/observations/:id/comments', ANY_STAFF],
   ['post', '/sync', ANY_STAFF],
 
+  // Distribution map (coordinates of endangered plants reduced by role, CTIP-88)
+  ['get', '/distribution', ANY_STAFF],
+
   // Sensors
   ['get', '/sensor-nodes', OFFICER_ADMIN],
   ['post', '/sensor-nodes', OFFICER_ADMIN],

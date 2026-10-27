@@ -5,8 +5,6 @@
   "description": "REST API for the Smart Ground-Truthing and Digital Biodiversity System",
   "type": "module",
   "scripts": {
-    "instructions": "node -e \"console.log('\\n=== BACKEND API INSTRUCTIONS ===\\n\\n  npm run dev    Start Express API server in development watch mode\\n  npm run start  Start Express API server in production mode\\n  npm run test   Run Node.js test suite\\n')\"",
-    "help": "npm run instructions",
     "dev": "node --watch --env-file=.env src/server.js",
     "start": "node --env-file=.env src/server.js",
     "test": "node --test"
@@ -15,7 +13,9 @@
     "@supabase/supabase-js": "^2.117.3",
     "cors": "^2.8.5",
     "express": "^5.3.0",
-    "jose": "^6.2.12"
+    "jose": "^6.2.12",
+    "multer": "^2.4.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "supertest": "^7.3.1"
