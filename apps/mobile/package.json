@@ -23,7 +23,7 @@
     "react-native-webview": "13.16.1"
   },
   "scripts": {
-    "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start          Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel         Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel   Alias for npm run tunnel\\n  npm run android        Launch directly on connected Android device or emulator\\n  npm run android:tunnel Launch on Android device with tunnel enabled\\n  npm run ios            Launch on iOS simulator\\n  npm run web            Launch in web browser mode\\n')\"",
+    "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start             Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel            Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel      Alias for npm run tunnel\\n  npm run android           Launch directly on connected Android device or emulator\\n  npm run android:tunnel    Launch on Android device with tunnel enabled\\n  npm run ios               Launch on iOS simulator\\n  npm run web               Launch in web browser mode\\n  npm run test:agent        Run automated Android emulator + local AI agent test suite\\n  npm run test:agent:ui     Launch interactive Web Test Studio dashboard\\n  npm run test:agent:watch  Run mobile agent tests in live watch mode\\n')\"",
     "help": "npm run instructions",
     "start": "npx expo start",
     "tunnel": "npx expo start --tunnel",
@@ -32,7 +32,11 @@
     "android:tunnel": "npx expo start --android --tunnel",
     "ios": "npx expo start --ios",
     "ios:tunnel": "npx expo start --ios --tunnel",
-    "web": "npx expo start --web"
+    "web": "npx expo start --web",
+    "test": "node --test tests/agent-*.test.mjs",
+    "test:agent": "node --test tests/agent-*.test.mjs",
+    "test:agent:ui": "node tests/helpers/mobileUiServer.mjs",
+    "test:agent:watch": "node --test --watch tests/agent-*.test.mjs"
   },
   "private": true,
   "devDependencies": {

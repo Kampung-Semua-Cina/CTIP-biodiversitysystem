@@ -29,26 +29,8 @@ export const SCREENS = {
   users: Users, audit: Audit,
 };
 
-// Which permission (apps/shared/permissions.js) a screen needs.
-// The API checks again; this only keeps people away from screens that would fail for them.
-export const NEEDS = {
-  add: 'add', submitted: 'add', revisit: 'add', records: 'records', record: 'records',
-  review: 'review', reviewItem: 'review', monitor: 'monitor', alert: 'monitor',
-  speciesAdmin: 'species', tags: 'tags', reports: 'reports', users: 'users', audit: 'audit',
-  alerts: 'bell', discussion: 'discuss', tagged: 'pending', staffMore: 'pending',
-};
-
-// Screens that cover the whole phone (no bottom bar).
-export const FULL_SCREEN = ['scan', 'add', 'submitted', 'revisit', 'signin'];
+// Pure route metadata and permission checks
+export { NEEDS, FULL_SCREEN, ROUTE_NAMES, canAccess, isFullScreen } from './routeMeta.js';
 
 // Fallback component when a user has no access to a screen
 export { NoAccess, Home as DefaultScreen };
-
-export function canAccess(role, routeName) {
-  const requirement = NEEDS[routeName];
-  return !requirement || can(role, requirement);
-}
-
-export function isFullScreen(routeName) {
-  return FULL_SCREEN.includes(routeName);
-}
