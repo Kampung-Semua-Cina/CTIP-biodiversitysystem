@@ -881,6 +881,40 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
   100% { transform: scale(1.7); opacity: 0; }
 }
 
+/* Marker Clustering (CTIP-70) */
+.daun-cluster-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+.daun-cluster {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  transition: transform 0.15s ease;
+  cursor: pointer;
+}
+.daun-cluster:hover {
+  transform: scale(1.1);
+}
+.daun-cluster-small {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+.daun-cluster-medium {
+  background: linear-gradient(135deg, #059669, #047857);
+}
+.daun-cluster-large {
+  background: linear-gradient(135deg, #047857, #064e3b);
+}
+
 .map-tools {
   position: absolute;
   top: 14px;

@@ -1,9 +1,10 @@
 // apps/mobile/pages/AddPlant.js
 // New plant record after scanning an unused tag, the "Sent for review" screen,
 // and a revisit to a plant that is already tagged.
-import React, { useState } from 'react';
-import { View, Text, Pressable, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 import { useStore } from '../../shared/store.js';
 import { plantView } from '../../shared/selectors.js';
@@ -13,6 +14,8 @@ import {
   Screen, Header, IconButton, TextLink, Txt, Mono, Sci, Section, Field, Area, Button, DotLabel, Thumb, Empty,
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
+import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
+import { uid } from '../../shared/utils.js';
 
 const MAX_PHOTOS = 6;
 
@@ -56,10 +59,49 @@ async function pickFromGallery() {
   return [];
 }
 
-// Simulated GPS fix near the trail head. CTIP-56 replaces this with expo-location.
-function readGps() {
+// Fallback GPS coordinates near the trail head when device hardware is unavailable.
+function fallbackGps() {
   const jitter = () => (Math.random() - 0.5) * 0.0006;
-  return { lat: +(3.8031 + jitter()).toFixed(5), lng: +(113.7762 + jitter()).toFixed(5), acc: Math.round(4 + Math.random() * 5) };
+  return { lat: +(3.8031 + jitter()).toFixed(5), lng: +(113.7762 + jitter()).toFixed(5), acc: Math.round(4 + Math.random() * 5), simulated: true };
+}
+
+// Real hardware GPS acquisition via expo-location (CTIP-56)
+async function requestHardwareLocation() {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      return {
+        gps: fallbackGps(),
+        error: 'Location permission denied. Please allow location access in your device settings to record plant coordinates.',
+        denied: true,
+      };
+    }
+
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    if (loc && loc.coords) {
+      return {
+        gps: {
+          lat: +loc.coords.latitude.toFixed(5),
+          lng: +loc.coords.longitude.toFixed(5),
+          acc: Math.round(loc.coords.accuracy || 6),
+          simulated: false,
+        },
+        error: null,
+        denied: false,
+      };
+    }
+  } catch (err) {
+    console.warn('GPS hardware read error:', err?.message || err);
+  }
+
+  return {
+    gps: fallbackGps(),
+    error: 'Could not obtain hardware GPS fix. Using default trail coordinates.',
+    denied: false,
+  };
 }
 
 function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd }) {
@@ -117,16 +159,25 @@ function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd 
   );
 }
 
-function GpsRow({ gps, onRefresh, title }) {
+function GpsRow({ gps, loading, error, onRefresh, title }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 }}>
-      <Icon name="pin" size={22} color={gps.acc <= 10 ? c.success : c.warning} />
-      <View style={{ flex: 1, gap: 2 }}>
-        {title ? <Txt v="label">{title}</Txt> : <Mono size={15}>{coords(gps.lat, gps.lng)}</Mono>}
-        <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>GPS ±{gps.acc} m · {gps.acc <= 10 ? 'good fix' : 'weak fix, try again in the open'}</Txt>
+    <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16, gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Icon name="pin" size={22} color={error ? c.warning : gps.acc <= 10 ? c.success : c.warning} />
+        <View style={{ flex: 1, gap: 2 }}>
+          {title ? <Txt v="label">{title}</Txt> : <Mono size={15}>{coords(gps.lat, gps.lng)}</Mono>}
+          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>
+            {loading ? 'Acquiring GPS fix…' : `GPS ±${gps.acc} m · ${gps.acc <= 10 ? 'good fix' : 'weak fix, try again in the open'}`}
+          </Txt>
+        </View>
+        <IconButton name="refresh" label="Refresh location" color={c.accent} size={20} onPress={onRefresh} />
       </View>
-      <IconButton name="refresh" label="Refresh location" color={c.accent} size={20} onPress={onRefresh} />
+      {error ? (
+        <View style={{ padding: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: c.warningSoft }}>
+          <Txt v="caption" color={c.warning} style={{ fontFamily: font('text', 600) }}>{error}</Txt>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -167,8 +218,47 @@ export function AddPlant({ nav, params = {} }) {
   const [height, setHeight] = useState('');
   const [looks, setLooks] = useState('');
   const [notes, setNotes] = useState('');
-  const [gps, setGps] = useState(readGps);
+  const [gps, setGps] = useState(fallbackGps);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState('');
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [tried, setTried] = useState(false);
+
+  const fetchGps = async () => {
+    setGpsLoading(true);
+    setGpsError('');
+    const res = await requestHardwareLocation();
+    setGps(res.gps);
+    setGpsError(res.error || '');
+    setGpsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchGps();
+    // Restore crash-safe draft if present (CTIP-57)
+    if (qr) {
+      getDraft(qr).then((d) => {
+        if (d) {
+          if (d.proposed_species) setSp(d.proposed_species);
+          if (d.height_cm) setHeight(String(d.height_cm));
+          if (d.morphology) setLooks(d.morphology);
+          if (d.notes) setNotes(d.notes);
+          if (d.photos && d.photos.length) setPhotos(d.photos);
+          if (d.gps) setGps(d.gps);
+          setRestoredDraft(true);
+        }
+      });
+    }
+  }, [qr]);
+
+  // Autosave in-progress draft to crash-safe storage (CTIP-57)
+  useEffect(() => {
+    if (!qr) return;
+    if (sp || looks || height || notes || photos.length > 0) {
+      saveDraft(qr, { proposed_species: sp, height_cm: height, morphology: looks, notes, photos, gps });
+    }
+  }, [qr, sp, looks, height, notes, photos, gps]);
 
   if (!qr) {
     return (
@@ -199,7 +289,7 @@ export function AddPlant({ nav, params = {} }) {
   };
   const ok = !problems.photos && !problems.looks && !problems.species;
 
-  const submit = () => {
+  const submit = async () => {
     setTried(true);
     if (!ok) {
       if (problems.species) {
@@ -211,15 +301,41 @@ export function AddPlant({ nav, params = {} }) {
       }
       return;
     }
-    addPlant({ qr_id: qr, proposed_species: sp.trim(), morphology: looks.trim(), height_cm: height, notes: notes.trim(), photos, lat: gps.lat, lng: gps.lng, gps_accuracy_m: gps.acc });
-    nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, acc: gps.acc, cover: photos[0]?.url });
+    setSubmitting(true);
+    try {
+      await addPlant({
+        qr_id: qr,
+        proposed_species: sp.trim(),
+        morphology: looks.trim(),
+        height_cm: height,
+        notes: notes.trim(),
+        photos,
+        lat: gps.lat,
+        lng: gps.lng,
+        gps_accuracy_m: gps.acc,
+        idempotency_key: uid(),
+      });
+      await clearDraft(qr); // Clean up crash draft after successful submit (CTIP-57)
+      nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, acc: gps.acc, cover: photos[0]?.url });
+    } catch (err) {
+      Alert.alert('Submission Error', err?.message || 'Failed to submit observation. Draft has been saved safely.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const leave = () => {
     if (!photos.length && !looks && !sp) return nav.back();
     Alert.alert('Discard this record?', 'What you entered will be lost.', [
       { text: 'Keep editing', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: nav.back },
+      {
+        text: 'Discard',
+        style: 'destructive',
+        onPress: async () => {
+          await clearDraft(qr);
+          nav.back();
+        },
+      },
     ]);
   };
 
@@ -228,7 +344,7 @@ export function AddPlant({ nav, params = {} }) {
       header={<Header left={<IconButton name="x" label="Close" onPress={leave} />} />}
       top={0}
       gap={20}
-      footer={<View style={{ flex: 1 }}><Button label="Submit for review" onPress={submit} /></View>}
+      footer={<View style={{ flex: 1 }}><Button label={submitting ? "Submitting..." : "Submit for review"} disabled={submitting} onPress={submit} /></View>}
     >
       <View style={{ gap: 6 }}>
         <Txt v="title1">New plant</Txt>
@@ -238,6 +354,15 @@ export function AddPlant({ nav, params = {} }) {
           <Mono size={15}>{qr}</Mono>
           <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
         </View>
+        {restoredDraft && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, padding: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.accentSoft }}>
+            <Icon name="check" size={16} color={c.accent} />
+            <Txt v="caption" color={c.accent} style={{ fontFamily: font('text', 700), flex: 1 }}>
+              Restored in-progress draft from previous session
+            </Txt>
+            <IconButton name="x" label="Dismiss" size={14} color={c.accent} onPress={() => setRestoredDraft(false)} />
+          </View>
+        )}
       </View>
 
       <Section title="Photos" right={<Txt v="caption" color={tried && problems.photos ? c.warning : c.ink3}>{tried && problems.photos ? 'Add at least one' : `${photos.length} of ${MAX_PHOTOS}`}</Txt>} gap={12}>
@@ -266,7 +391,7 @@ export function AddPlant({ nav, params = {} }) {
         <Area label="Field notes" optional value={notes} onChangeText={setNotes} placeholder="Habitat, nearby trail, anything unusual" rows={2} />
       </Section>
 
-      <GpsRow gps={gps} onRefresh={() => setGps(readGps())} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={fetchGps} />
     </Screen>
   );
 }
@@ -306,7 +431,23 @@ export function Revisit({ nav, params = {} }) {
   const [photos, setPhotos] = useState([]);
   const [height, setHeight] = useState('');
   const [changes, setChanges] = useState('');
-  const [gps, setGps] = useState(readGps);
+  const [gps, setGps] = useState(fallbackGps);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState('');
+
+  const fetchGps = async () => {
+    setGpsLoading(true);
+    setGpsError('');
+    const res = await requestHardwareLocation();
+    setGps(res.gps);
+    setGpsError(res.error || '');
+    setGpsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchGps();
+  }, []);
+
   if (!plant) {
     return (
       <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />}>
@@ -363,7 +504,7 @@ export function Revisit({ nav, params = {} }) {
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} placeholder={last?.height_cm ? String(last.height_cm) : ''} keyboardType="decimal-pad" width={140} hint="Leave empty if it has not changed" />
         <Area label="Changes" value={changes} onChangeText={setChanges} placeholder="New pitchers, flowering, damage…" />
       </Section>
-      <GpsRow gps={gps} title="Same place as before" onRefresh={() => setGps(readGps())} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} title="Same place as before" onRefresh={fetchGps} />
     </Screen>
   );
 }

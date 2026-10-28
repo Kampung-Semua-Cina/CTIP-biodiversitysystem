@@ -56,3 +56,28 @@ export const label = (s = "") => {
   const t = String(s).replaceAll("_", " ");
   return t.charAt(0).toUpperCase() + t.slice(1);
 };
+
+/**
+ * Exponential backoff retry wrapper (CTIP-58).
+ * Retries on transient failure with exponential delay and randomized jitter.
+ */
+export async function withExponentialRetry(fn, { maxRetries = 3, initialDelayMs = 400, factor = 2, maxDelayMs = 4000 } = {}) {
+  let attempt = 0;
+  let delay = initialDelayMs;
+  while (true) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      attempt++;
+      if (attempt > maxRetries) {
+        throw err;
+      }
+      const jitter = (Math.random() - 0.5) * 0.4 * delay;
+      const sleepMs = Math.min(maxDelayMs, delay + jitter);
+      console.warn(`[Retry ${attempt}/${maxRetries}] Network action failed: ${err?.message || err}. Retrying in ${Math.round(sleepMs)}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, sleepMs));
+      delay = Math.min(maxDelayMs, delay * factor);
+    }
+  }
+}
+

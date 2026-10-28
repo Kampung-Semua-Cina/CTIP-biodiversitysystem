@@ -4,6 +4,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import Icon from "./Icon.jsx";
 import {
   MAP_BOUNDS,
@@ -70,8 +73,25 @@ export default function LeafletMap({
     }).addTo(map);
     tileLayerRef.current = tileLayer;
 
-    // Markers layer group
-    const markersGroup = L.layerGroup().addTo(map);
+    // Markers layer group with clustering support (CTIP-70)
+    const markersGroup = typeof L.markerClusterGroup === "function"
+      ? L.markerClusterGroup({
+          showCoverageOnHover: false,
+          maxClusterRadius: 40,
+          spiderfyOnMaxZoom: true,
+          disableClusteringAtZoom: 17,
+          iconCreateFunction: (cluster) => {
+            const count = cluster.getChildCount();
+            const size = count < 10 ? "small" : count < 30 ? "medium" : "large";
+            return L.divIcon({
+              html: `<div class="daun-cluster daun-cluster-${size}"><span>${count}</span></div>`,
+              className: "daun-cluster-wrap",
+              iconSize: [36, 36],
+              iconAnchor: [18, 18],
+            });
+          },
+        }).addTo(map)
+      : L.layerGroup().addTo(map);
     markersGroupRef.current = markersGroup;
 
     // Initial Bounds

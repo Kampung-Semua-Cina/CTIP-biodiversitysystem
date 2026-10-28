@@ -4,7 +4,7 @@ import { StoreContext } from "./store.js";
 import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
-import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
+import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
 import { getSupabase } from "./supabase.js";
 import {
   getAuthToken,
@@ -665,81 +665,85 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     return { s3_key: storagePath, contentType, sizeBytes, photoId };
   };
 
-  const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m }) => {
+  const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m, idempotency_key }) => {
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const now = nowIso();
+    const clientId = idempotency_key || uid();
 
     try {
-      // 1. Mark tag as assigned in Supabase
-      try {
-        if (db.tags.some((t) => t.qr_id === qr_id)) {
-          await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
-        } else {
-          await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
+      return await withExponentialRetry(async () => {
+        // 1. Mark tag as assigned in Supabase
+        try {
+          if (db.tags.some((t) => t.qr_id === qr_id)) {
+            await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
+          } else {
+            await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
+          }
+        } catch (tagErr) {
+          console.warn("tag status sync warning:", tagErr);
         }
-      } catch (tagErr) {
-        console.warn("tag status sync warning:", tagErr);
-      }
 
-      // 2. Insert specimen
-      const { data: specData, error: specErr } = await sb.from("specimens").insert({
-        qr_id,
-        species_id: null,
-        proposed_species_name: proposed_species || null,
-        registered_by: authUid,
-        lat,
-        lng,
-        gps_accuracy_m: gps_accuracy_m || null,
-        endangered_override: false,
-        is_deleted: false,
-      }).select().single();
+        // 2. Insert specimen
+        const { data: specData, error: specErr } = await sb.from("specimens").insert({
+          qr_id,
+          species_id: null,
+          proposed_species_name: proposed_species || null,
+          registered_by: authUid,
+          lat,
+          lng,
+          gps_accuracy_m: gps_accuracy_m || null,
+          endangered_override: false,
+          is_deleted: false,
+        }).select().single();
 
-      if (specErr) throw specErr;
-      const specimenId = specData.id;
+        if (specErr) throw specErr;
+        const specimenId = specData.id;
 
-      // 3. Insert observation
-      const { data: obsData, error: obsErr } = await sb.from("observations").insert({
-        specimen_id: specimenId,
-        recorded_by: authUid,
-        observed_at: now,
-        height_cm: Number(height_cm) || null,
-        morphology: morphology || null,
-        notes: notes || null,
-        lat,
-        lng,
-        gps_accuracy_m: gps_accuracy_m || null,
-        status: "synced",
-        version: 1,
-        device_id: deviceId,
-        last_synced_at: now,
-      }).select().single();
+        // 3. Insert observation
+        const { data: obsData, error: obsErr } = await sb.from("observations").insert({
+          specimen_id: specimenId,
+          recorded_by: authUid,
+          observed_at: now,
+          height_cm: Number(height_cm) || null,
+          morphology: morphology || null,
+          notes: notes || null,
+          lat,
+          lng,
+          gps_accuracy_m: gps_accuracy_m || null,
+          status: "synced",
+          version: 1,
+          device_id: deviceId,
+          client_id: clientId,
+          last_synced_at: now,
+        }).select().single();
 
-      if (obsErr) throw obsErr;
-      const obsId = obsData.id;
+        if (obsErr) throw obsErr;
+        const obsId = obsData.id;
 
-      // 4. Upload and insert photos
-      if (photos && photos.length > 0) {
-        const photoPayload = [];
-        for (let i = 0; i < photos.length; i++) {
-          const p = photos[i];
-          const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
-          photoPayload.push({
-            id: uploaded.photoId,
-            observation_id: obsId,
-            s3_bucket: "observation-photos",
-            s3_key: uploaded.s3_key,
-            content_type: uploaded.contentType,
-            size_bytes: uploaded.sizeBytes,
-            upload_status: "uploaded",
-          });
+        // 4. Upload and insert photos
+        if (photos && photos.length > 0) {
+          const photoPayload = [];
+          for (let i = 0; i < photos.length; i++) {
+            const p = photos[i];
+            const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
+            photoPayload.push({
+              id: uploaded.photoId,
+              observation_id: obsId,
+              s3_bucket: "observation-photos",
+              s3_key: uploaded.s3_key,
+              content_type: uploaded.contentType,
+              size_bytes: uploaded.sizeBytes,
+              upload_status: "uploaded",
+            });
+          }
+          await sb.from("observation_photos").insert(photoPayload);
         }
-        await sb.from("observation_photos").insert(photoPayload);
-      }
 
-      notify(`Plant tagged with ${qr_id}`);
-      await fetchFromSupabase(true);
-      return { ok: true, id: specimenId, obsId };
+        notify(`Plant tagged with ${qr_id}`);
+        await fetchFromSupabase(true);
+        return { ok: true, id: specimenId, obsId, clientId };
+      }, { maxRetries: 3 });
     } catch (err) {
       console.error("addPlant error:", err);
       notify(`Failed to add plant: ${err.message || err}`);
