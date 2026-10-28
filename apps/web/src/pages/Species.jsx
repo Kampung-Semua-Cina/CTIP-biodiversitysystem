@@ -18,6 +18,7 @@ const BLANK = {
 export default function Species() {
   const { db, saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia, notify } = useStore();
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState("common");
   const [form, setForm] = useState(null); // species being edited, or BLANK for a new one
   const [removing, setRemoving] = useState(null);
   const [photosOf, setPhotosOf] = useState(null); // species whose photos are open in the editor
@@ -25,6 +26,24 @@ export default function Species() {
   const list = db.species
     .filter((s) => !s.is_deleted)
     .filter((s) => `${s.scientific_name} ${s.common_name} ${s.family}`.toLowerCase().includes(q.toLowerCase()));
+
+  const sortedList = [...list].sort((a, b) => {
+    if (sort === "scientific") return (a.scientific_name || "").localeCompare(b.scientific_name || "");
+    if (sort === "family") return (a.family || "").localeCompare(b.family || "");
+    if (sort === "endangered") {
+      const ea = a.conservation_status === "endangered" ? 1 : 0;
+      const eb = b.conservation_status === "endangered" ? 1 : 0;
+      return eb - ea || (a.common_name || a.scientific_name || "").localeCompare(b.common_name || b.scientific_name || "");
+    }
+    if (sort === "plants") {
+      const ca = db.plants.filter((p) => p.species_id === a.id).length;
+      const cb = db.plants.filter((p) => p.species_id === b.id).length;
+      return cb - ca || (a.common_name || a.scientific_name || "").localeCompare(b.common_name || b.scientific_name || "");
+    }
+    const na = a.common_name || a.scientific_name || "";
+    const nb = b.common_name || b.scientific_name || "";
+    return na.localeCompare(nb);
+  });
 
   const deleted = db.species.filter((s) => s.is_deleted);
 
@@ -51,10 +70,10 @@ export default function Species() {
     notify("Species saved");
   };
 
-  const savePhotos = (list) => {
-    const r = setSpeciesMedia(photosOf.id, list);
-    notify(r.ok ? "Photos saved" : r.message);
-    if (r.ok) setPhotosOf(null);
+  const savePhotos = async (list) => {
+    const r = await setSpeciesMedia(photosOf.id, list);
+    notify(r?.ok ? "Photos saved" : (r?.message || "Failed to save photos"));
+    if (r?.ok) setPhotosOf(null);
   };
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -66,19 +85,31 @@ export default function Species() {
         <h2>Species</h2>
         <button className="btn" onClick={() => setForm(BLANK)}><Icon name="plus" size={18} /> Add species</button>
       </div>
-      <label className="search wide">
+      <div className="toolbar" style={{ display: "flex", gap: 12, alignItems: "center", margin: "14px 0", flexWrap: "wrap" }}>
+        <label className="search grow" style={{ flex: 1, minWidth: 220 }}>
         <Icon name="search" size={18} />
         <input placeholder="Search by name or family" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search species" />
-      </label>
+        </label>
+        <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort species">
+            <option value="common">Common name A–Z</option>
+            <option value="scientific">Scientific name A–Z</option>
+            <option value="family">Family A–Z</option>
+            <option value="endangered">Endangered first</option>
+            <option value="plants">Most plants</option>
+          </select>
+        </label>
+      </div>
 
-      {list.length === 0 ? (
+      {sortedList.length === 0 ? (
         <Empty>No species match your search.</Empty>
       ) : (
         <div className="tablewrap">
           <table>
             <thead><tr><th>Species</th><th>Family</th><th>Conservation</th><th>Public</th><th><span className="sr">Actions</span></th></tr></thead>
             <tbody>
-              {list.map((s) => (
+              {sortedList.map((s) => (
                 <tr key={s.id}>
                   <td><b>{s.common_name || s.scientific_name}</b><i className="sci small block">{s.scientific_name}</i></td>
                   <td>{s.family}</td>
@@ -157,7 +188,7 @@ export default function Species() {
 
       {photosOf && (
         <PhotoEditor
-          photos={speciesMedia(db, photosOf.id)}
+          photos={speciesMedia(db, photosOf.id) || []}
           observationPhotos={speciesObservationPhotos(db, photosOf.id)}
           captions
           min={0}

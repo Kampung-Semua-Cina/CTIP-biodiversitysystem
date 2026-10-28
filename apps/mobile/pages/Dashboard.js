@@ -10,7 +10,7 @@ import { useStore } from '../../shared/store.js';
 import { visiblePlants, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  TitleBlock, SearchField, Pills, Segmented, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,
+  TitleBlock, SearchField, Pills, Segmented, SortBar, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,
   SkeletonRow, LoadingMore, Empty,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
@@ -46,12 +46,21 @@ function ListHeader({ children }) {
 
 /* ---------- species catalogue ---------- */
 
+const SORT_SPECIES = [
+  { key: 'common', label: 'Common (A–Z)' },
+  { key: 'scientific', label: 'Scientific (A–Z)' },
+  { key: 'family', label: 'Family' },
+  { key: 'endangered', label: 'Endangered' },
+  { key: 'plants', label: 'Most tagged' },
+];
+
 export function SpeciesList({ nav, params = {} }) {
   const { db, role } = useStore();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState(params.q || '');
   const [family, setFamily] = useState('all');
+  const [sort, setSort] = useState('common');
   const list = useRef(null);
   const staff = role !== 'visitor';
 
@@ -62,23 +71,44 @@ export function SpeciesList({ nav, params = {} }) {
 
   const needle = q.trim().toLowerCase();
   const filtered = species
-      .filter((s) => family === 'all' || s.family === family)
-      .filter((s) => {
-        if (!needle) return true;
-        const tags = plants.filter((p) => p.species_id === s.id && p.qr_id).map((p) => String(p.qr_id).toLowerCase());
-        return [s.common_name, s.scientific_name, s.family].filter(Boolean).join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
-      })
-      .sort((a, b) => (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name));
+    .filter((s) => family === 'all' || s.family === family)
+    .filter((s) => {
+      if (!needle) return true;
+      const tags = plants.filter((p) => p.species_id === s.id && p.qr_id).map((p) => String(p.qr_id).toLowerCase());
+      return [s.common_name, s.scientific_name, s.family].filter(Boolean).join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
+    });
 
-  const { shown, loading, loadMore, total, done } = usePaged(filtered, `${q}|${family}`);
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === 'scientific') return (a.scientific_name || '').localeCompare(b.scientific_name || '');
+    if (sort === 'family') return (a.family || '').localeCompare(b.family || '') || (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
+    if (sort === 'endangered') {
+      const ea = a.conservation_status === 'endangered' ? 1 : 0;
+      const eb = b.conservation_status === 'endangered' ? 1 : 0;
+      if (eb !== ea) return eb - ea;
+      return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
+    }
+    if (sort === 'plants') {
+      const ca = plants.filter((p) => p.species_id === a.id).length;
+      const cb = plants.filter((p) => p.species_id === b.id).length;
+      if (cb !== ca) return cb - ca;
+      return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
+    }
+    return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
+  });
 
-  // Insert a letter heading before the first species of each letter.
+  const { shown, loading, loadMore, total, done } = usePaged(sorted, `${q}|${family}|${sort}`);
+
+  // Insert a letter heading before the first species of each letter (when sorted alphabetically).
+  const isAlphaSort = ['common', 'scientific'].includes(sort);
   const rows = [];
   let last = '';
   for (const s of shown) {
-    const letter = (s.common_name || s.scientific_name)[0].toUpperCase();
-    if (letter !== last) rows.push({ type: 'letter', key: 'L' + letter, letter });
-    last = letter;
+    if (isAlphaSort) {
+      const name = sort === 'scientific' ? (s.scientific_name || s.common_name) : (s.common_name || s.scientific_name);
+      const letter = (name || '?')[0].toUpperCase();
+      if (letter !== last) rows.push({ type: 'letter', key: 'L' + letter, letter });
+      last = letter;
+    }
     rows.push({ type: 'species', key: s.id, s });
   }
   const offsets = [];
@@ -97,9 +127,11 @@ export function SpeciesList({ nav, params = {} }) {
     <View onLayout={(e) => (headerHeight.current = e.nativeEvent.layout.height)}>
       <ListHeader>
         {nav.canGoBack ? <View style={{ marginLeft: -16, marginTop: -8 }}><IconButton name="chevL" label="Back" onPress={nav.back} /></View> : null}
-        <TitleBlock title={staff ? 'Species' : 'Plants'} right={<Txt v="small" color={c.ink2}>{total} species</Txt>} />
+        <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{total} species</Txt>} />
+        <Segmented value="species" onChange={(k) => k === 'tagged' && nav.go('tagged')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
         <SearchField value={q} onChangeText={setQ} placeholder="Search name or tag ID" />
         <Pills value={family} onChange={setFamily} items={[{ key: 'all', label: 'All families' }, ...families.map((f) => ({ key: f, label: f }))]} />
+        <SortBar items={SORT_SPECIES} value={sort} onChange={setSort} />
       </ListHeader>
     </View>
   );
@@ -111,7 +143,7 @@ export function SpeciesList({ nav, params = {} }) {
         data={rows}
         keyExtractor={(r) => r.key}
         ListHeaderComponent={header}
-        contentContainerStyle={{ paddingLeft: 20, paddingRight: 36, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingLeft: 20, paddingRight: isAlphaSort ? 36 : 20, paddingBottom: 24 }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
         renderItem={({ item }) =>
@@ -133,13 +165,13 @@ export function SpeciesList({ nav, params = {} }) {
           ) : done && shown.length > PAGE_SIZE ? <Txt v="caption" color={c.ink3} style={{ textAlign: 'center', paddingVertical: 16 }}>That's every species.</Txt> : null
         }
       />
-      {letters.length > 1 ? <LetterIndex letters={letters} onJump={jump} /> : null}
+      {isAlphaSort && letters.length > 1 ? <LetterIndex letters={letters} onJump={jump} /> : null}
     </View>
   );
 }
 
 function SpeciesRow({ s, plants, staff, onPress }) {
-  const photo = plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
+  const photo = s.photo || plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
   return (
     <View style={{ height: ROW_HEIGHT }}>
       <Row
@@ -177,7 +209,7 @@ function LetterIndex({ letters, onJump }) {
   );
 }
 
-/* ---------- tagged plants (staff) ---------- */
+/* ---------- tagged plants (staff & visitors) ---------- */
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -187,23 +219,43 @@ const FILTERS = [
   { key: 'endangered', label: 'Endangered' },
 ];
 
+const SORT_TAGGED = [
+  { key: 'recent', label: 'Recent visit' },
+  { key: 'name', label: 'Name (A–Z)' },
+  { key: 'tag', label: 'Tag ID' },
+  { key: 'status', label: 'Status' },
+];
+
 export function TaggedPlants({ nav }) {
   const { db, role, me } = useStore();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('recent');
 
   const lastVisit = (id) => db.observations.filter((o) => o.specimen_id === id).map((o) => o.observed_at).sort().pop();
   const all = visiblePlants(db, role)
-    .map((p) => ({ ...p, seen: lastVisit(p.id), by: nameOf(db, p.registered_by) }))
-    .sort((a, b) => (b.seen || '').localeCompare(a.seen || ''));
+    .map((p) => ({ ...p, seen: lastVisit(p.id), by: nameOf(db, p.registered_by) }));
+
   const needle = q.trim().toLowerCase();
   const filtered = all
     .filter((p) => (filter === 'all' ? true : filter === 'mine' ? p.registered_by === me?.id : filter === 'endangered' ? p.endangered : p.status === filter))
     .filter((p) => !needle || [p.qr_id, p.name, p.scientific, p.by].filter(Boolean).join(' ').toLowerCase().includes(needle));
-  const { shown, loading, loadMore } = usePaged(filtered, `${q}|${filter}|${db.plants.length}`);
-  const filters = role === 'botanist' ? FILTERS : FILTERS.filter((f) => f.key !== 'mine');
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === 'name') return (a.name || '').localeCompare(b.name || '');
+    if (sort === 'tag') return (a.qr_id || '').localeCompare(b.qr_id || '');
+    if (sort === 'status') return (a.status || '').localeCompare(b.status || '') || (b.seen || '').localeCompare(a.seen || '');
+    return (b.seen || '').localeCompare(a.seen || '');
+  });
+
+  const { shown, loading, loadMore } = usePaged(sorted, `${q}|${filter}|${sort}|${db.plants.length}`);
+  const filters = role === 'visitor'
+    ? [{ key: 'all', label: 'All' }, { key: 'endangered', label: 'Endangered' }]
+    : role === 'botanist'
+    ? FILTERS
+    : FILTERS.filter((f) => f.key !== 'mine');
 
   return (
     <View style={{ flex: 1, backgroundColor: c.surface, paddingTop: insets.top }}>
@@ -219,6 +271,7 @@ export function TaggedPlants({ nav }) {
             <Segmented value="tagged" onChange={(k) => k === 'species' && nav.go('plants')} items={[{ key: 'tagged', label: 'Tagged plants' }, { key: 'species', label: 'Species' }]} />
             <SearchField value={q} onChangeText={setQ} placeholder="Tag ID, species or botanist" />
             <Pills value={filter} onChange={setFilter} items={filters} />
+            <SortBar items={SORT_TAGGED} value={sort} onChange={setSort} />
           </ListHeader>
         }
         renderItem={({ item: p, index }) => (
@@ -228,7 +281,7 @@ export function TaggedPlants({ nav }) {
             sub={
               <>
                 <Mono size={13}>{p.qr_id}</Mono>
-                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>· {p.by} · {shortDate(p.seen)}</Txt>
+                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>· {role !== 'visitor' ? `${p.by} · ` : ''}{shortDate(p.seen)}</Txt>
               </>
             }
             right={<DotLabel status={p.status} />}

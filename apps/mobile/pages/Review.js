@@ -7,7 +7,7 @@ import { useStore } from '../../shared/store.js';
 import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  Screen, Bar, TitleBlock, Pills, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field,
+  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords } from '../components/format.js';
 
@@ -17,16 +17,32 @@ const FILTERS = [
   { key: 'all', label: 'All' },
 ];
 
+const SORT_REVIEW = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Waiting longest' },
+  { key: 'name', label: 'Plant (A–Z)' },
+  { key: 'botanist', label: 'Botanist (A–Z)' },
+  { key: 'tag', label: 'Tag ID' },
+];
+
 export function ReviewQueue({ nav }) {
   const { db } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('synced');
+  const [sort, setSort] = useState('newest');
   const all = db.observations
     .filter((o) => ['synced', 'returned', 'approved', 'rejected'].includes(o.status))
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
     .filter((o) => o.plant)
     .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
   const rows = all.filter((o) => filter === 'all' || o.status === filter);
+  const sorted = [...rows].sort((a, b) => {
+    if (sort === 'oldest') return a.observed_at.localeCompare(b.observed_at);
+    if (sort === 'name') return (a.plant?.name || '').localeCompare(b.plant?.name || '');
+    if (sort === 'botanist') return nameOf(db, a.recorded_by).localeCompare(nameOf(db, b.recorded_by));
+    if (sort === 'tag') return (a.plant?.qr_id || '').localeCompare(b.plant?.qr_id || '');
+    return b.observed_at.localeCompare(a.observed_at);
+  });
   const waiting = all.filter((o) => o.status === 'synced').length;
   const n = (k) => all.filter((o) => o.status === k).length;
 
@@ -34,9 +50,10 @@ export function ReviewQueue({ nav }) {
     <Screen gap={16}>
       <TitleBlock title="Review" sub={waiting ? `${waiting} record${waiting === 1 ? '' : 's'} waiting for a decision` : 'Nothing is waiting'} />
       <Pills value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ key: f.key, label: f.key === 'all' ? f.label : `${f.label} ${n(f.key)}` }))} />
+      <SortBar items={SORT_REVIEW} value={sort} onChange={setSort} />
       <View>
-        {rows.length === 0 ? <Empty icon="clipboard">No records here.</Empty> : null}
-        {rows.map((o, i) => (
+        {sorted.length === 0 ? <Empty icon="clipboard">No records here.</Empty> : null}
+        {sorted.map((o, i) => (
           <Row
             key={o.id}
             left={<Thumb uri={o.plant.photos[0]?.url} size={64} />}
@@ -49,7 +66,7 @@ export function ReviewQueue({ nav }) {
               </>
             }
             onPress={() => nav.go('reviewItem', { id: o.id })}
-            last={i === rows.length - 1}
+            last={i === sorted.length - 1}
           />
         ))}
       </View>

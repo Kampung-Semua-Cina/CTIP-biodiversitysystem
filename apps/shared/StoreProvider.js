@@ -2,9 +2,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
 import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
-import { nextTagIds } from "./selectors.js";
+import { nextTagIds, speciesObservationPhotos } from "./selectors.js";
 import { can } from "./permissions.js";
-import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
+import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry, isValidUuid, decodeBase64ToArrayBuffer } from "./utils.js";
 import { getSupabase } from "./supabase.js";
 import {
   getAuthToken,
@@ -120,7 +120,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       // Resolve signed URLs for private observation photos
       const privatePaths = photoRows
         .map((ph) => ph.s3_key)
-        .filter((k) => k && !k.startsWith("http://") && !k.startsWith("https://") && !k.startsWith("blob:") && !k.startsWith("data:"));
+        .filter((k) => k && !k.startsWith("http://") && !k.startsWith("https://") && !k.startsWith("blob:") && !k.startsWith("data:") && !k.startsWith("file:") && !k.startsWith("content:"));
 
       const signedMap = new Map();
       if (privatePaths.length > 0) {
@@ -148,6 +148,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
           id: ph.id,
           observation_id: ph.observation_id,
           url,
+          s3_bucket: ph.s3_bucket || "observation-photos",
+          s3_key: ph.s3_key,
           created_at: ph.created_at,
           is_primary: false,
         });
@@ -208,6 +210,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
           id: m.id,
           species_id: m.species_id,
           url,
+          s3_bucket: m.s3_bucket,
+          s3_key: m.s3_key,
           caption: m.caption || "",
           credit: m.credit || null,
           is_primary: m.is_primary,
@@ -622,47 +626,182 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }));
   };
 
-  // Upload photo file or blob to Supabase Storage bucket and return storage path / s3_key
+  // Upload photo file, buffer, or base64 to Supabase Storage bucket and return storage path / s3_key
   const uploadPhotoFile = async (bucket, folderPath, photoObj) => {
     const sb = getSupabase();
 
-    let fileToUpload = photoObj.file;
-    if (!fileToUpload && photoObj.url && (photoObj.url.startsWith("blob:") || photoObj.url.startsWith("file://"))) {
+    // 1. Ensure valid RFC 4122 v4 UUID for photo record id (required by Postgres uuid column)
+    const photoId = isValidUuid(photoObj.id) ? photoObj.id : uid();
+
+    // 2. Determine clean file extension & supported contentType
+    let ext = "jpg";
+    const sourceName = photoObj.name || photoObj.fileName || photoObj.url || (photoObj.file && photoObj.file.name) || "";
+    const nameMatch = sourceName.match(/\.(jpg|jpeg|png|webp|heic)(\?.*)?$/i);
+    if (nameMatch) {
+      ext = nameMatch[1].toLowerCase();
+      if (ext === "jpeg") ext = "jpg";
+    } else if (photoObj.type && photoObj.type.startsWith("image/")) {
+      ext = photoObj.type.split("/")[1].toLowerCase();
+      if (ext === "jpeg") ext = "jpg";
+    } else if (photoObj.file && photoObj.file.type && photoObj.file.type.startsWith("image/")) {
+      ext = photoObj.file.type.split("/")[1].toLowerCase();
+      if (ext === "jpeg") ext = "jpg";
+    }
+
+    const mimeMap = {
+      jpg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+      heic: "image/heic",
+    };
+    const contentType = mimeMap[ext] || "image/jpeg";
+    const storagePath = `${folderPath}/${photoId}.${ext}`;
+
+    // 3. Acquire binary payload (ArrayBuffer, Blob, or File)
+    let payload = null;
+
+    // Fast path: In-memory base64 string provided (avoids Android file URI fetch & blob polyfills)
+    if (photoObj.base64 && typeof photoObj.base64 === "string") {
+      payload = decodeBase64ToArrayBuffer(photoObj.base64);
+    } else if (photoObj.url && photoObj.url.startsWith("data:")) {
+      payload = decodeBase64ToArrayBuffer(photoObj.url);
+    } else if (photoObj.file) {
+      // Browser File or Blob
+      payload = photoObj.file;
+    } else if (photoObj.url && (photoObj.url.startsWith("blob:") || photoObj.url.startsWith("file://") || photoObj.url.startsWith("content://") || photoObj.url.startsWith("ph://"))) {
       try {
-        const res = await fetch(photoObj.url);
-        fileToUpload = await res.blob();
+        // In React Native, try XMLHttpRequest with arraybuffer first to avoid Expo fetch Blob override
+        if (typeof XMLHttpRequest !== "undefined" && !photoObj.url.startsWith("blob:")) {
+          try {
+            payload = await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.onload = () => {
+                if (xhr.response) resolve(xhr.response);
+                else reject(new Error("Empty XHR response"));
+              };
+              xhr.onerror = () => reject(new Error("XHR failed"));
+              xhr.responseType = "arraybuffer";
+              xhr.open("GET", photoObj.url, true);
+              xhr.send(null);
+            });
+          } catch {
+            // fall back to fetch
+          }
+        }
+        if (!payload) {
+          const res = await fetch(photoObj.url);
+          payload = await res.arrayBuffer();
+        }
       } catch (err) {
-        console.warn("Could not fetch photo blob:", err);
+        console.warn("Could not read photo binary data:", err);
+      }
+    } else if (photoObj.url && (photoObj.url.startsWith("http://") || photoObj.url.startsWith("https://"))) {
+      try {
+        const isSameBucket = photoObj.url.includes(`/storage/v1/object/public/${bucket}/`) ||
+                             photoObj.url.includes(`/storage/v1/object/sign/${bucket}/`);
+        if (isSameBucket) {
+          const match = photoObj.url.match(new RegExp(`${bucket}/([^?#]+)`));
+          if (match && match[1]) {
+            return {
+              s3_key: decodeURIComponent(match[1]),
+              contentType,
+              sizeBytes: null,
+              photoId,
+              uploadStatus: "uploaded",
+            };
+          }
+        }
+
+        if (photoObj.s3_bucket && photoObj.s3_key) {
+          try {
+            const { data: dlBlob, error: dlErr } = await sb.storage.from(photoObj.s3_bucket).download(photoObj.s3_key);
+            if (!dlErr && dlBlob) {
+              payload = dlBlob;
+            }
+          } catch {
+            // fall back to fetch
+          }
+        }
+        if (!payload) {
+          const res = await fetch(photoObj.url);
+          if (res.ok) {
+            payload = await res.arrayBuffer();
+            const ct = res.headers.get("content-type");
+            if (ct && ct.startsWith("image/")) {
+              const sub = ct.split("/")[1].toLowerCase();
+              if (sub === "jpeg" || sub === "jpg") ext = "jpg";
+              else if (sub === "png") ext = "png";
+              else if (sub === "webp") ext = "webp";
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not retrieve remote photo binary for upload:", err);
       }
     }
 
-    const photoId = photoObj.id || uid();
-    if (!fileToUpload) {
-      return { s3_key: photoObj.url || "", contentType: null, sizeBytes: null, photoId };
+    const sizeBytes = payload ? (payload.byteLength || payload.size || null) : null;
+
+    if (!payload) {
+      console.warn(`No binary payload available for photo ${photoId}; skipping storage upload.`);
+      const fallbackKey = (photoObj.url && (photoObj.url.startsWith("http://") || photoObj.url.startsWith("https://")))
+        ? photoObj.url
+        : storagePath;
+      return {
+        s3_key: fallbackKey,
+        contentType,
+        sizeBytes,
+        photoId,
+        uploadStatus: "failed",
+      };
     }
 
-    let ext = "jpg";
-    if (fileToUpload.name) {
-      ext = fileToUpload.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    } else if (fileToUpload.type) {
-      ext = fileToUpload.type.split("/").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    // 4. Upload binary payload to Supabase Storage
+    try {
+      let upRes = await sb.storage
+        .from(bucket)
+        .upload(storagePath, payload, { contentType, upsert: false });
+
+      if (upRes.error && (upRes.error.statusCode === "409" || upRes.error.message?.includes("already exists"))) {
+        upRes = await sb.storage
+          .from(bucket)
+          .upload(storagePath, payload, { contentType, upsert: true });
+      }
+
+      if (upRes.error) {
+        console.warn(`Storage upload to ${bucket} failed:`, upRes.error);
+        const fallbackKey = (photoObj.url && (photoObj.url.startsWith("http://") || photoObj.url.startsWith("https://")))
+          ? photoObj.url
+          : storagePath;
+        return {
+          s3_key: fallbackKey,
+          contentType,
+          sizeBytes,
+          photoId,
+          uploadStatus: "failed",
+          error: upRes.error,
+        };
+      }
+
+      return {
+        s3_key: storagePath,
+        contentType,
+        sizeBytes,
+        photoId,
+        uploadStatus: "uploaded",
+        error: null,
+      };
+    } catch (upErr) {
+      console.warn(`Storage upload exception for ${storagePath}:`, upErr);
+      return {
+        s3_key: storagePath,
+        contentType,
+        sizeBytes,
+        photoId,
+        uploadStatus: "failed",
+        error: upErr,
+      };
     }
-    if (ext === "jpeg") ext = "jpg";
-
-    const storagePath = `${folderPath}/${photoId}.${ext}`;
-    const contentType = fileToUpload.type || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
-    const sizeBytes = fileToUpload.size || null;
-
-    const upRes = await sb.storage
-      .from(bucket)
-      .upload(storagePath, fileToUpload, { contentType, upsert: true });
-
-    if (upRes.error) {
-      console.warn(`Storage upload to ${bucket} failed:`, upRes.error);
-      return { s3_key: photoObj.url || storagePath, contentType, sizeBytes, photoId };
-    }
-
-    return { s3_key: storagePath, contentType, sizeBytes, photoId };
   };
 
   const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m, idempotency_key }) => {
@@ -684,21 +823,34 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
           console.warn("tag status sync warning:", tagErr);
         }
 
-        // 2. Insert specimen
-        const { data: specData, error: specErr } = await sb.from("specimens").insert({
-          qr_id,
-          species_id: null,
-          proposed_species_name: proposed_species || null,
-          registered_by: authUid,
-          lat,
-          lng,
-          gps_accuracy_m: gps_accuracy_m || null,
-          endangered_override: false,
-          is_deleted: false,
-        }).select().single();
+        // 2. Find existing or insert new specimen (idempotent across network retries)
+        let specimenId = null;
+        const { data: existingSpec } = await sb.from("specimens").select("id").eq("qr_id", qr_id).maybeSingle();
+        if (existingSpec?.id) {
+          specimenId = existingSpec.id;
+          await sb.from("specimens").update({
+            proposed_species_name: proposed_species || null,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+            gps_accuracy_m: gps_accuracy_m || undefined,
+            is_deleted: false,
+          }).eq("id", specimenId);
+        } else {
+          const { data: specData, error: specErr } = await sb.from("specimens").insert({
+            qr_id,
+            species_id: null,
+            proposed_species_name: proposed_species || null,
+            registered_by: authUid,
+            lat,
+            lng,
+            gps_accuracy_m: gps_accuracy_m || null,
+            endangered_override: false,
+            is_deleted: false,
+          }).select().single();
 
-        if (specErr) throw specErr;
-        const specimenId = specData.id;
+          if (specErr) throw specErr;
+          specimenId = specData.id;
+        }
 
         // 3. Insert observation
         const { data: obsData, error: obsErr } = await sb.from("observations").insert({
@@ -714,7 +866,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
           status: "synced",
           version: 1,
           device_id: deviceId,
-          client_id: clientId,
           last_synced_at: now,
         }).select().single();
 
@@ -734,10 +885,14 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
               s3_key: uploaded.s3_key,
               content_type: uploaded.contentType,
               size_bytes: uploaded.sizeBytes,
-              upload_status: "uploaded",
+              upload_status: uploaded.uploadStatus || "uploaded",
             });
           }
-          await sb.from("observation_photos").insert(photoPayload);
+          const { error: photoErr } = await sb.from("observation_photos").insert(photoPayload);
+          if (photoErr) {
+            console.error("observation_photos insert error:", photoErr);
+            throw photoErr;
+          }
         }
 
         notify(`Plant tagged with ${qr_id}`);
@@ -787,10 +942,14 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
             s3_key: uploaded.s3_key,
             content_type: uploaded.contentType,
             size_bytes: uploaded.sizeBytes,
-            upload_status: "uploaded",
+            upload_status: uploaded.uploadStatus || "uploaded",
           });
         }
-        await sb.from("observation_photos").insert(photoPayload);
+        const { error: photoErr } = await sb.from("observation_photos").insert(photoPayload);
+        if (photoErr) {
+          console.error("revisit observation_photos insert error:", photoErr);
+          throw photoErr;
+        }
       }
 
       notify("Revisit recorded");
@@ -919,6 +1078,37 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         }
       }
 
+      // Option A: Auto-sync first observation photo to species_media on approval if species has no media
+      if (decision === "approve") {
+        try {
+          const rawPlant = (db.plants || []).find((p) => p.id === obs?.specimen_id);
+          const speciesId = rawPlant?.species_id ||
+            (rawPlant?.proposed_species && (db.species || []).find((s) =>
+              !s.is_deleted && (
+                s.scientific_name?.toLowerCase() === rawPlant.proposed_species.trim().toLowerCase() ||
+                (s.common_name && s.common_name.toLowerCase() === rawPlant.proposed_species.trim().toLowerCase())
+              )
+            )?.id);
+          if (speciesId) {
+            const hasMedia = (db.species_media || []).some((m) => m.species_id === speciesId);
+            if (!hasMedia) {
+              const plantPhotos = (rawPlant?.photos || []).filter((p) => p.observation_id === id);
+              const photoCandidate = plantPhotos[0] || rawPlant?.photos?.[0];
+              if (photoCandidate) {
+                const sp = (db.species || []).find((s) => s.id === speciesId);
+                const caption = photoCandidate.caption || `${sp?.common_name || sp?.scientific_name || "Species"} field observation`;
+                await setSpeciesMedia(speciesId, [{
+                  ...photoCandidate,
+                  caption,
+                  is_primary: true,
+                }]);
+              }
+            }
+          }
+        } catch (autoMediaErr) {
+          console.warn("Auto-sync species media on approval notice:", autoMediaErr);
+        }
+      }
       notify(`Record ${verb}`);
       await fetchFromSupabase(true);
       return { ok: true };
@@ -1028,6 +1218,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         if (error) throw error;
         notify(`Species "${sp.scientific_name}" updated`);
       }
+      notify(`Record ${verb}`);
       await fetchFromSupabase(true);
     } catch (err) {
       console.error("saveSpecies error:", err);
@@ -1103,14 +1294,34 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
       if (list.length > 0) {
         const payload = [];
+        const localMedia = [];
         for (let i = 0; i < list.length; i++) {
           const p = list[i];
           const uploaded = await uploadPhotoFile("species-media", speciesId, p);
+          let publicUrl = p.url;
+          if (uploaded.uploadStatus === "uploaded" && uploaded.s3_key && !uploaded.s3_key.startsWith("http://") && !uploaded.s3_key.startsWith("https://")) {
+            const { data } = sb.storage.from("species-media").getPublicUrl(uploaded.s3_key);
+            if (data?.publicUrl) publicUrl = data.publicUrl;
+          }
+          const savedBucket = uploaded.uploadStatus === "uploaded" ? "species-media" : (p.s3_bucket || "species-media");
+          const savedKey = uploaded.uploadStatus === "uploaded" ? uploaded.s3_key : (p.s3_key || uploaded.s3_key);
           payload.push({
             id: uploaded.photoId,
             species_id: speciesId,
-            s3_bucket: "species-media",
-            s3_key: uploaded.s3_key,
+            s3_bucket: savedBucket,
+            s3_key: savedKey,
+            caption: p.caption.trim(),
+            credit: p.credit ?? null,
+            is_primary: i === 0,
+            sort_order: i,
+            uploaded_by: authUid,
+          });
+          localMedia.push({
+            id: uploaded.photoId,
+            species_id: speciesId,
+            url: publicUrl,
+            s3_bucket: savedBucket,
+            s3_key: savedKey,
             caption: p.caption.trim(),
             credit: p.credit ?? null,
             is_primary: i === 0,
@@ -1120,6 +1331,18 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         }
         const { error } = await sb.from("species_media").insert(payload);
         if (error) throw error;
+        setDb((prev) => ({
+          ...prev,
+          species_media: [
+            ...(prev.species_media || []).filter((m) => m.species_id !== speciesId),
+            ...localMedia,
+          ],
+        }));
+      } else {
+        setDb((prev) => ({
+          ...prev,
+          species_media: (prev.species_media || []).filter((m) => m.species_id !== speciesId),
+        }));
       }
       notify("Species photos updated");
       await fetchFromSupabase(true);
@@ -1147,6 +1370,45 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       return { ok: true };
     }
   };
+
+  // Auto-backfill species_media from approved observations for published species lacking media (Option A)
+  useEffect(() => {
+    if (!can(role, "species") || !db?.species?.length || !db?.plants?.length) return;
+    const publishedWithoutMedia = (db.species || []).filter(
+      (s) => !s.is_deleted && s.is_published && !(db.species_media || []).some((m) => m.species_id === s.id)
+    );
+    if (!publishedWithoutMedia.length) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const s of publishedWithoutMedia) {
+        if (cancelled) break;
+        const matchingPlants = (db.plants || []).filter((p) => !p.is_deleted && p.species_id === s.id);
+        const approvedObsPhotos = [];
+        for (const p of matchingPlants) {
+          const approvedObs = (db.observations || []).filter((o) => o.specimen_id === p.id && o.status === "approved");
+          for (const obs of approvedObs) {
+            const phs = (p.photos || []).filter((ph) => ph.observation_id === obs.id);
+            approvedObsPhotos.push(...phs);
+          }
+        }
+        const photoCandidate = approvedObsPhotos[0] || matchingPlants.flatMap((p) => p.photos)[0];
+        if (photoCandidate) {
+          try {
+            await setSpeciesMedia(s.id, [{
+              ...photoCandidate,
+              caption: photoCandidate.caption || `${s.common_name || s.scientific_name} field observation`,
+              is_primary: true,
+            }]);
+          } catch (e) {
+            console.warn(`Could not auto-seed media for ${s.scientific_name}:`, e);
+          }
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [role, db?.species, db?.species_media, db?.plants, db?.observations, setSpeciesMedia]);
 
   /* ---------- users ---------- */
   const freeUsername = (email) => {

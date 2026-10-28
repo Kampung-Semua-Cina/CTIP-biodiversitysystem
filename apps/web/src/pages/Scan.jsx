@@ -113,6 +113,38 @@ export default function Scan() {
     animFrameRef.current = requestAnimationFrame(scanFrames);
   };
 
+  const onPickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if ("BarcodeDetector" in window) {
+        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+        const barcodes = await detector.detect(img);
+        if (barcodes && barcodes.length > 0) {
+          const raw = barcodes[0].rawValue;
+          const tag = extractTag(raw);
+          if (tag) {
+            navigateToTag(tag);
+            e.target.value = "";
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Barcode detection error from file:", err);
+    }
+    const nameMatch = file.name.toUpperCase().match(/NIAH-\d{4}/);
+    if (nameMatch) {
+      navigateToTag(nameMatch[0]);
+    } else {
+      notify("Could not detect a QR tag in that image. Try entering the tag code above.");
+    }
+    e.target.value = "";
+  };
+
   useEffect(() => {
     return () => {
       stopCamera();
@@ -248,7 +280,7 @@ export default function Scan() {
           )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 12, flexWrap: "wrap" }}>
           {!cameraActive ? (
             <button className="btn" type="button" onClick={startCamera}>
               <Icon name="camera" size={18} /> Start Camera
@@ -258,6 +290,10 @@ export default function Scan() {
               <Icon name="x" size={18} /> Stop Camera
             </button>
           )}
+          <label className="btn ghost" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="upload" size={18} /> Pick QR from image
+            <input type="file" accept="image/*" hidden onChange={onPickImage} />
+          </label>
         </div>
       </section>
     </div>

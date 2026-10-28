@@ -1,16 +1,18 @@
 // apps/web/src/components/Img.jsx
 // Image that hides itself if the file cannot load, so the soft green
 // background behind it shows instead of a broken-image icon.
-export default function Img({ src, alt = "", className }) {
+export default function Img({ src, alt = "", className, style, ...rest }) {
   return (
     <img
       className={className}
       src={src}
       alt={alt}
+      style={style}
       loading="lazy"
       onError={(e) => {
         e.currentTarget.style.visibility = "hidden";
       }}
+      {...rest}
     />
   );
 }

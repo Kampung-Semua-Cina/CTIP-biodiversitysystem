@@ -14,6 +14,22 @@ export function Users() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newRole, setNewRole] = useState("botanist");
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState("active");
+
+  const filtered = (db.profiles || []).filter((u) => {
+    const text = `${u.full_name || ""} ${u.email || ""} ${u.role || ""}`.toLowerCase();
+    return text.includes(q.trim().toLowerCase());
+  });
+
+  const sortedUsers = [...filtered].sort((a, b) => {
+    if (sort === "name") return (a.full_name || "").localeCompare(b.full_name || "");
+    if (sort === "role") return (a.role || "").localeCompare(b.role || "");
+    if (sort === "email") return (a.email || "").localeCompare(b.email || "");
+    const aa = a.is_active ? 1 : 0;
+    const ab = b.is_active ? 1 : 0;
+    return ab - aa || (a.full_name || "").localeCompare(b.full_name || "");
+  });
 
   const add = async (e) => {
     e.preventDefault();
@@ -47,11 +63,27 @@ export function Users() {
         <p className="mute small">Accounts authenticate directly via Supabase Auth. Staff can also reset their password using the login page.</p>
       </form>
 
+      <div className="toolbar" style={{ display: "flex", gap: 12, alignItems: "center", margin: "20px 0 14px", flexWrap: "wrap" }}>
+        <label className="search grow" style={{ flex: 1, minWidth: 220 }}>
+          <Icon name="search" size={18} />
+          <input placeholder="Search users by name, email or role" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search users" />
+        </label>
+        <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort users">
+            <option value="active">Active first</option>
+            <option value="name">Name A–Z</option>
+            <option value="role">Role</option>
+            <option value="email">Email A–Z</option>
+          </select>
+        </label>
+      </div>
+
       <div className="tablewrap">
         <table>
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th>Added</th></tr></thead>
           <tbody>
-            {db.profiles.map((u) => (
+            {sortedUsers.map((u) => (
               <tr key={u.id}>
                 <td><b>{u.full_name}</b>{u.id === me.id && <small className="mute"> (you)</small>}</td>
                 <td>{u.email}</td>
@@ -81,6 +113,7 @@ export function Audit() {
     <Shell seg="audit">
       <h2>Audit log</h2>
       <p className="mute">Who changed what. Entries cannot be edited.</p>
+
       <div className="tablewrap">
         <table>
           <thead><tr><th>When</th><th>Who</th><th>Table</th><th>Action</th><th>Change</th></tr></thead>

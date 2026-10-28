@@ -134,6 +134,8 @@ export function speciesObservationPhotos(db, speciesId) {
           id: ph.id,
           observation_id: ph.observation_id || null,
           url: ph.url,
+          s3_bucket: ph.s3_bucket || "observation-photos",
+          s3_key: ph.s3_key || null,
           created_at: ph.created_at || "",
           plant_qr: plant.qr_id,
           plant_name: plant.name,
@@ -156,12 +158,16 @@ export function speciesCatalogue(db, role) {
       const mine = plants.filter((p) => p.species_id === s.id);
       const media = speciesMedia(db, s.id);
       const obsPhotos = speciesObservationPhotos(db, s.id);
+      const effectiveMedia = media.length > 0 ? media : obsPhotos;
+      const defaultObsPhoto = obsPhotos[0]?.url || mine.find((p) => p.photos?.length)?.photos[0]?.url || null;
       return {
         ...s,
         name: s.common_name || s.scientific_name,
         plants: mine,
-        media,
-        photo: media[0]?.url || obsPhotos[0]?.url || mine.find((p) => p.photos?.length)?.photos[0]?.url || null,
+        media: effectiveMedia,
+        raw_media: media,
+        observation_photos: obsPhotos,
+        photo: (media.length > 0 ? media[0]?.url : defaultObsPhoto) || defaultObsPhoto || null,
         endangered: s.conservation_status === "endangered",
       };
     });
@@ -169,3 +175,23 @@ export function speciesCatalogue(db, role) {
 
 // Plants that are not on the map for this role (endangered for visitors) still count, but have no coords.
 export const mappable = (plants, role) => plants.map((p) => ({ p, c: shownCoords(p, role) })).filter((x) => x.c);
+
+// Pull "NIAH-0007" out of whatever the QR holds (a bare ID, a URL, or image path).
+export function extractTag(raw) {
+  const match = String(raw || "").toUpperCase().match(/NIAH-\d{4}/);
+  return match ? match[0] : String(raw || "").trim().toUpperCase();
+}
+
+// What a scanned or picked ID refers to.
+export function lookupTag(db, id) {
+  const cleanId = String(id || "").trim().toUpperCase();
+  if (!cleanId || !db) return { kind: "unknown", id: cleanId };
+  const plants = db.plants || [];
+  const tags = db.tags || [];
+  const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
+  if (plant) return { kind: "used", id: cleanId, plant: plantView(db, plant) };
+  const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
+  if (tag?.status === "unused") return { kind: "unused", id: cleanId, tag };
+  if (tag?.status === "retired") return { kind: "retired", id: cleanId, tag };
+  return { kind: "unknown", id: cleanId };
+}

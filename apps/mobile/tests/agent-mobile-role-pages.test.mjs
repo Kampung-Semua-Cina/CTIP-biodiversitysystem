@@ -8,7 +8,7 @@ import { ROUTE_NAMES, canAccess, isFullScreen } from "../navigation/routeMeta.js
 import { TABS, getRoleTabs, getRoleDefaultTab, badgeCounts } from "../navigation/tabs.js";
 import { ROLES, can } from "../../shared/permissions.js";
 import { initialProfiles, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, seed } from "../../shared/data.js";
-import { visiblePlants, speciesCatalogue } from "../../shared/selectors.js";
+import { visiblePlants, speciesCatalogue, extractTag, lookupTag } from "../../shared/selectors.js";
 
 describe("Mobile Port: Automated Role & Page Verification", () => {
   // =========================================================================
@@ -75,7 +75,7 @@ describe("Mobile Port: Automated Role & Page Verification", () => {
   // 2. ROLE-BASED ACCESS CONTROL (RBAC) FOR EVERY SCREEN
   // =========================================================================
   test("Screen Permissions: Visitor has access to public screens, restricted from staff routes", () => {
-    const allowed = ["home", "about", "contact", "more", "plants", "species", "tag", "map", "scan", "signin"];
+    const allowed = ["home", "about", "contact", "more", "plants", "species", "tag", "tagged", "map", "scan", "signin"];
     for (const route of allowed) {
       assert.equal(canAccess("visitor", route), true, `Visitor should have access to '${route}'`);
     }
@@ -182,5 +182,52 @@ describe("Mobile Port: Automated Role & Page Verification", () => {
     const fallbackCatalog = speciesCatalogue(testDb, "visitor");
     assert.ok(fallbackCatalog.length >= 2, "Visitor catalogue must return published species");
     assert.equal(fallbackCatalog[0].common_name, "Rajah Pitcher Plant");
+  });
+
+  // =========================================================================
+  // 6. ADD PLANT & SCAN: QR GENERATION AND GALLERY EXTRACTION
+  // =========================================================================
+  test("Tag Extraction Utility: Extracts tag IDs from camera text, full web URLs, and gallery filenames", () => {
+    // Bare tag
+    assert.equal(extractTag("NIAH-0007"), "NIAH-0007");
+    assert.equal(extractTag("niah-0042"), "NIAH-0042");
+
+    // Full web QR URL
+    assert.equal(extractTag("https://daunsense.org/tag/NIAH-0088"), "NIAH-0088");
+    assert.equal(extractTag("http://192.168.1.10:5173/#/tag/NIAH-0015"), "NIAH-0015");
+
+    // Filenames from gallery picking
+    assert.equal(extractTag("IMG_NIAH-0021_preview.jpg"), "NIAH-0021");
+    assert.equal(extractTag("/data/user/0/host.exp.exponent/cache/photo_NIAH-0099.png"), "NIAH-0099");
+  });
+
+  test("Add Plant QR Setup: Resolves unused vs existing tags for binding vs revisits", () => {
+    const testDb = {
+      ...seed,
+      tags: [
+        { qr_id: "NIAH-0001", status: "unused", batch_label: "field-1" },
+        { qr_id: "NIAH-0002", status: "retired", batch_label: "field-1" },
+      ],
+      plants: [
+        { id: "plant-1", qr_id: "NIAH-0003", name: "Rajah Pitcher", is_deleted: false, photos: [] },
+      ],
+      observations: [],
+      comments: [],
+      reviews: [],
+    };
+
+    // Unused tag is valid for new plant record
+    const unusedLookup = lookupTag(testDb, "NIAH-0001");
+    assert.equal(unusedLookup.kind, "unused");
+    assert.equal(unusedLookup.id, "NIAH-0001");
+
+    // Already-used tag triggers existing plant view / revisit option
+    const usedLookup = lookupTag(testDb, "NIAH-0003");
+    assert.equal(usedLookup.kind, "used");
+    assert.equal(usedLookup.id, "NIAH-0003");
+
+    // Retired tag is marked retired
+    const retiredLookup = lookupTag(testDb, "NIAH-0002");
+    assert.equal(retiredLookup.kind, "retired");
   });
 });
