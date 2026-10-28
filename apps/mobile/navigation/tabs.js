@@ -10,23 +10,23 @@ export const TABS = {
     { key: 'more', label: 'More', icon: 'more' },
   ],
   botanist: [
-    { key: 'tagged', label: 'Plants', icon: 'leaf' },
     { key: 'records', label: 'My records', icon: 'file', badge: 'returned' },
+    { key: 'tagged', label: 'Plants', icon: 'leaf' },
     { key: 'scan', label: 'Add plant', icon: 'scan', main: true },
     { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
     { key: 'staffMore', label: 'More', icon: 'more' },
   ],
   officer: [
+    { key: 'review', label: 'Review', icon: 'clipboard', badge: 'pendingReview' },
     { key: 'tagged', label: 'Plants', icon: 'leaf' },
-    { key: 'monitor', label: 'Monitor', icon: 'activity', badge: 'openAlerts' },
-    { key: 'review', label: 'Review', icon: 'clipboard', main: true },
+    { key: 'scan', label: 'Add plant', icon: 'scan', main: true },
     { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
     { key: 'staffMore', label: 'More', icon: 'more' },
   ],
   admin: [
-    { key: 'tagged', label: 'Plants', icon: 'leaf' },
     { key: 'users', label: 'Users', icon: 'users' },
-    { key: 'monitor', label: 'Monitor', icon: 'activity', main: true },
+    { key: 'tagged', label: 'Plants', icon: 'leaf' },
+    { key: 'scan', label: 'Add plant', icon: 'scan', main: true },
     { key: 'alerts', label: 'Alerts', icon: 'bell', badge: 'unread' },
     { key: 'staffMore', label: 'More', icon: 'more' },
   ],
@@ -38,6 +38,7 @@ export function badgeCounts(db, me) {
     unread: (db.notifications || []).filter((n) => n.user_id === me.id && !n.is_read).length,
     returned: (db.observations || []).filter((o) => o.recorded_by === me.id && o.status === 'returned').length,
     openAlerts: (db.alerts || []).filter((a) => a.status === 'open').length,
+    pendingReview: (db.observations || []).filter((o) => o.status === 'synced').length,
   };
 }
 

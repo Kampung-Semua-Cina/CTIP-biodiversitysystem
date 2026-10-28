@@ -1,7 +1,7 @@
 // apps/shared/StoreProvider.js
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, DEMO_USER, DEMO_EMAILS, initialProfiles } from "./data.js";
+import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
 import { nextTagIds } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX } from "./utils.js";
@@ -18,10 +18,11 @@ import {
   fetchDistribution,
 } from "./api.js";
 
-const DEMO_PASSWORD =
+const ACTIVE_DEMO_PASSWORD =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
   (typeof process !== "undefined" && (process.env?.VITE_DEMO_PASSWORD || process.env?.DEMO_PASSWORD)) ||
-  "";
+  DEMO_PASSWORD ||
+  "Niah@1234";
 
 // Database store fully integrated with Supabase and the backend API.
 // Live Supabase tables (species, specimens, observations, qr_tags, alerts, profiles, etc.)
@@ -37,8 +38,37 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [backendSpeciesCount, setBackendSpeciesCount] = useState(0);
   const timer = useRef(null);
 
-  const me = db.profiles.find((p) => p.id === userId) || null;
-  const role = me ? me.role : "visitor";
+  const [prototypeRole, setPrototypeRole] = useState(null);
+
+  const effectiveRole = prototypeRole !== null
+    ? prototypeRole
+    : (userId ? (db.profiles.find((p) => p.id === userId)?.role || "visitor") : "visitor");
+
+  const me = useMemo(() => {
+    if (effectiveRole === "visitor") return null;
+    const byId = userId ? db.profiles.find((p) => p.id === userId) : null;
+    if (byId) return byId;
+
+    if (prototypeRole) {
+      const targetEmail = DEMO_EMAILS[prototypeRole];
+      const found =
+        db.profiles.find((p) => p.email === targetEmail) ||
+        db.profiles.find((p) => p.role === prototypeRole && p.is_active) ||
+        db.profiles.find((p) => p.role === prototypeRole) ||
+        initialProfiles.find((p) => p.email === targetEmail || p.role === prototypeRole);
+      if (found) return found;
+      return {
+        id: DEMO_USER[prototypeRole] || `demo-${prototypeRole}`,
+        full_name: `${prototypeRole.charAt(0).toUpperCase() + prototypeRole.slice(1)} (Demo)`,
+        role: prototypeRole,
+        email: DEMO_EMAILS[prototypeRole] || `${prototypeRole}@demo.local`,
+        is_active: true,
+      };
+    }
+    return null;
+  }, [effectiveRole, prototypeRole, db.profiles, userId]);
+
+  const role = effectiveRole;
 
   const notify = useCallback((message) => {
     clearTimeout(timer.current);
@@ -323,6 +353,16 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         setUserId(session.user.id);
         setAuthToken(session.access_token);
         setAuthTokenState(session.access_token);
+        setPrototypeRole(null);
+      } else {
+        setPrototypeRole((current) => {
+          if (!current || current === "visitor") {
+            setUserId(null);
+            clearAuthToken();
+            setAuthTokenState(null);
+          }
+          return current;
+        });
       }
       fetchFromSupabase(true);
     });
@@ -337,6 +377,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const setRole = async (key) => {
     const sb = getSupabase();
     if (key === "visitor") {
+      setPrototypeRole("visitor");
       clearAuthToken();
       setAuthTokenState(null);
       setUserId(null);
@@ -345,32 +386,55 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       } catch (e) {
         console.warn("signOut error:", e);
       }
-      fetchFromSupabase(true);
+      await fetchFromSupabase(true);
+      notify("Viewing as Visitor");
       return;
     }
 
     const targetEmail = DEMO_EMAILS[key];
-    const targetId = DEMO_USER[key];
-    setUserId(targetId);
+    const password = ACTIVE_DEMO_PASSWORD;
 
-    if (targetEmail && DEMO_PASSWORD) {
+    // Optimistically set prototype role so screen transitions are immediate
+    setPrototypeRole(key);
+
+    if (targetEmail && password) {
       try {
         const { data, error } = await sb.auth.signInWithPassword({
           email: targetEmail,
-          password: DEMO_PASSWORD,
+          password: password,
         });
+
         if (!error && data?.session) {
           setAuthToken(data.session.access_token);
           setAuthTokenState(data.session.access_token);
+          if (data.session.user) {
+            setUserId(data.session.user.id);
+          }
+          setPrototypeRole(null);
+          await fetchFromSupabase(true);
+          notify(`Signed in as ${targetEmail} (${key})`);
+          return;
+        } else if (error) {
+          console.warn("setRole signIn notice:", error.message);
         }
       } catch (err) {
-        console.warn("setRole signIn error:", err);
+        console.warn("setRole signIn exception:", err);
       }
     }
-    fetchFromSupabase(true);
+
+    // Offline / fallback resolution
+    const match =
+      db.profiles.find((p) => p.email === targetEmail || (p.role === key && p.is_active)) ||
+      db.profiles.find((p) => p.role === key) ||
+      initialProfiles.find((p) => p.email === targetEmail || p.role === key);
+    if (match) {
+      setUserId(match.id);
+    }
+    notify(`Viewing as ${key.charAt(0).toUpperCase() + key.slice(1)}`);
   };
 
   const logout = async () => {
+    setPrototypeRole("visitor");
     const sb = getSupabase();
     clearAuthToken();
     setAuthTokenState(null);
@@ -380,7 +444,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     } catch (e) {
       console.warn("signOut error:", e);
     }
-    fetchFromSupabase(true);
+    notify("Signed out");
   };
 
   const loginWithToken = async (token) => {
@@ -407,6 +471,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         };
       });
       setUserId(profile.id);
+      setPrototypeRole(null);
       setApiStatus("connected");
       notify(`Signed in as ${profile.full_name || profile.email} (${profile.role})`);
       return { ok: true, profile };
@@ -463,6 +528,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       setAuthToken(data.session.access_token);
       setAuthTokenState(data.session.access_token);
       setUserId(sessionUser.id);
+      setPrototypeRole(null);
       await fetchFromSupabase(true);
       return { ok: true, id: sessionUser.id, first: false };
     } catch (err) {

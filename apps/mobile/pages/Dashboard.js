@@ -65,8 +65,8 @@ export function SpeciesList({ nav, params = {} }) {
       .filter((s) => family === 'all' || s.family === family)
       .filter((s) => {
         if (!needle) return true;
-        const tags = plants.filter((p) => p.species_id === s.id).map((p) => p.qr_id.toLowerCase());
-        return [s.common_name, s.scientific_name, s.family].join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
+        const tags = plants.filter((p) => p.species_id === s.id && p.qr_id).map((p) => String(p.qr_id).toLowerCase());
+        return [s.common_name, s.scientific_name, s.family].filter(Boolean).join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
       })
       .sort((a, b) => (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name));
 
@@ -201,7 +201,7 @@ export function TaggedPlants({ nav }) {
   const needle = q.trim().toLowerCase();
   const filtered = all
     .filter((p) => (filter === 'all' ? true : filter === 'mine' ? p.registered_by === me?.id : filter === 'endangered' ? p.endangered : p.status === filter))
-    .filter((p) => !needle || [p.qr_id, p.name, p.scientific, p.by].join(' ').toLowerCase().includes(needle));
+    .filter((p) => !needle || [p.qr_id, p.name, p.scientific, p.by].filter(Boolean).join(' ').toLowerCase().includes(needle));
   const { shown, loading, loadMore } = usePaged(filtered, `${q}|${filter}|${db.plants.length}`);
   const filters = role === 'botanist' ? FILTERS : FILTERS.filter((f) => f.key !== 'mine');
 

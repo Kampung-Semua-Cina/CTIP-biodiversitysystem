@@ -4,7 +4,7 @@ import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import PlantCard from "../components/PlantCard.jsx";
 import { useStore } from "../../../shared/store.js";
-import { visiblePlants } from "../../../shared/selectors.js";
+import { visiblePlants, speciesCatalogue } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
 import { SITE, PARK } from "../../../shared/site.js";
 
@@ -20,11 +20,27 @@ import {
 // Forest photo for the home page hero. Swap for a park photo from Supabase Storage later.
 const HERO_PHOTO = "https://images.unsplash.com/photo-1470058869958-2a77ade41c02?auto=format&fit=crop&w=1400&q=70";
 
+// Newest published plants first (the date an officer approved them or observed/created).
+function recentPublishedPlants(db) {
+  const approvedAt = (p) => {
+    const obs = (db.observations || []).filter((o) => o.specimen_id === p.id && o.status === "approved");
+    const rev = (db.reviews || []).filter((r) => obs.some((o) => o.id === r.observation_id));
+    return rev.map((r) => r.created_at).sort().pop() || obs[0]?.observed_at || p.created_at || "";
+  };
+  return visiblePlants(db, "visitor").sort((a, b) => approvedAt(b).localeCompare(approvedAt(a)));
+}
+
+// Published species as fallback if no specimens are loaded
+function recentPublishedSpecies(db) {
+  return speciesCatalogue(db, "visitor").sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+}
+
 export function Home() {
   const { db, notify } = useStore();
   const [q, setQ] = useState("");
   const plants = visiblePlants(db, "visitor");
-  const latest = plants.slice(0, 3);
+  const recentPlants = recentPublishedPlants(db);
+  const recentSpecies = recentPublishedSpecies(db);
   const content = getHomeContent(PARK); // same text as the mobile home screen
 
   // Search jumps straight to the best match: an exact tag ID opens that plant, a name opens the species.
@@ -32,12 +48,15 @@ export function Home() {
     e.preventDefault();
     const t = q.trim().toLowerCase();
     if (!t) return go("/plants");
-    const tag = plants.find((p) => p.qr_id.toLowerCase() === t);
+    const tag = plants.find((p) => p && p.qr_id && p.qr_id.toLowerCase() === t);
     if (tag) return go("/tag/" + tag.qr_id);
     const hit = plants.find((p) => p.species && `${p.name} ${p.scientific} ${p.species.family}`.toLowerCase().includes(t));
     if (hit) go("/plants/" + hit.species.id);
     else notify(`No published plant matches "${q.trim()}"`);
   };
+
+  const showPlants = recentPlants.length > 0;
+  const recentItems = showPlants ? recentPlants.slice(0, 6) : recentSpecies.slice(0, 6);
 
   return (
     <>
@@ -61,13 +80,13 @@ export function Home() {
         </div>
         <div className="homehero-photo">
           <Img src={HERO_PHOTO} alt="Rainforest canopy" />
-          <div className="scanbadge">
+          <a className="scanbadge" href="#/scan" aria-label="Open plant QR tag scanner">
             <span className="scanicon"><Icon name="qr" size={32} /></span>
             <span>
               <b>In the forest?</b>
               <span>Scan the QR tag on any plant with your phone camera to open its page here.</span>
             </span>
-          </div>
+          </a>
         </div>
       </section>
 
@@ -79,7 +98,7 @@ export function Home() {
             ["Verified by an officer", "A park officer checks the species and photos, then approves the record or returns it for changes."],
             ["Published for everyone", "Approved plants appear in the library and on the map. Endangered plants never show an exact location."],
           ].map(([title, text], i) => (
-            <li className="glass pad" key={title}>
+            <li className="stepcard" key={title}>
               <span className="stepnum" aria-hidden="true">{i + 1}</span>
               <h3>{title}</h3>
               <p className="mute">{text}</p>
@@ -88,20 +107,29 @@ export function Home() {
         </ol>
       </section>
 
-      {latest.length > 0 && (
-        <section className="gap-section" aria-labelledby="recent">
-          <div className="row between wrap">
-            <h2 id="recent">{content.recentSectionTitle}</h2>
-            <a className="textlink" href="#/plants">See all plants</a>
-          </div>
+      <section className="gap-section" aria-labelledby="recent">
+        <div className="row between wrap">
+          <h2 id="recent">{content.recentSectionTitle}</h2>
+          <a className="textlink" href="#/plants">See all plants <Icon name="arrowR" size={16} /></a>
+        </div>
+        {recentItems.length === 0 ? (
+          <p className="mute" style={{ margin: "16px 0" }}>No published plant records yet.</p>
+        ) : (
           <div className="plantgrid">
-            {latest.map((p) => (
-              <PlantCard key={p.id} href={"#/tag/" + p.qr_id} photo={p.photos[0]?.url} family={p.species?.family}
-                name={p.name} scientific={p.scientific} conservation={p.conservation} />
+            {recentItems.map((item) => (
+              <PlantCard
+                key={item.id}
+                href={item.qr_id ? `#/tag/${item.qr_id}` : `#/plants/${item.id}`}
+                photo={item.photo || item.photos?.[0]?.url}
+                family={item.species?.family || item.family}
+                name={item.name}
+                scientific={item.scientific || item.scientific_name}
+                conservation={item.conservation || item.conservation_status}
+              />
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </>
   );
 }
@@ -123,7 +151,9 @@ export function Contact() {
   return (
     <section className="glass pad prose">
       <h1>{content.title}</h1>
-      <p>Email: {content.email}</p>
+      <p>
+        Email: <a className="textlink" href={`mailto:${content.email}`}>{content.email}</a>
+      </p>
       <p>
         {content.organization}, {content.address}
       </p>

@@ -223,10 +223,10 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--r-pill);
   font-size: 11px; font-weight: 600; line-height: 1.4; border: 1px solid var(--line);
 }
-.api-badge.on { background: rgba(46, 125, 50, 0.12); color: #2e7d32; border-color: rgba(46, 125, 50, 0.3); }
+.api-badge.on { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
 .api-badge.off { background: rgba(120, 144, 156, 0.12); color: var(--ink3); border-color: var(--line); }
-.api-badge.syncing { background: rgba(2, 136, 209, 0.12); color: #0288d1; border-color: rgba(2, 136, 209, 0.3); }
-.api-badge.session { background: rgba(103, 58, 183, 0.12); color: #673ab7; border-color: rgba(103, 58, 183, 0.3); }
+.api-badge.syncing { background: var(--info-soft); color: var(--info); border-color: var(--info-line); }
+.api-badge.session { background: var(--acc-soft); color: var(--acc); border-color: var(--acc-line); }
 .protobar-sync {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); color: var(--ink2);
   cursor: pointer; padding: 4px 8px; display: inline-flex; align-items: center; justify-content: center;
@@ -256,18 +256,53 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 .bottom { display: none; }
 
 /* ---------- 3. Buttons and forms ---------- */
+.site .btn,
+.site a.btn,
+.site a.btn:visited,
+.site button.btn,
+.site label.btn,
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
   min-height: 44px; padding: 0 20px; border: 1px solid transparent; border-radius: var(--r-control);
-  background: var(--acc); color: var(--on-acc);
+  background: var(--acc); color: var(--on-acc) !important;
   font: 700 var(--t-label-size) / var(--t-label-line) var(--f-text); cursor: pointer; white-space: nowrap;
 }
-.btn:hover { background: var(--acc-press); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn.ghost, .btn.staff { background: var(--surface); color: var(--ink); border-color: var(--line); }
-.btn.ghost:hover, .btn.staff:hover { background: var(--raised); }
-.btn.danger { background: var(--bad); color: var(--on-bad); }
-.btn.danger:hover { background: var(--bad); filter: brightness(0.95); }
+.site .btn:hover,
+.site a.btn:hover,
+.site button.btn:hover,
+.site label.btn:hover,
+.btn:hover { background: var(--acc-press); color: var(--on-acc) !important; }
+.site .btn:disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.site a.btn.ghost,
+.site a.btn.staff,
+.site button.btn.ghost,
+.site button.btn.staff,
+.site label.btn.ghost,
+.site label.btn.staff,
+.btn.ghost,
+.btn.staff {
+  background: var(--surface); color: var(--ink) !important; border-color: var(--line);
+}
+.site a.btn.ghost:hover,
+.site a.btn.staff:hover,
+.site button.btn.ghost:hover,
+.site button.btn.staff:hover,
+.site label.btn.ghost:hover,
+.site label.btn.staff:hover,
+.btn.ghost:hover,
+.btn.staff:hover { background: var(--raised); color: var(--ink) !important; }
+
+.site a.btn.danger,
+.site button.btn.danger,
+.site label.btn.danger,
+.btn.danger {
+  background: var(--bad); color: var(--on-bad) !important;
+}
+.site a.btn.danger:hover,
+.site button.btn.danger:hover,
+.site label.btn.danger:hover,
+.btn.danger:hover { background: var(--bad); filter: brightness(0.95); color: var(--on-bad) !important; }
 .btn.small-btn { min-height: 36px; padding: 0 var(--s-3); font-size: var(--t-small-size); }
 .filebtn { cursor: pointer; }
 
@@ -308,7 +343,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .site form.row > label, .site form .row > label { margin: 0; }
 .site input[type="number"] { min-width: 90px; }
 /* A label styled as a button (e.g. "Scan or upload QR") looks exactly like the buttons next to it. */
-.site label.btn { display: inline-flex; margin: 0; color: var(--ink); font-size: var(--t-label-size); }
+.site label.btn { display: inline-flex; margin: 0; font-size: var(--t-label-size); }
 
 .switch {
   position: relative; width: 44px; height: 26px; padding: 0; border-radius: var(--r-pill);
@@ -348,7 +383,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
   font: 600 var(--t-small-size) var(--f-text); cursor: pointer;
 }
 .pill:hover { background: var(--raised); }
-.pill.on, .pill[aria-pressed="true"] { background: var(--acc); color: var(--on-acc); border-color: var(--acc); font-weight: 700; }
+.site a.pill.on, .site button.pill.on, .pill.on, .pill[aria-pressed="true"] { background: var(--acc); color: var(--on-acc) !important; border-color: var(--acc); font-weight: 700; }
 .pills { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .viewcount, .pill b { font-weight: 800; opacity: 0.85; }
 
@@ -411,7 +446,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .side .toolslabel:first-child { margin-top: var(--s-1); }
 .count { min-width: 22px; padding: 0 7px; border-radius: var(--r-pill); text-align: center; font-size: 12px; font-weight: 800; background: var(--info); color: var(--ground); }
 .count-alerts { background: var(--bad); color: var(--on-bad); }
-.count-returned { background: var(--warn); color: var(--ground); }
+.count-returned { background: var(--warn); color: var(--on-warn); }
 /* On narrow screens the sidebar is hidden and the staff tools show as a row of pills. */
 .quick { display: none; gap: var(--s-2); margin-bottom: var(--s-4); overflow-x: auto; padding-bottom: 2px; }
 .content { min-width: 0; }
@@ -525,12 +560,36 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .scanbadge {
   position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; align-items: center; gap: var(--s-4);
   padding: var(--s-4); border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+  text-decoration: none; color: var(--ink); cursor: pointer;
+  transition: transform var(--m-base) var(--ease-io), box-shadow var(--m-base) var(--ease-io), border-color var(--m-base) var(--ease-io);
+}
+.scanbadge:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+  border-color: var(--acc-line);
+}
+.scanbadge:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
 }
 .scanbadge .scanicon { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--r-control); background: var(--acc-soft); color: var(--acc); }
 .scanbadge b { display: block; font-family: var(--f-display); font-weight: 700; font-size: var(--t-title3-size); line-height: var(--t-title3-line); }
 .scanbadge span { font-size: var(--t-small-size); line-height: var(--t-small-line); color: var(--ink2); }
 .steps3 { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s-4); }
-.steps3 li { display: flex; flex-direction: column; gap: 10px; }
+.stepcard, .steps3 li {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: var(--s-5);
+  background: var(--sunken);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
+  box-shadow: none;
+  cursor: default;
+}
+.stepcard:hover, .steps3 li:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: var(--line) !important;
+}
 .steps3 li > * { margin: 0 !important; }
 .steps3 h3 { font-size: 19px; }
 .stepnum, .step span {
@@ -938,7 +997,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .maplegend p { margin: 0; }
 .legend { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
 .fam { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: 600 var(--t-caption-size) var(--f-text); cursor: pointer; }
-.fam.on { background: var(--acc); color: var(--on-acc); border-color: var(--acc); font-weight: 700; }
+.site .fam.on, .fam.on { background: var(--acc); color: var(--on-acc) !important; border-color: var(--acc); font-weight: 700; }
 .fam.on i { border-color: var(--on-acc); }
 .fam i, .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line); vertical-align: -1px; }
 .site .maplink { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--acc); font-weight: 700; }

@@ -14,6 +14,8 @@ export const DEMO_EMAILS = {
   admin: "admin123456@gmail.com",
 };
 
+export const DEMO_PASSWORD = "Niah@1234";
+
 export const CONSERVATION = ["least concern", "near threatened", "vulnerable", "endangered"];
 export const OBS_STATUS = ["draft", "queued", "synced", "returned", "approved", "rejected"];
 

@@ -37,7 +37,7 @@ export default function MapPage({ nav, params = {} }) {
   const needle = q.trim().toLowerCase();
   const shown = plants
     .filter((p) => family === 'all' || p.species?.family === family)
-    .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].join(' ').toLowerCase().includes(needle))
+    .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].filter(Boolean).join(' ').toLowerCase().includes(needle))
     .map((p) => ({ p, where: shownCoords(p, role) }));
 
   const onMap = shown.filter((s) => s.where);

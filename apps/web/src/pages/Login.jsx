@@ -100,6 +100,9 @@ export default function Login() {
 
   return (
     <section className="glass pad narrow">
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+        <img src="/logo.svg" alt="Daun Sense" style={{ width: 56, height: 56, borderRadius: 14 }} />
+      </div>
       {mode === "signin" && (
         <form onSubmit={submit}>
           <h1>Staff sign in</h1>

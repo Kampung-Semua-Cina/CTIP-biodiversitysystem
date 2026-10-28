@@ -5,18 +5,14 @@ import React from 'react';
 import { View } from 'react-native';
 
 import Icon from './Icon.js';
+import Logo from './Logo.js';
 import { useTheme } from './Theme.js';
 import { Section, Segmented, Txt } from './Bits.js';
 import { useStore } from '../../shared/store.js';
 import { ROLES } from '../../shared/permissions.js';
 
 export function LogoMark({ size = 30 }) {
-  const { c } = useTheme();
-  return (
-    <View accessibilityLabel="Daun Sense" style={{ width: size, height: size, borderRadius: size * 0.27, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent }}>
-      <Icon name="leaf" size={size * 0.6} color={c.onAccent} strokeWidth={2} />
-    </View>
-  );
+  return <Logo size={size} />;
 }
 
 export function AppearanceSection() {

@@ -7,6 +7,7 @@ import Catalogue from "../pages/Catalogue.jsx";
 import SpeciesPage from "../pages/SpeciesPage.jsx";
 import Specimen from "../pages/Specimen.jsx";
 import MapPage from "../pages/MapPage.jsx";
+import Scan from "../pages/Scan.jsx";
 import { canAccess } from "../routes.js";
 
 // Helper for staff/admin modules: lazy-load with graceful fallbacks so ad-blockers (e.g. uBlock Origin)
@@ -66,6 +67,7 @@ export default function RouteView({ seg, arg, role }) {
     case "plants": return arg ? <SpeciesPage key={arg} id={arg} /> : <Catalogue />;
     case "tag": return <Specimen key={arg} qr={arg} />;
     case "map": return <MapPage arg={arg} />;
+    case "scan": return <Scan />;
     default: break;
   }
 

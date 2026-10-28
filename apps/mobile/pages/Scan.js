@@ -28,12 +28,16 @@ export function extractTag(raw) {
 
 // What a scanned ID refers to. Supabase: GET /tags/{qrId} once the apps use the API.
 export function lookupTag(db, id) {
-  const plant = db.plants.find((p) => p.qr_id.toUpperCase() === id && !p.is_deleted);
-  if (plant) return { kind: 'used', id, plant: plantView(db, plant) };
-  const tag = db.tags.find((t) => t.qr_id.toUpperCase() === id);
-  if (tag?.status === 'unused') return { kind: 'unused', id, tag };
-  if (tag?.status === 'retired') return { kind: 'retired', id, tag };
-  return { kind: 'unknown', id };
+  const cleanId = String(id || '').trim().toUpperCase();
+  if (!cleanId || !db) return { kind: 'unknown', id: cleanId };
+  const plants = db.plants || [];
+  const tags = db.tags || [];
+  const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
+  if (plant) return { kind: 'used', id: cleanId, plant: plantView(db, plant) };
+  const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
+  if (tag?.status === 'unused') return { kind: 'unused', id: cleanId, tag };
+  if (tag?.status === 'retired') return { kind: 'retired', id: cleanId, tag };
+  return { kind: 'unknown', id: cleanId };
 }
 
 export default function Scan({ nav, params = {} }) {

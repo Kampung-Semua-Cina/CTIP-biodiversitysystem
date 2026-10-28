@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { View, Linking } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
-import { visiblePlants } from '../../shared/selectors.js';
+import { visiblePlants, speciesCatalogue } from '../../shared/selectors.js';
 import { getAboutContent, getContactContent, getHomeContent } from '../../shared/publicContent.js';
 import { SITE, PARK } from '../../shared/site.js';
 import { useTheme } from '../components/Theme.js';
@@ -15,21 +15,33 @@ import {
   MenuRow, Button, KV, IconTile, IconButton, Empty,
 } from '../components/Bits.js';
 
-// Newest published plants first (the date an officer approved them).
+// Newest published plants first (the date an officer approved them), or published species
 function recentPublished(db) {
-  const approvedAt = (plantId) => {
-    const obs = db.observations.filter((o) => o.specimen_id === plantId && o.status === 'approved');
-    const rev = db.reviews.filter((r) => obs.some((o) => o.id === r.observation_id));
-    return rev.map((r) => r.created_at).sort().pop() || '';
+  const approvedAt = (plant) => {
+    const obs = (db.observations || []).filter((o) => o.specimen_id === plant.id && o.status === 'approved');
+    const rev = (db.reviews || []).filter((r) => obs.some((o) => o.id === r.observation_id));
+    return rev.map((r) => r.created_at).sort().pop() || obs[0]?.observed_at || plant.created_at || '';
   };
-  return visiblePlants(db, 'visitor').sort((a, b) => approvedAt(b.id).localeCompare(approvedAt(a.id)));
+  const plants = visiblePlants(db, 'visitor').sort((a, b) => approvedAt(b).localeCompare(approvedAt(a)));
+  if (plants.length > 0) return plants;
+
+  return speciesCatalogue(db, 'visitor')
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .map((s) => ({
+      id: s.id,
+      name: s.common_name || s.name || s.scientific_name,
+      scientific: s.scientific_name,
+      endangered: s.endangered,
+      photos: s.photo ? [{ url: s.photo }] : (s.media?.length ? [{ url: s.media[0].url }] : []),
+      species: s,
+    }));
 }
 
 export function Home({ nav }) {
   const { db } = useStore();
   const { c } = useTheme();
   const [q, setQ] = useState('');
-  const recent = recentPublished(db).slice(0, 5);
+  const recent = recentPublished(db).slice(0, 6);
   const home = getHomeContent(PARK);
 
   return (
@@ -52,19 +64,23 @@ export function Home({ nav }) {
         placeholder="Search plants or tag ID"
       />
       <Section title={home.recentSectionTitle} top={false} gap={0} right={<TextLink label="See all" size={14} onPress={() => nav.tab('plants')} />}>
-        {recent.length === 0 ? <Empty>No plants are published yet.</Empty> : null}
+        {recent.length === 0 ? <Empty>No published plants or species yet.</Empty> : null}
         {recent.map((p, i) => (
           <Row
             key={p.id}
-            left={<Thumb uri={p.photos[0]?.url} />}
+            left={<Thumb uri={p.photos?.[0]?.url || p.photo} />}
             title={p.name}
             sub={
               <>
-                <Sci size={14}>{p.scientific}</Sci>
+                <Sci size={14}>{p.scientific || p.scientific_name}</Sci>
                 {p.endangered ? <DotLabel status="endangered" /> : null}
               </>
             }
-            onPress={() => nav.go('species', { id: p.species?.id })}
+            onPress={() => {
+              if (p.qr_id) nav.go('tag', { qr: p.qr_id });
+              else if (p.species?.id || p.id) nav.go('species', { id: p.species?.id || p.id });
+              else nav.tab('plants');
+            }}
             last={i === recent.length - 1}
           />
         ))}

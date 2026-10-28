@@ -8,6 +8,7 @@ import { getStaffPageContent } from '../../shared/publicContent.js';
 import { PARK } from '../../shared/site.js';
 import { useTheme } from '../components/Theme.js';
 import { Screen, Header, IconButton, TitleBlock, Field, Button, Txt } from '../components/Bits.js';
+import { LogoMark } from '../components/Chrome.js';
 
 export default function SignIn({ nav }) {
   const { login, signIn } = useStore();
@@ -26,6 +27,9 @@ export default function SignIn({ nav }) {
 
   return (
     <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />} top={0} gap={18}>
+      <View style={{ alignItems: 'flex-start', paddingTop: 8 }}>
+        <LogoMark size={48} />
+      </View>
       <TitleBlock title="Staff sign in" />
       <Txt v="body" color={c.ink2}>For Sarawak Forestry Corporation botanists, conservation officers and admins.</Txt>
       <Field label="Email" value={email} onChangeText={(v) => { setEmail(v); setError(''); }} placeholder="name@sfc.my" keyboardType="email-address" />

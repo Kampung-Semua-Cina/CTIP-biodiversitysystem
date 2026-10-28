@@ -16,19 +16,44 @@ import { shortDate, coords } from '../components/format.js';
 
 const MAX_PHOTOS = 6;
 
-// Take a photo with the camera (or pick one if the camera is not allowed).
-// CTIP-55 adds upload to Supabase Storage; for now the photo stays on the phone.
+// Take a photo with the camera.
 async function takePhoto() {
   try {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     const result = cam.granted
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    if (!result.canceled && result.assets?.length) return { url: result.assets[0].uri };
+    if (!result.canceled && result.assets?.length) return [{ url: result.assets[0].uri }];
   } catch {
-    // Camera not available (for example on a simulator); nothing to add.
+    // Camera not available (e.g. simulator)
   }
-  return null;
+  return [];
+}
+
+// Pick photo(s) from device image gallery.
+async function pickFromGallery() {
+  try {
+    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!lib.granted) {
+      const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!ask.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to choose images.');
+        return [];
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.7,
+      selectionLimit: MAX_PHOTOS,
+    });
+    if (!result.canceled && result.assets?.length) {
+      return result.assets.map((a) => ({ url: a.uri }));
+    }
+  } catch {
+    // Gallery not available
+  }
+  return [];
 }
 
 // Simulated GPS fix near the trail head. CTIP-56 replaces this with expo-location.
@@ -37,23 +62,57 @@ function readGps() {
   return { lat: +(3.8031 + jitter()).toFixed(5), lng: +(113.7762 + jitter()).toFixed(5), acc: Math.round(4 + Math.random() * 5) };
 }
 
-function PhotoStrip({ photos, onAdd, onRemove, highlightAdd }) {
+function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd }) {
   const { c } = useTheme();
+
+  const promptChoice = () => {
+    Alert.alert('Add Photo', 'Take a new photo with camera or choose from gallery', [
+      { text: 'Take photo', onPress: onAddCamera },
+      { text: 'Choose from gallery', onPress: onAddGallery },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-      {photos.map((p, i) => (
-        <Pressable key={p.url + i} accessibilityRole="button" accessibilityLabel={`Photo ${i + 1}${i === 0 ? ', cover' : ''}. Hold to remove.`} onLongPress={() => onRemove(i)}
-          style={i === 0 ? { borderRadius: 12, borderWidth: 2, borderColor: c.accent, padding: 2 } : { padding: 4 }}>
-          <Image source={{ uri: p.url }} style={{ width: 72, height: 72, borderRadius: 9, backgroundColor: c.accentSoft }} />
-        </Pressable>
-      ))}
-      {photos.length < MAX_PHOTOS ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Add photo" onPress={onAdd}
-          style={{ width: 76, height: 76, marginTop: 2, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: highlightAdd ? 'transparent' : c.bg, borderWidth: highlightAdd ? 2 : 0, borderStyle: 'dashed', borderColor: c.warning }}>
-          <Icon name={photos.length ? 'plus' : 'camera'} size={24} color={highlightAdd ? c.warning : c.accent} />
-          {!photos.length ? <Text style={{ fontFamily: font('text', 800), fontSize: 12, color: c.accent }}>Add</Text> : null}
-        </Pressable>
-      ) : null}
+    <View style={{ gap: 10 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+        {photos.map((p, i) => (
+          <Pressable key={p.url + i} accessibilityRole="button" accessibilityLabel={`Photo ${i + 1}${i === 0 ? ', cover' : ''}. Hold to remove.`} onLongPress={() => onRemove(i)}
+            style={i === 0 ? { borderRadius: 12, borderWidth: 2, borderColor: c.accent, padding: 2 } : { padding: 4 }}>
+            <Image source={{ uri: p.url }} style={{ width: 72, height: 72, borderRadius: 9, backgroundColor: c.accentSoft }} />
+          </Pressable>
+        ))}
+        {photos.length < MAX_PHOTOS ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Add photo" onPress={promptChoice}
+            style={{ width: 76, height: 76, marginTop: 2, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: highlightAdd ? 'transparent' : c.bg, borderWidth: highlightAdd ? 2 : 0, borderStyle: 'dashed', borderColor: c.warning }}>
+            <Icon name={photos.length ? 'plus' : 'camera'} size={24} color={highlightAdd ? c.warning : c.accent} />
+            {!photos.length ? <Text style={{ fontFamily: font('text', 800), fontSize: 12, color: c.accent }}>Add</Text> : null}
+          </Pressable>
+        ) : null}
+      </View>
+
+      {photos.length < MAX_PHOTOS && (
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Button
+            label="Take photo"
+            icon="camera"
+            kind="secondary"
+            height={40}
+            size={14}
+            flex={1}
+            onPress={onAddCamera}
+          />
+          <Button
+            label="From gallery"
+            icon="plus"
+            kind="secondary"
+            height={40}
+            size={14}
+            flex={1}
+            onPress={onAddGallery}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -73,7 +132,7 @@ function GpsRow({ gps, onRefresh, title }) {
 }
 
 // Species picker: type a name, pick from the species list (CTIP-26) and pre-fill (CTIP-63).
-function SpeciesField({ value, onChange, onPick, species }) {
+function SpeciesField({ value, onChange, onPick, species, error }) {
   const { c } = useTheme();
   const needle = value.trim().toLowerCase();
   const exact = species.find((s) => s.scientific_name.toLowerCase() === needle);
@@ -82,8 +141,8 @@ function SpeciesField({ value, onChange, onPick, species }) {
     : [];
   return (
     <View style={{ gap: 6 }}>
-      <Field label="Species" value={value} onChangeText={onChange} placeholder="Start typing a name" italic
-        hint={exact ? `${exact.common_name} · ${exact.family}. Details pre-filled from the species list.` : 'Leave as your best guess. An officer confirms it.'} />
+      <Field label="Species (required)" value={value} onChangeText={onChange} placeholder="Start typing a name" italic error={error}
+        hint={exact ? `${exact.common_name} · ${exact.family}. Details pre-filled from the species list.` : 'Select or enter the species before submitting for review.'} />
       {matches.map((s) => (
         <Pressable key={s.id} accessibilityRole="button" onPress={() => onPick(s)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.bg }}>
@@ -124,12 +183,34 @@ export function AddPlant({ nav, params = {} }) {
     setSp(s.scientific_name);
     if (!looks) setLooks(s.description || '');
   };
-  const problems = { photos: photos.length === 0, looks: !looks.trim() };
-  const ok = !problems.photos && !problems.looks;
+
+  const addPhotoItems = (items) => {
+    if (!items || !items.length) return;
+    setPhotos((prev) => {
+      const combined = [...prev, ...items];
+      return combined.slice(0, MAX_PHOTOS);
+    });
+  };
+
+  const problems = {
+    photos: photos.length === 0,
+    looks: !looks.trim(),
+    species: !sp.trim(),
+  };
+  const ok = !problems.photos && !problems.looks && !problems.species;
 
   const submit = () => {
     setTried(true);
-    if (!ok) return;
+    if (!ok) {
+      if (problems.species) {
+        Alert.alert('Species required', 'Please select or enter a species before submitting for review.');
+      } else if (problems.photos) {
+        Alert.alert('Photo required', 'Please add at least one photo of the plant.');
+      } else if (problems.looks) {
+        Alert.alert('Appearance required', 'Please describe what the plant looks like.');
+      }
+      return;
+    }
     addPlant({ qr_id: qr, proposed_species: sp.trim(), morphology: looks.trim(), height_cm: height, notes: notes.trim(), photos, lat: gps.lat, lng: gps.lng, gps_accuracy_m: gps.acc });
     nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, acc: gps.acc, cover: photos[0]?.url });
   };
@@ -163,13 +244,20 @@ export function AddPlant({ nav, params = {} }) {
         <PhotoStrip
           photos={photos}
           highlightAdd={tried && problems.photos}
-          onAdd={async () => { const p = await takePhoto(); if (p) setPhotos((list) => [...list, p]); }}
+          onAddCamera={async () => { const p = await takePhoto(); addPhotoItems(p); }}
+          onAddGallery={async () => { const p = await pickFromGallery(); addPhotoItems(p); }}
           onRemove={(i) => setPhotos((list) => list.filter((_, j) => j !== i))}
         />
       </Section>
 
       <Section title="Details" gap={16}>
-        <SpeciesField value={sp} onChange={setSp} onPick={pick} species={species} />
+        <SpeciesField
+          value={sp}
+          onChange={setSp}
+          onPick={pick}
+          species={species}
+          error={tried && problems.species ? 'Species is required before submitting for review' : undefined}
+        />
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" width={140} />
         <View style={{ gap: 6 }}>
           <Area label="Appearance" value={looks} onChangeText={setLooks} placeholder="Leaves, stem, pitchers, flowers, roots" />
@@ -198,15 +286,14 @@ export function Submitted({ nav, params = {} }) {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, backgroundColor: c.bg }}>
         <Thumb uri={params.cover} size={56} />
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={{ fontFamily: params.name ? font('display', 500, true) : font('display', 600), fontSize: 17, color: c.ink }}>{params.name || 'Species not set'}</Text>
-          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>{params.qr} · {params.photos} photo{params.photos === 1 ? '' : 's'} · ±{params.acc} m</Txt>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt v="label">{params.name || 'Plant record'}</Txt>
+          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{params.photos || 1} photo · GPS ±{params.acc || 5} m</Txt>
         </View>
-        <DotLabel status="synced" />
       </View>
-      <View style={{ gap: 4, paddingTop: 24 }}>
-        <Button label="Tag another plant" icon="scan" onPress={() => nav.replace('scan')} />
-        <Button label="View my records" kind="text" height={48} size={15} onPress={() => nav.tab('records')} />
+      <View style={{ gap: 10, marginTop: 'auto' }}>
+        <Button label="View my records" onPress={() => nav.tab('records')} />
+        <Button label="Back to home" kind="secondary" onPress={nav.home} />
       </View>
     </Screen>
   );
@@ -215,8 +302,7 @@ export function Submitted({ nav, params = {} }) {
 export function Revisit({ nav, params = {} }) {
   const { db, addRevisit, notify } = useStore();
   const { c } = useTheme();
-  const raw = db.plants.find((p) => p.qr_id === params.qr && !p.is_deleted);
-  const plant = plantView(db, raw);
+  const plant = db.plants.find((p) => p.qr_id === params.qr);
   const [photos, setPhotos] = useState([]);
   const [height, setHeight] = useState('');
   const [changes, setChanges] = useState('');
@@ -230,6 +316,14 @@ export function Revisit({ nav, params = {} }) {
   }
   const last = db.observations.filter((o) => o.specimen_id === plant.id).sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
   const ok = photos.length > 0 || changes.trim() || height;
+
+  const addPhotoItems = (items) => {
+    if (!items || !items.length) return;
+    setPhotos((prev) => {
+      const combined = [...prev, ...items];
+      return combined.slice(0, MAX_PHOTOS);
+    });
+  };
 
   const submit = () => {
     addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: gps.acc });
@@ -258,7 +352,12 @@ export function Revisit({ nav, params = {} }) {
         </View>
       ) : null}
       <Section title="New photos" right={<Txt v="caption" color={c.ink3}>{photos.length} of {MAX_PHOTOS}</Txt>} gap={12}>
-        <PhotoStrip photos={photos} onAdd={async () => { const p = await takePhoto(); if (p) setPhotos((l) => [...l, p]); }} onRemove={(i) => setPhotos((l) => l.filter((_, j) => j !== i))} />
+        <PhotoStrip
+          photos={photos}
+          onAddCamera={async () => { const p = await takePhoto(); addPhotoItems(p); }}
+          onAddGallery={async () => { const p = await pickFromGallery(); addPhotoItems(p); }}
+          onRemove={(i) => setPhotos((l) => l.filter((_, j) => j !== i))}
+        />
       </Section>
       <Section title="What has changed" gap={16}>
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} placeholder={last?.height_cm ? String(last.height_cm) : ''} keyboardType="decimal-pad" width={140} hint="Leave empty if it has not changed" />

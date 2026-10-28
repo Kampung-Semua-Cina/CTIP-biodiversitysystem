@@ -18,6 +18,7 @@ export function StaffMore({ nav }) {
   const { me, role, logout } = useStore();
   const { c } = useTheme();
   const tools = [
+    can(role, 'monitor') && { icon: 'activity', label: 'Monitoring', go: 'monitor' },
     can(role, 'species') && { icon: 'leaf', label: 'Species', go: 'speciesAdmin' },
     can(role, 'tags') && { icon: 'qr', label: 'QR tags', go: 'tags' },
     can(role, 'reports') && { icon: 'chart', label: 'Reports', go: 'reports' },

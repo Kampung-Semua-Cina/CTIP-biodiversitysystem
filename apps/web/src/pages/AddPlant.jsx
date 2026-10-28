@@ -68,6 +68,7 @@ export default function AddPlant() {
   const save = async (e) => {
     e.preventDefault();
     if (!qr) return notify("Choose or generate a QR tag first");
+    if (!guess.trim()) return notify("Please select or enter a species before submitting");
     if (!photos.length) return notify("Add at least one photo");
     setSaving(true);
     const res = await addPlant({
