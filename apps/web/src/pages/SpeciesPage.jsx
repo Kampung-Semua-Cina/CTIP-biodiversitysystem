@@ -42,8 +42,8 @@ export default function SpeciesPage({ id }) {
   const photos = s.media.length > 0 ? s.media : obsPhotos;
   const savePhotos = async (list) => {
     const r = await setSpeciesMedia(s.id, list);
-    notify(r.ok ? "Photos saved" : r.message);
-    if (r.ok) setEditing(false);
+    notify(r?.ok ? "Photos saved" : (r?.message || "Failed to save photos"));
+    if (r?.ok) setEditing(false);
   };
   const points = mappable(s.plants, role);
   const related = all
@@ -120,7 +120,7 @@ export default function SpeciesPage({ id }) {
         )}
       </section>
 
-      {editing && <PhotoEditor photos={s.media} observationPhotos={obsPhotos} captions min={0} onClose={() => setEditing(false)} onSave={savePhotos} />}
+      {editing && <PhotoEditor photos={s.raw_media || []} observationPhotos={obsPhotos} captions min={0} onClose={() => setEditing(false)} onSave={savePhotos} />}
 
       {related.length > 0 && (
         <section className="gap-section-s" aria-labelledby="related">

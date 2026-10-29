@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
 import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
-import { nextTagIds } from "./selectors.js";
+import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
 import { getSupabase } from "./supabase.js";
@@ -23,6 +23,32 @@ import {
   uploadSpeciesMediaApi,
   updateSpeciesMediaApi,
   deleteSpeciesMediaApi,
+  fetchWorkspace,
+  updateMeApi,
+  createProfileApi,
+  updateProfileApi,
+  findSpecimenByQrApi,
+  createSpecimenApi,
+  updateSpecimenApi,
+  createObservationApi,
+  submitObservationApi,
+  addCommentApi,
+  uploadObservationPhotoApi,
+  filePart,
+  publishSpeciesApi,
+  deleteSpeciesApi,
+  restoreSpeciesApi,
+  createTagBatchApi,
+  deleteTagApi,
+  retireTagApi,
+  assignAlertApi,
+  acknowledgeAlertApi,
+  resolveAlertApi,
+  addAlertNoteApi,
+  setThresholdsApi,
+  fetchNotificationsApi,
+  markReadApi,
+  markAllReadApi,
 } from "./api.js";
 
 const ACTIVE_DEMO_PASSWORD =
@@ -35,9 +61,14 @@ const ACTIVE_DEMO_PASSWORD =
 export const API_DOWN = "Cannot reach the API server. Start it with npm run api (needs services/api/.env).";
 const API_CHECK_MS = 30000;
 
-// Database store fully integrated with Supabase and the backend API.
-// Live Supabase tables (species, specimens, observations, qr_tags, alerts, profiles, etc.)
-// are queried on load and updated directly on mutations.
+// The freshest token: Supabase Auth refreshes the session, the stored one can be expired.
+const sessionToken = async () =>
+  (await getSupabase().auth.getSession())?.data?.session?.access_token || getAuthToken();
+
+// App state, loaded from and saved through the Express API (services/api).
+// Supabase is used here only for Auth (sign in, sign out, passwords, the
+// session token the API checks); every table and file goes through the API,
+// which checks the role and runs each query as the user so RLS applies too.
 export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [userId, setUserId] = useState(null);
@@ -87,225 +118,157 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     timer.current = setTimeout(() => setToast(""), 2600);
   }, []);
 
-  // Fetch live tables from Supabase and assemble into client state
-  const fetchFromSupabase = useCallback(async (quiet = true) => {
-    try {
-      const sb = getSupabase();
-
-      const [
-        spRes,
-        smRes,
-        tagRes,
-        specRes,
-        obsRes,
-        photoRes,
-        revRes,
-        commRes,
-        alertRes,
-        anRes,
-        nodeRes,
-        notifRes,
-        auditRes,
-        profRes,
-      ] = await Promise.all([
-        sb.from("species").select("*").order("created_at", { ascending: true }),
-        sb.from("species_media").select("*").order("sort_order", { ascending: true }),
-        sb.from("qr_tags").select("*").order("qr_id", { ascending: true }),
-        sb.from("specimens").select("*"), // deleted ones too: their tags stay taken
-        sb.from("observations").select("*").eq("is_deleted", false).order("observed_at", { ascending: false }),
-        sb.from("observation_photos").select("*").order("created_at", { ascending: true }),
-        sb.from("observation_reviews").select("*").order("created_at", { ascending: false }),
-        sb.from("observation_comments").select("*").order("created_at", { ascending: true }),
-        sb.from("alerts").select("*").order("created_at", { ascending: false }),
-        sb.from("alert_notes").select("*").order("created_at", { ascending: true }),
-        sb.from("sensor_nodes").select("*").order("created_at", { ascending: true }),
-        sb.from("notifications").select("*").order("created_at", { ascending: false }),
-        sb.from("audit_logs").select("*").order("changed_at", { ascending: false }),
-        sb.from("profiles").select("*"),
-      ]);
-
-      // A tag counts as used when a plant is on it. If plants or tags failed to
-      // load, keep what we had: an empty plant list would show every tag as unused.
-      const coreError = specRes.error || tagRes.error || obsRes.error;
-      if (coreError) throw coreError;
-
-      const photoRows = photoRes.data || [];
-      const obsRows = obsRes.data || [];
-      const allSpecRows = specRes.data || [];
-      const specRows = allSpecRows.filter((s) => !s.is_deleted);
-
-      // Resolve signed URLs for private observation photos
-      const privatePaths = photoRows
-        .map((ph) => ph.s3_key)
-        .filter((k) => k && !k.startsWith("http://") && !k.startsWith("https://") && !k.startsWith("blob:") && !k.startsWith("data:"));
-
-      const signedMap = new Map();
-      if (privatePaths.length > 0) {
-        try {
-          const { data: signedItems } = await sb.storage
-            .from("observation-photos")
-            .createSignedUrls(privatePaths, 3600 * 24);
-
-          (signedItems || []).forEach((item) => {
-            if (item?.signedUrl) signedMap.set(item.path, item.signedUrl);
-          });
-        } catch (signErr) {
-          console.warn("createSignedUrls warning:", signErr);
-        }
-      }
-
-      const photosByObs = new Map();
-      for (const ph of photoRows) {
-        const list = photosByObs.get(ph.observation_id) || [];
-        let url = ph.s3_key;
-        if (signedMap.has(ph.s3_key)) {
-          url = signedMap.get(ph.s3_key);
-        }
-        list.push({
-          id: ph.id,
-          observation_id: ph.observation_id,
-          url,
-          created_at: ph.created_at,
-          is_primary: false,
-        });
-        photosByObs.set(ph.observation_id, list);
-      }
-
-      const obsBySpecimen = new Map();
-      for (const o of obsRows) {
-        const list = obsBySpecimen.get(o.specimen_id) || [];
-        list.push(o);
-        obsBySpecimen.set(o.specimen_id, list);
-      }
-
-      const plants = specRows.map((s) => {
-        const specObs = obsBySpecimen.get(s.id) || [];
-        const photos = specObs.flatMap((o) => photosByObs.get(o.id) || []);
-        return {
-          id: s.id,
-          qr_id: s.qr_id,
-          species_id: s.species_id,
-          proposed_species: s.proposed_species_name || "",
-          registered_by: s.registered_by,
-          lat: s.lat,
-          lng: s.lng,
-          gps_accuracy_m: s.gps_accuracy_m,
-          endangered_override: s.endangered_override,
-          is_deleted: s.is_deleted,
-          photos,
-        };
-      });
-
-      // The database allows one plant per tag, deleted plants included.
-      const assignedTagIds = new Set(allSpecRows.map((s) => s.qr_id).filter(Boolean));
-      const tags = (tagRes.data || []).map((t) => ({
-        qr_id: t.qr_id,
-        status: assignedTagIds.has(t.qr_id) ? "assigned" : (t.status === "unassigned" ? "unused" : t.status),
-        batch_label: t.batch_label,
-        created_by: t.created_by,
-        created_at: t.created_at,
-      }));
-
-      const reviews = (revRes.data || []).map((r) => ({
-        id: r.id,
-        observation_id: r.observation_id,
-        reviewer_id: r.reviewer_id,
-        observation_ver: r.observation_version,
-        decision: r.decision,
-        comment: r.comment || "",
-        created_at: r.created_at,
-      }));
-
-      const species_media = (smRes.data || []).map((m) => {
-        let url = m.s3_key;
-        if (url && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("blob:") && !url.startsWith("data:")) {
-          const { data } = sb.storage.from("species-media").getPublicUrl(m.s3_key);
-          url = data?.publicUrl || url;
-        }
-        return {
-          id: m.id,
-          species_id: m.species_id,
-          url,
-          caption: m.caption || "",
-          credit: m.credit || null,
-          is_primary: m.is_primary,
-          sort_order: m.sort_order,
-          uploaded_by: m.uploaded_by,
-          created_at: m.created_at,
-        };
-      });
-
-      const alertNotes = (anRes.data || []).map((an) => ({
-        id: an.id,
-        alert_id: an.alert_id,
-        author_id: an.author_id,
-        note: an.note,
-        created_at: an.created_at,
-      }));
-
-      const audit = (auditRes.data || []).map((a) => ({
-        id: a.id,
-        changed_by: a.changed_by,
-        table_name: a.table_name,
-        record_id: a.record_id,
-        action: a.action.toLowerCase(),
-        old_value: a.old_value,
-        new_value: a.new_value,
-        changed_at: a.changed_at,
-      }));
-
-      const nodes = (nodeRes.data || []).map((n) => ({
-        id: n.id,
-        name: n.name || `Node ${n.id.slice(0, 4)}`,
-        specimen_id: n.specimen_id,
-        status: n.status,
-        thresholds: n.thresholds,
-        last_seen: n.last_seen,
-      }));
-
-      setDb((prevDb) => {
-        let mergedProfiles = prevDb.profiles || initialProfiles;
-        if (profRes.data && profRes.data.length > 0) {
-          const pMap = new Map(mergedProfiles.map((p) => [p.id, p]));
-          for (const pr of profRes.data) {
-            pMap.set(pr.id, { ...(pMap.get(pr.id) || {}), ...pr });
-          }
-          mergedProfiles = Array.from(pMap.values());
-        }
-
-        return {
-          ...prevDb,
-          species: spRes.data || [],
-          species_media,
-          plants,
-          observations: obsRows,
-          tags,
-          reviews,
-          comments: commRes.data || [],
-          alerts: alertRes.data || [],
-          alertNotes,
-          nodes,
-          notifications: notifRes.data || [],
-          audit,
-          profiles: mergedProfiles,
-        };
-      });
-
-      if (!quiet) notify("Synchronized with Supabase");
-    } catch (err) {
-      console.warn("fetchFromSupabase error:", err);
+  // Load everything the pages show from the API (GET /v1/workspace, or
+  // /v1/public/workspace for visitors) and shape it for the store.
+  const loadFromApi = useCallback(async (quiet = true) => {
+    const token = await sessionToken();
+    const res = await fetchWorkspace({ token });
+    // Not loaded: keep what we had. An empty plant list would show every tag as unused.
+    if (!res.ok) {
+      if (res.offline) { setApiStatus("offline"); setApiError(API_DOWN); }
+      console.warn("loadFromApi:", res.message || res.code);
+      return { ok: false, message: res.offline ? API_DOWN : res.message };
     }
+    const w = res.data;
+
+    const photosByObs = new Map();
+    for (const ph of w.observation_photos) {
+      const list = photosByObs.get(ph.observation_id) || [];
+      list.push({
+        id: ph.id,
+        observation_id: ph.observation_id,
+        url: ph.url || ph.s3_key,
+        s3_bucket: ph.s3_bucket || "observation-photos",
+        s3_key: ph.s3_key,
+        created_at: ph.created_at,
+        is_primary: false,
+      });
+      photosByObs.set(ph.observation_id, list);
+    }
+
+    const obsBySpecimen = new Map();
+    for (const o of w.observations) {
+      const list = obsBySpecimen.get(o.specimen_id) || [];
+      list.push(o);
+      obsBySpecimen.set(o.specimen_id, list);
+    }
+
+    const plants = w.specimens.filter((s) => !s.is_deleted).map((s) => ({
+      id: s.id,
+      qr_id: s.qr_id,
+      species_id: s.species_id,
+      proposed_species: s.proposed_species_name || "",
+      registered_by: s.registered_by,
+      lat: s.lat,
+      lng: s.lng,
+      gps_accuracy_m: s.gps_accuracy_m,
+      endangered_override: s.endangered_override,
+      is_deleted: s.is_deleted,
+      photos: (obsBySpecimen.get(s.id) || []).flatMap((o) => photosByObs.get(o.id) || []),
+    }));
+
+    // The database allows one plant per tag, deleted plants included.
+    const assignedTagIds = new Set(w.specimens.map((s) => s.qr_id).filter(Boolean));
+    const tags = w.qr_tags.map((t) => ({
+      qr_id: t.qr_id,
+      status: assignedTagIds.has(t.qr_id) ? "assigned" : (t.status === "unassigned" ? "unused" : t.status),
+      batch_label: t.batch_label,
+      created_by: t.created_by,
+      created_at: t.created_at,
+    }));
+
+    const reviews = w.observation_reviews.map((r) => ({
+      id: r.id,
+      observation_id: r.observation_id,
+      reviewer_id: r.reviewer_id,
+      observation_ver: r.observation_version,
+      decision: r.decision,
+      comment: r.comment || "",
+      created_at: r.created_at,
+    }));
+
+    const species_media = w.species_media.map((m) => ({
+      id: m.id,
+      species_id: m.species_id,
+      url: m.url || m.s3_key,
+      s3_bucket: m.s3_bucket,
+      s3_key: m.s3_key,
+      caption: m.caption || "",
+      credit: m.credit || null,
+      is_primary: m.is_primary,
+      sort_order: m.sort_order,
+      uploaded_by: m.uploaded_by,
+      created_at: m.created_at,
+    }));
+
+    const alertNotes = w.alert_notes.map((an) => ({
+      id: an.id,
+      alert_id: an.alert_id,
+      author_id: an.author_id,
+      note: an.note,
+      created_at: an.created_at,
+    }));
+
+    const audit = w.audit_logs.map((a) => ({
+      id: a.id,
+      changed_by: a.changed_by,
+      table_name: a.table_name,
+      record_id: a.record_id,
+      action: a.action.toLowerCase(),
+      old_value: a.old_value,
+      new_value: a.new_value,
+      changed_at: a.changed_at,
+    }));
+
+    const nodes = w.sensor_nodes.map((n) => ({
+      id: n.id,
+      name: n.name || `Node ${n.id.slice(0, 4)}`,
+      specimen_id: n.specimen_id,
+      status: n.status,
+      thresholds: n.thresholds,
+      last_seen: n.last_seen,
+    }));
+
+    setDb((prevDb) => {
+      let mergedProfiles = prevDb.profiles || initialProfiles;
+      if (w.profiles.length > 0) {
+        const pMap = new Map(mergedProfiles.map((p) => [p.id, p]));
+        for (const pr of w.profiles) pMap.set(pr.id, { ...(pMap.get(pr.id) || {}), ...pr });
+        mergedProfiles = Array.from(pMap.values());
+      }
+      return {
+        ...prevDb,
+        species: w.species,
+        species_media,
+        plants,
+        observations: w.observations,
+        tags,
+        reviews,
+        comments: w.observation_comments,
+        alerts: w.alerts,
+        alertNotes,
+        nodes,
+        notifications: w.notifications,
+        audit,
+        profiles: mergedProfiles,
+      };
+    });
+
+    setApiStatus("connected");
+    setApiError(null);
+    if (!quiet) notify("Synchronized");
+    return { ok: true };
   }, [notify]);
 
-  // Synchronize with backend API (/v1) and Supabase
+  // Reload everything from the API (/v1) and check the signed-in profile
   const syncWithBackend = useCallback(async (quiet = false) => {
     setIsSyncing(true);
     try {
-      await fetchFromSupabase(quiet);
+      await loadFromApi(quiet);
 
       const ping = await pingBackend();
       if (!ping.online) {
-        // Supabase pages still work; species and the review queue need the API.
+        // Pages keep the last data loaded; nothing new can be saved until it is back.
         setApiStatus("offline");
         setApiError(API_DOWN);
         return { ok: true };
@@ -346,9 +309,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [fetchFromSupabase]);
+  }, [loadFromApi]);
 
-  // Initial load: check Supabase session and fetch data
+  // Initial load: pick up the Supabase Auth session, then load through the API
   useEffect(() => {
     let mounted = true;
     const sb = getSupabase();
@@ -360,9 +323,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         setAuthToken(session.access_token);
         setAuthTokenState(session.access_token);
       }
-      fetchFromSupabase(true);
+      loadFromApi(true);
     }).catch(() => {
-      if (mounted) fetchFromSupabase(true);
+      if (mounted) loadFromApi(true);
     });
 
     const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
@@ -382,14 +345,14 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
           return current;
         });
       }
-      fetchFromSupabase(true);
+      loadFromApi(true);
     });
 
     return () => {
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, [fetchFromSupabase]);
+  }, [loadFromApi]);
 
   // Is the Express API up? Checked on load, every 30 s and when the tab comes
   // back into view, so the "API down" notice appears and clears by itself.
@@ -415,14 +378,28 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     };
   }, [checkApi]);
 
-  // New notifications without a reload: the signed-in person's rows (RLS
-  // returns only their own), on the same 30 s beat and when the tab comes back.
+  // One API call with the fresh token. A call that could not reach the API
+  // marks it down; `message` is always something to show the user.
+  const callApi = async (fn, ...args) => {
+    const res = noteOffline(await fn(...args, { token: await sessionToken() }));
+    if (res.ok) return res;
+    const fields = res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
+    return { ...res, message: res.offline ? API_DOWN : `${res.message || res.code}${fields ? ` (${fields})` : ""}` };
+  };
+
+  // An API error as something withExponentialRetry understands: only "API
+  // down", timeouts and server errors are worth trying again.
+  const toError = (res) => Object.assign(new Error(res.message), {
+    code: res.code, status: res.status, retryable: !!res.offline || res.status >= 500 || res.status === 429,
+  });
+
+  // New notifications without a reload, on the same 30 s beat and when the tab
+  // comes back: GET /v1/notifications, the signed-in person's own.
   const refreshNotifications = useCallback(async () => {
     if (!userId) return;
-    const { data, error } = await getSupabase()
-      .from("notifications").select("*").order("created_at", { ascending: false });
-    if (error) return console.warn("refreshNotifications:", error.message);
-    setDb((prev) => ({ ...prev, notifications: [...data, ...prev.notifications.filter((n) => n.user_id !== userId)] }));
+    const res = await fetchNotificationsApi({ token: await sessionToken() });
+    if (!res.ok) return console.warn("refreshNotifications:", res.message);
+    setDb((prev) => ({ ...prev, notifications: [...res.data, ...prev.notifications.filter((n) => n.user_id !== userId)] }));
   }, [userId]);
   useEffect(() => {
     if (!userId) return undefined;
@@ -448,7 +425,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       } catch (e) {
         console.warn("signOut error:", e);
       }
-      await fetchFromSupabase(true);
+      await loadFromApi(true);
       notify("Viewing as Visitor");
       return;
     }
@@ -473,7 +450,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
             setUserId(data.session.user.id);
           }
           setPrototypeRole(null);
-          await fetchFromSupabase(true);
+          await loadFromApi(true);
           notify(`Signed in as ${targetEmail} (${key})`);
           return;
         } else if (error) {
@@ -591,7 +568,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       setAuthTokenState(data.session.access_token);
       setUserId(sessionUser.id);
       setPrototypeRole(null);
-      await fetchFromSupabase(true);
+      await loadFromApi(true);
       return { ok: true, id: sessionUser.id, first: false };
     } catch (err) {
       return { ok: false, message: err?.message || "Sign in failed" };
@@ -640,17 +617,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       if (clean.phone && !/^\+?[0-9 -]{7,15}$/.test(clean.phone)) return { ok: false, message: "Enter a valid phone number" };
     }
 
-    const sb = getSupabase();
-    try {
-      const { error } = await sb.from("profiles").update(clean).eq("id", me.id);
-      if (error) throw error;
-      notify("Profile updated");
-      await fetchFromSupabase(true);
-      return { ok: true };
-    } catch (err) {
-      console.error("updateProfile error:", err);
-      return { ok: false, message: err.message || err };
-    }
+    const res = await callApi(updateMeApi, clean);
+    if (!res.ok) return { ok: false, message: res.message };
+    notify("Profile updated");
+    await loadFromApi(true);
+    return { ok: true };
   };
 
   const changeMyPassword = async (current, next) => {
@@ -684,72 +655,26 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }));
   };
 
-  // Upload photo file or blob to Supabase Storage bucket and return storage path / s3_key
-  const uploadPhotoFile = async (bucket, folderPath, photoObj) => {
-    const sb = getSupabase();
-
-    let fileToUpload = photoObj.file;
-    if (!fileToUpload && photoObj.url && (photoObj.url.startsWith("blob:") || photoObj.url.startsWith("file://"))) {
-      try {
-        const res = await fetch(photoObj.url);
-        fileToUpload = await res.blob();
-      } catch (err) {
-        console.warn("Could not fetch photo blob:", err);
-      }
-    }
-
-    const photoId = photoObj.id || uid();
-    if (!fileToUpload) {
-      return { s3_key: photoObj.url || "", contentType: null, sizeBytes: null, photoId };
-    }
-
-    let ext = "jpg";
-    if (fileToUpload.name) {
-      ext = fileToUpload.name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    } else if (fileToUpload.type) {
-      ext = fileToUpload.type.split("/").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    }
-    if (ext === "jpeg") ext = "jpg";
-
-    const storagePath = `${folderPath}/${photoId}.${ext}`;
-    const contentType = fileToUpload.type || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
-    const sizeBytes = fileToUpload.size || null;
-
-    const upRes = await sb.storage
-      .from(bucket)
-      .upload(storagePath, fileToUpload, { contentType, upsert: true });
-
-    // Fail instead of saving the phone's local blob: URL, which nobody else can open.
-    if (upRes.error) throw upRes.error;
-
-    return { s3_key: storagePath, contentType, sizeBytes, photoId };
-  };
-
   // The plant already registered on a tag, if any: { id, registered_by, observations }.
   const findSpecimenByQr = async (qr_id) => {
-    const { data, error } = await getSupabase()
-      .from("specimens")
-      .select("id, registered_by, observations(id)")
-      .eq("qr_id", qr_id)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+    const res = await callApi(findSpecimenByQrApi, qr_id);
+    if (res.ok) return res.data;
+    if (res.status === 404) return null;
+    throw toError(res);
   };
 
   const tagInUse = (qr_id) =>
     Object.assign(new Error(`Tag ${qr_id} is already on another plant. Pick or scan an unused tag.`), { code: "TAG_IN_USE", retryable: false });
 
-  // New plant on an unused tag: specimen, first observation, photos.
-  // Each step runs once. The ids are made here, so a retry after a dropped
-  // connection finds the row it already saved instead of adding a second one
-  // (that second specimen insert is what raised "specimens_qr_id_key").
-  // Returns { ok, ... } and never throws.
+  // New plant on an unused tag: specimen, first observation, photos, each
+  // through the API. Each step runs once. The ids are made here, so a retry
+  // after a dropped connection gets back the row it already saved instead of
+  // adding a second one. Returns { ok, ... } and never throws.
   const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos = [], lat, lng, gps_accuracy_m }) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    const now = nowIso();
-    const done = { specimenId: null, obsId: uid(), observation: false, photoRows: [] };
+    const authUid = userId || (await getSupabase().auth.getUser())?.data?.user?.id;
+    const done = { specimenId: null, obsId: uid(), observation: false, photos: 0 };
     const photoIds = photos.map((p) => p.id || uid());
+    const must = (res) => { if (!res.ok) throw toError(res); return res.data; };
 
     try {
       const result = await withExponentialRetry(async () => {
@@ -762,160 +687,97 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
             done.specimenId = existing.id;
           } else {
             const specimenId = uid();
-            const { error } = await sb.from("specimens").insert({
+            const res = await callApi(createSpecimenApi, {
               id: specimenId,
               qr_id,
-              species_id: null,
               proposed_species_name: proposed_species || null,
-              registered_by: authUid,
-              lat,
-              lng,
+              lat: lat ?? null,
+              lng: lng ?? null,
               gps_accuracy_m: gps_accuracy_m || null,
-              endangered_override: false,
-              is_deleted: false,
             });
-            if (error?.code === "23505") throw tagInUse(qr_id); // someone took the tag a moment ago
-            if (error?.code === "23503") {
-              throw Object.assign(new Error(`Tag ${qr_id} is not in the tag list. Ask an officer to create it.`), { retryable: false });
-            }
-            if (error) throw error;
-            done.specimenId = specimenId;
+            if (res.code === "TAG_IN_USE") throw tagInUse(qr_id); // someone took the tag a moment ago
+            if (res.code === "TAG_NOT_FOUND") throw Object.assign(new Error(res.message), { retryable: false });
+            done.specimenId = must(res).id;
           }
         }
 
         // 2. First observation, waiting for review.
         if (!done.observation) {
-          const { error } = await sb.from("observations").insert({
-            id: done.obsId,
-            specimen_id: done.specimenId,
-            recorded_by: authUid,
-            observed_at: now,
-            height_cm: Number(height_cm) || null,
-            morphology: morphology || null,
-            notes: notes || null,
-            lat,
-            lng,
-            gps_accuracy_m: gps_accuracy_m || null,
-            status: "synced",
-            version: 1,
-            device_id: deviceId,
-            last_synced_at: now,
-          });
-          if (error && error.code !== "23505") throw error; // 23505: saved on an earlier try
+          must(await callApi(createObservationApi, observationBody({
+            id: done.obsId, specimen_id: done.specimenId, height_cm, morphology, notes, lat, lng, gps_accuracy_m,
+          })));
           done.observation = true;
         }
 
-        // 3. Photos: upload each file once, then save the rows together.
-        for (let i = done.photoRows.length; i < photos.length; i++) {
-          const uploaded = await uploadPhotoFile("observation-photos", done.obsId, { ...photos[i], id: photoIds[i] });
-          done.photoRows.push({
-            id: uploaded.photoId,
-            observation_id: done.obsId,
-            s3_bucket: "observation-photos",
-            s3_key: uploaded.s3_key,
-            content_type: uploaded.contentType,
-            size_bytes: uploaded.sizeBytes,
-            upload_status: "uploaded",
-          });
-        }
-        if (done.photoRows.length) {
-          const { error } = await sb.from("observation_photos").upsert(done.photoRows, { onConflict: "id", ignoreDuplicates: true });
-          if (error) throw error;
+        // 3. Photos, one at a time; a retry carries on after the last one saved.
+        for (; done.photos < photos.length; done.photos++) {
+          must(await callApi(uploadObservationPhotoApi, done.obsId, { ...photos[done.photos], id: photoIds[done.photos] }));
         }
 
         return { ok: true, id: done.specimenId, obsId: done.obsId };
       }, { maxRetries: 3 });
 
       notify(`Plant tagged with ${qr_id}`);
-      await fetchFromSupabase(true);
+      await loadFromApi(true);
       return result;
     } catch (err) {
       console.error("addPlant error:", err);
       notify(`Failed to add plant: ${err.message || err}`);
-      await fetchFromSupabase(true); // so the tag list shows what the database now holds
+      await loadFromApi(true); // so the tag list shows what the database now holds
       return { ok: false, error: err, message: err.message || String(err) };
     }
   };
 
-  const addRevisit = async ({ specimen_id, height_cm, morphology, notes, photos, gps_accuracy_m }) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    const now = nowIso();
+  // POST /v1/observations body; the API sets recorded_by, version and the sync time.
+  const observationBody = ({ id, specimen_id, height_cm, morphology, notes, lat, lng, gps_accuracy_m }) => ({
+    id,
+    specimen_id,
+    observed_at: nowIso(),
+    height_cm: height_cm === "" || height_cm == null || Number.isNaN(Number(height_cm)) ? null : Number(height_cm),
+    morphology: morphology || null,
+    notes: notes || null,
+    lat: lat ?? null,
+    lng: lng ?? null,
+    gps_accuracy_m: gps_accuracy_m || null,
+    status: "synced",
+    device_id: deviceId,
+  });
 
+  const addRevisit = async ({ specimen_id, height_cm, morphology, notes, photos = [], gps_accuracy_m }) => {
+    const obsId = uid();
     try {
-      const { data: obsData, error: obsErr } = await sb.from("observations").insert({
-        specimen_id,
-        recorded_by: authUid,
-        observed_at: now,
-        height_cm: Number(height_cm) || null,
-        morphology: morphology || null,
-        notes: notes || null,
-        gps_accuracy_m: gps_accuracy_m || null,
-        status: "synced",
-        version: 1,
-        device_id: deviceId,
-        last_synced_at: now,
-      }).select().single();
-
-      if (obsErr) throw obsErr;
-      const obsId = obsData.id;
-
-      // Upload and insert revisit photos
-      if (photos && photos.length > 0) {
-        const photoPayload = [];
-        for (let i = 0; i < photos.length; i++) {
-          const p = photos[i];
-          const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
-          photoPayload.push({
-            id: uploaded.photoId,
-            observation_id: obsId,
-            s3_bucket: "observation-photos",
-            s3_key: uploaded.s3_key,
-            content_type: uploaded.contentType,
-            size_bytes: uploaded.sizeBytes,
-            upload_status: "uploaded",
-          });
-        }
-        const { error: photoErr } = await sb.from("observation_photos").insert(photoPayload);
-        if (photoErr) throw photoErr;
+      const res = await callApi(createObservationApi, observationBody({ id: obsId, specimen_id, height_cm, morphology, notes, gps_accuracy_m }));
+      if (!res.ok) throw toError(res);
+      for (const p of photos) {
+        const up = await callApi(uploadObservationPhotoApi, obsId, { ...p, id: p.id || uid() });
+        if (!up.ok) throw toError(up);
       }
-
       notify("Revisit recorded");
-      await fetchFromSupabase(true);
+      await loadFromApi(true);
       return obsId;
     } catch (err) {
       console.error("addRevisit error:", err);
       notify(`Failed to record revisit: ${err.message || err}`);
+      await loadFromApi(true);
       return null;
     }
   };
 
   const setPlantSpecies = async (plantId, speciesId) => {
-    const sb = getSupabase();
-    try {
-      const { error } = await sb.from("specimens").update({ species_id: speciesId }).eq("id", plantId);
-      if (error) throw error;
-      notify("Species matched");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("setPlantSpecies error:", err);
-      notify(`Failed to update species: ${err.message || err}`);
-    }
+    const res = await callApi(updateSpecimenApi, plantId, { species_id: speciesId });
+    if (!res.ok) return notify(`Failed to update species: ${res.message}`);
+    notify("Species matched");
+    await loadFromApi(true);
   };
 
   /* ---------- observations and review ---------- */
-  // Send a draft or a record waiting for a signal. Returns { ok, message }.
+  // Send a draft or a record waiting for a signal: POST /v1/observations/:id/submit.
+  // Returns { ok, message }.
   const syncObservation = async (id) => {
-    const sb = getSupabase();
-    const { data, error } = await sb.from("observations")
-      .update({ status: "synced", last_synced_at: nowIso() })
-      .eq("id", id)
-      .in("status", ["draft", "queued"])
-      .select("id");
-    await fetchFromSupabase(true);
-    if (error || !data?.length) {
-      const message = error?.message || "This record can no longer be sent. Refresh and check its status.";
-      console.warn("syncObservation error:", error);
+    const res = await callApi(submitObservationApi, id);
+    await loadFromApi(true);
+    if (!res.ok) {
+      const message = res.code === "WRONG_STATUS" ? "This record can no longer be sent. Refresh and check its status." : res.message;
       notify(`Failed to send record: ${message}`);
       return { ok: false, message };
     }
@@ -924,46 +786,25 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   };
 
   // Send a returned record again, with the botanist's fixes and an optional
-  // reply. `changes` may hold height_cm, morphology and notes.
-  // The version goes up so the officer reviews the new one. Returns { ok, message }.
+  // reply. `changes` may hold height_cm, morphology and notes. The API raises
+  // the version so the officer reviews the new one. Returns { ok, message }.
   const resubmit = async (id, message, changes = {}) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    const obs = db.observations.find((o) => o.id === id);
-    const edits = {};
-    if ("height_cm" in changes) edits.height_cm = changes.height_cm === "" || changes.height_cm == null ? null : Number(changes.height_cm);
-    if ("morphology" in changes) edits.morphology = changes.morphology?.trim() || null;
-    if ("notes" in changes) edits.notes = changes.notes?.trim() || null;
-    if (edits.height_cm != null && !(edits.height_cm >= 0)) return { ok: false, message: "Height must be a number of 0 or more" };
+    const body = {};
+    if ("height_cm" in changes) body.height_cm = changes.height_cm === "" || changes.height_cm == null ? null : Number(changes.height_cm);
+    if ("morphology" in changes) body.morphology = changes.morphology?.trim() || null;
+    if ("notes" in changes) body.notes = changes.notes?.trim() || null;
+    if (body.height_cm != null && !(body.height_cm >= 0)) return { ok: false, message: "Height must be a number of 0 or more" };
+    if (message && message.trim()) body.comment = message.trim();
 
-    try {
-      // Only while still returned, so a stale screen cannot overwrite a decided record.
-      const { data, error } = await sb.from("observations").update({
-        ...edits,
-        status: "synced",
-        version: (obs?.version || 1) + 1,
-        last_synced_at: nowIso(),
-      }).eq("id", id).eq("status", "returned").select("id");
-      if (error) throw error;
-      if (!data?.length) throw new Error("This record is no longer waiting for your changes. Refresh to see its status.");
-
-      if (message && message.trim()) {
-        const { error: commentErr } = await sb.from("observation_comments").insert({
-          observation_id: id,
-          author_id: authUid,
-          body: message.trim(),
-        });
-        if (commentErr) console.warn("resubmit reply not saved:", commentErr); // the record itself was sent
-      }
-      notify("Record sent for review again");
-      await fetchFromSupabase(true);
-      return { ok: true };
-    } catch (e) {
-      console.warn("resubmit error:", e);
-      notify(`Failed to send again: ${e.message || e}`);
-      await fetchFromSupabase(true);
-      return { ok: false, message: e.message || String(e) };
+    const res = await callApi(submitObservationApi, id, body);
+    await loadFromApi(true);
+    if (!res.ok) {
+      const msg = res.code === "WRONG_STATUS" ? "This record is no longer waiting for your changes. Refresh to see its status." : res.message;
+      notify(`Failed to send again: ${msg}`);
+      return { ok: false, message: msg };
     }
+    notify("Record sent for review again");
+    return { ok: true };
   };
 
   // Approve, return or reject: through the API only (CTIP-29: "only Officer and
@@ -972,7 +813,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // When the API is down the decision is not saved, and the officer is told.
   const reviewObservation = async (id, decision, comment) => {
     const obs = db.observations.find((o) => o.id === id);
-    const token = await currentToken();
+    const token = await sessionToken();
     const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision] || decision;
     if (!token) {
       notify("Sign in again to review records");
@@ -992,19 +833,18 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         : res.code === "WRONG_STATUS" ? "This record is no longer waiting for review. Someone may have decided already."
         : `Failed to submit review: ${res.message || res.code}`;
       notify(msg);
-      await fetchFromSupabase(true);
+      await loadFromApi(true);
       return { ok: false, error: res.code, message: msg };
     }
 
     notify(`Record ${verb}`);
-    await fetchFromSupabase(true);
+    await loadFromApi(true);
     return { ok: true };
   };
 
   const getDistributionPoints = useCallback(async ({ speciesId, family } = {}) => {
     try {
-      const sb = getSupabase();
-      const token = authToken || getAuthToken() || (await sb.auth.getSession())?.data?.session?.access_token;
+      const token = await sessionToken();
       if (token) {
         const res = await fetchDistribution({ speciesId, family, token });
         if (res.ok && Array.isArray(res.data)) {
@@ -1046,29 +886,13 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const addComment = async (id, body) => {
     if (!body || !body.trim()) return;
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-
-    try {
-      const { error } = await sb.from("observation_comments").insert({
-        observation_id: id,
-        author_id: authUid,
-        body: body.trim(),
-      });
-      if (error) throw error;
-      notify("Comment posted");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("addComment error:", err);
-      notify(`Failed to add comment: ${err.message || err}`);
-    }
+    const res = await callApi(addCommentApi, id, body.trim());
+    if (!res.ok) return notify(`Failed to add comment: ${res.message}`);
+    notify("Comment posted");
+    await loadFromApi(true);
   };
 
   /* ---------- species ---------- */
-  // The freshest token: Supabase refreshes the session, the stored one can be expired.
-  const currentToken = async () =>
-    (await getSupabase().auth.getSession())?.data?.session?.access_token || authToken || getAuthToken();
-
   // API rows replace the matching species in the store; others are kept as they are.
   const mergeSpecies = (rows) => setDb((prevDb) => {
     const byId = new Map(rows.map((r) => [r.id, r]));
@@ -1079,9 +903,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   // Staff species list through the API (CTIP-46): GET /v1/species. The API
   // only answers Officer and Admin. Deleted species are not in it, so the
-  // "Recently deleted" rows loaded from Supabase stay.
+  // "Recently deleted" rows from the start-up load stay.
   const loadStaffSpecies = useCallback(async () => {
-    const res = noteOffline(await fetchStaffSpecies({ token: await currentToken() }));
+    const res = noteOffline(await fetchStaffSpecies({ token: await sessionToken() }));
     if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
     setDb((prevDb) => {
       const byId = new Map(prevDb.species.map((s) => [s.id, s]));
@@ -1097,7 +921,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // The API checks the role and the IUCN status and records who edited it.
   // No Supabase fallback: that would skip the API's checks.
   const saveSpecies = async (sp) => {
-    const token = await currentToken();
+    const token = await sessionToken();
     const res = noteOffline(sp.id ? await updateSpeciesApi(sp.id, sp, { token }) : await createSpeciesApi(sp, { token }));
     if (!res.ok) {
       const fields = res.details?.fields?.map((f) => f.path).join(", ");
@@ -1115,7 +939,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // Review queue through the API (CTIP-29, CTIP-86): GET /v1/observations.
   // "pending" is what waits for a decision; the others are for looking back.
   const loadReviewQueue = useCallback(async () => {
-    const token = await currentToken();
+    const token = await sessionToken();
     const results = await Promise.all(
       ["pending", "returned", "approved", "rejected"].map(async (status) => noteOffline(await fetchObservations({ status, token }))),
     );
@@ -1129,54 +953,30 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     return { ok: true, observations: results.flatMap((r) => r.data) };
   }, [authToken]);
 
+  // Publish for visitors or move back to drafts: POST /v1/species/:id/publish.
   const togglePublish = async (id) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const sp = db.species.find((s) => s.id === id);
     if (!sp) return;
-    const nextPub = !sp.is_published;
-
-    setDb((prevDb) => ({
-      ...prevDb,
-      species: (prevDb.species || []).map((s) => (s.id === id ? { ...s, is_published: nextPub } : s)),
-    }));
-    notify(nextPub ? "Published species" : "Moved species to drafts");
-
-    try {
-      const { error } = await sb.from("species").update({
-        is_published: nextPub,
-        updated_by: authUid,
-      }).eq("id", id);
-      if (error) throw error;
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.warn("togglePublish Supabase sync warning:", err?.message || err);
-    }
+    const res = await callApi(publishSpeciesApi, id, !sp.is_published);
+    if (!res.ok) return notify(`Failed to change publishing: ${res.message}`);
+    mergeSpecies([res.data]);
+    notify(res.data.is_published ? "Published species" : "Moved species to drafts");
   };
 
+  // Soft delete (DELETE /v1/species/:id) or undo it (POST /v1/species/:id/restore).
   const setSpeciesDeleted = async (id, is_deleted) => {
     if (!can(role, "species")) return false;
+    const res = await callApi(is_deleted ? deleteSpeciesApi : restoreSpeciesApi, id);
+    if (!res.ok) {
+      notify(`Failed to ${is_deleted ? "delete" : "restore"} species: ${res.message}`);
+      return false;
+    }
     setDb((prevDb) => ({
       ...prevDb,
-      species: (prevDb.species || []).map((s) => (s.id === id ? { ...s, is_deleted } : s)),
+      species: prevDb.species.map((s) => (s.id === id ? { ...s, is_deleted } : s)),
     }));
     notify(is_deleted ? "Species deleted" : "Species restored");
-
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-
-    try {
-      const { error } = await sb.from("species").update({
-        is_deleted,
-        updated_by: authUid,
-      }).eq("id", id);
-      if (error) throw error;
-      await fetchFromSupabase(true);
-      return true;
-    } catch (err) {
-      console.warn("deleteSpecies remote error:", err);
-      return true;
-    }
+    return true;
   };
   const deleteSpecies = (id) => setSpeciesDeleted(id, true);
   const restoreSpecies = (id) => setSpeciesDeleted(id, false);
@@ -1194,7 +994,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     if (k >= 0) return { ok: false, message: `Add a caption to photo ${k + 1}` };
     if (list.some((p) => p.caption.trim().length > CAPTION_MAX)) return { ok: false, message: `Keep captions under ${CAPTION_MAX} characters` };
 
-    const token = await currentToken();
+    const token = await sessionToken();
     const before = new Map(db.species_media.filter((m) => m.species_id === speciesId).map((m) => [m.id, m]));
     const failed = (res, what) => {
       noteOffline(res);
@@ -1208,10 +1008,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       for (let i = 0; i < list.length; i++) {
         const p = list[i];
         if (before.has(p.id)) continue;
-        let file = p.file;
-        if (!file && p.url) {
-          try { file = await (await fetch(p.url)).blob(); } catch { file = null; }
-        }
+        const file = await filePart(p);
         if (!file) return { ok: false, message: `Photo ${i + 1} could not be read. Remove it and add it again.` };
         const res = await uploadSpeciesMediaApi(speciesId, file,
           { caption: p.caption.trim(), credit: p.credit || null, is_primary: i === 0, sort_order: i }, { token });
@@ -1246,275 +1043,116 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       console.error("setSpeciesMedia error:", err);
       return { ok: false, message: `Photos not saved: ${err.message || err}` };
     } finally {
-      await fetchFromSupabase(true); // show what was really saved, also after a failure part way
+      await loadFromApi(true); // show what was really saved, also after a failure part way
     }
   };
 
   /* ---------- users ---------- */
-  const freeUsername = (email) => {
-    const local = email.split("@")[0].toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 16);
-    const base = local.length >= 3 ? local : local + "user";
-    let name = base;
-    for (let n = 2; usernameTaken(name); n++) name = base + n;
-    return name;
-  };
-
+  // New account through the API (POST /v1/profiles, Admin). Without a password
+  // the API sends the person an email to choose their own.
   const addUser = async ({ full_name, email, role: newRole, password }) => {
     const cleanEmail = email.trim().toLowerCase();
     if (db.profiles.some((p) => p.email?.toLowerCase() === cleanEmail)) {
       return { ok: false, message: "This email already has an account" };
     }
-    const sb = getSupabase();
-    let authUid = null;
-
-    if (password) {
-      try {
-        const { data, error } = await sb.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: { full_name, role: newRole },
-          },
-        });
-
-        if (error) {
-          if (error.code === "signup_disabled" || error.message?.toLowerCase().includes("signups not allowed")) {
-            return {
-              ok: false,
-              message: "Signups disabled in Supabase. In Supabase Dashboard, go to Authentication > Providers > Email, turn ON 'Allow new users to sign up' (and turn OFF 'Confirm email').",
-            };
-          }
-          return { ok: false, message: error.message || "Failed to create authentication user" };
-        }
-
-        if (data?.user) {
-          authUid = data.user.id;
-        }
-      } catch (err) {
-        return { ok: false, message: err?.message || "Sign up error" };
-      }
-    }
-
-    const id = authUid || uid();
-    const now = nowIso();
-    const newProfile = {
-      id,
-      full_name,
-      username: freeUsername(cleanEmail),
-      phone: "",
-      avatar_url: null,
-      email: cleanEmail,
-      role: newRole,
-      is_active: true,
-      created_at: now,
-    };
-
-    if (authUid) {
-      // Upsert profile in Supabase database so role and profile are immediately persisted
-      try {
-        await sb.from("profiles").upsert(newProfile, { onConflict: "id" });
-      } catch (upsertErr) {
-        console.warn("profiles upsert warning:", upsertErr);
-      }
-    } else {
-      try {
-        await sb.from("profiles").insert(newProfile);
-      } catch {
-        // offline / prototype fallback
-      }
-    }
-
-    setDb((d) => ({
-      ...d,
-      profiles: [...d.profiles, newProfile],
-    }));
-
-    notify(`Account created for ${cleanEmail}`);
-    await fetchFromSupabase(true);
-    return { ok: true, id };
+    const res = await callApi(createProfileApi, { full_name: full_name.trim(), email: cleanEmail, role: newRole, ...(password ? { password } : {}) });
+    if (!res.ok) return { ok: false, message: res.message };
+    notify(res.data.invited ? `Invitation sent to ${cleanEmail}` : `Account created for ${cleanEmail}`);
+    await loadFromApi(true);
+    return { ok: true, id: res.data.id, invited: res.data.invited };
   };
 
   const updateUser = async (id, patch) => {
-    const sb = getSupabase();
-    try {
-      const { error } = await sb.from("profiles").update(patch).eq("id", id);
-      if (error) throw error;
-      notify("User updated");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("updateUser error:", err);
-      notify(`Failed to update user: ${err.message || err}`);
-    }
+    const res = await callApi(updateProfileApi, id, patch);
+    if (!res.ok) return notify(`Failed to update user: ${res.message}`);
+    notify("User updated");
+    await loadFromApi(true);
   };
 
   /* ---------- monitoring ---------- */
   const ackAlert = async (id) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    try {
-      const { error } = await sb.from("alerts").update({
-        status: "acknowledged",
-        acknowledged_by: authUid,
-        acknowledged_at: nowIso(),
-      }).eq("id", id);
-      if (error) throw error;
-      notify("Alert acknowledged");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("ackAlert error:", err);
-      notify(`Failed to acknowledge alert: ${err.message || err}`);
-    }
+    const res = await callApi(acknowledgeAlertApi, id);
+    if (!res.ok) return notify(`Failed to acknowledge alert: ${res.message}`);
+    notify("Alert acknowledged");
+    await loadFromApi(true);
   };
 
   const resolveAlert = async (id, outcome) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    try {
-      const { error } = await sb.from("alerts").update({
-        status: "resolved",
-        outcome: outcome || "",
-        resolved_by: authUid,
-        resolved_at: nowIso(),
-      }).eq("id", id);
-      if (error) throw error;
-      notify("Alert resolved");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("resolveAlert error:", err);
-      notify(`Failed to resolve alert: ${err.message || err}`);
-    }
+    const res = await callApi(resolveAlertApi, id, outcome || "");
+    if (!res.ok) return notify(`Failed to resolve alert: ${res.message}`);
+    notify("Alert resolved");
+    await loadFromApi(true);
   };
 
   const assignAlert = async (id, assignee) => {
-    const sb = getSupabase();
-    try {
-      const { error } = await sb.from("alerts").update({ assigned_to: assignee }).eq("id", id);
-      if (error) throw error;
-      notify("Alert assigned");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("assignAlert error:", err);
-      notify(`Failed to assign alert: ${err.message || err}`);
-    }
+    const res = await callApi(assignAlertApi, id, assignee || null);
+    if (!res.ok) return notify(`Failed to assign alert: ${res.message}`);
+    notify("Alert assigned");
+    await loadFromApi(true);
   };
 
   const addAlertNote = async (id, note) => {
     if (!note || !note.trim()) return;
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    try {
-      const { error } = await sb.from("alert_notes").insert({
-        alert_id: id,
-        author_id: authUid,
-        note: note.trim(),
-      });
-      if (error) throw error;
-      notify("Note added to alert");
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("addAlertNote error:", err);
-      notify(`Failed to add alert note: ${err.message || err}`);
-    }
+    const res = await callApi(addAlertNoteApi, id, note.trim());
+    if (!res.ok) return notify(`Failed to add alert note: ${res.message}`);
+    notify("Note added to alert");
+    await loadFromApi(true);
   };
 
   const setThresholds = async (nodeId, thresholds) => {
-    const sb = getSupabase();
-    try {
-      await sb.from("sensor_nodes").update({ thresholds }).eq("id", nodeId);
-      setDb((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === nodeId ? { ...n, thresholds } : n)) }));
-      notify("Thresholds updated");
-    } catch (e) {
-      console.warn("setThresholds error:", e);
-    }
+    const res = await callApi(setThresholdsApi, nodeId, thresholds);
+    if (!res.ok) return notify(`Failed to update thresholds: ${res.message}`);
+    setDb((d) => ({ ...d, nodes: d.nodes.map((n) => (n.id === nodeId ? { ...n, thresholds } : n)) }));
+    notify("Thresholds updated");
   };
 
   /* ---------- notifications and tags ---------- */
   const markRead = async (id) => {
-    const sb = getSupabase();
-    try {
-      await sb.from("notifications").update({ is_read: true }).eq("id", id);
-      setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)) }));
-    } catch {
-      // fallback
-    }
+    const res = await callApi(markReadApi, id);
+    if (res.ok) setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)) }));
   };
 
   const markAllRead = async () => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    try {
-      if (authUid) await sb.from("notifications").update({ is_read: true }).eq("user_id", authUid);
-      setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.user_id === userId ? { ...n, is_read: true } : n)) }));
-    } catch {
-      // fallback
-    }
+    const res = await callApi(markAllReadApi);
+    if (res.ok) setDb((d) => ({ ...d, notifications: d.notifications.map((n) => (n.user_id === userId ? { ...n, is_read: true } : n)) }));
   };
 
+  // The API picks the next free ids (POST /v1/qr-tags/batch). No local stand-in
+  // tags: a tag that is not in the database cannot go on a plant.
   const generateTags = async (count, batch_label = "field") => {
     if (!can(role, "tags")) {
       notify("Only officers and admins can create QR tags");
       return [];
     }
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    const ids = nextTagIds(db.tags, count);
-
-    try {
-      const payload = ids.map((qr_id) => ({
-        qr_id,
-        status: "unassigned",
-        batch_label,
-        created_by: authUid,
-      }));
-      const { error } = await sb.from("qr_tags").insert(payload);
-      if (error) throw error;
-      notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
-      await fetchFromSupabase(true);
-      return ids;
-    } catch (err) {
-      // No local stand-in tags: a tag that is not in the database cannot go on a plant.
-      console.error("generateTags error:", err);
-      notify(`Failed to create tags: ${err?.message || err}`);
+    const res = await callApi(createTagBatchApi, count, batch_label);
+    if (!res.ok) {
+      notify(`Failed to create tags: ${res.message}`);
       return [];
     }
+    const ids = res.data.map((t) => t.qr_id);
+    notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
+    await loadFromApi(true);
+    return ids;
   };
 
   const deleteTag = async (qr_id) => {
     const tag = db.tags.find((t) => t.qr_id === qr_id);
     if (!tag || tag.status !== "unused" || !can(role, "tags")) return false;
-    const sb = getSupabase();
-
-    setDb((prev) => ({
-      ...prev,
-      tags: (prev.tags || []).filter((t) => t.qr_id !== qr_id),
-    }));
-    notify(`Tag ${qr_id} deleted`);
-
-    try {
-      const { error } = await sb.from("qr_tags").delete().eq("qr_id", qr_id);
-      if (error) throw error;
-      await fetchFromSupabase(true);
-      return true;
-    } catch (err) {
-      console.warn("deleteTag Supabase sync warning:", err?.message || err);
-      return true;
+    const res = await callApi(deleteTagApi, qr_id);
+    if (!res.ok) {
+      notify(`Failed to delete tag: ${res.message}`);
+      return false;
     }
+    setDb((prev) => ({ ...prev, tags: prev.tags.filter((t) => t.qr_id !== qr_id) }));
+    notify(`Tag ${qr_id} deleted`);
+    return true;
   };
 
   const retireTag = async (qr_id) => {
-    const sb = getSupabase();
-    setDb((prev) => ({
-      ...prev,
-      tags: (prev.tags || []).map((t) => (t.qr_id === qr_id ? { ...t, status: "retired" } : t)),
-    }));
+    const res = await callApi(retireTagApi, qr_id);
+    if (!res.ok) return notify(`Failed to retire tag: ${res.message}`);
+    setDb((prev) => ({ ...prev, tags: prev.tags.map((t) => (t.qr_id === qr_id ? { ...t, status: "retired" } : t)) }));
     notify(`Tag ${qr_id} retired`);
-    try {
-      const { error } = await sb.from("qr_tags").update({ status: "retired" }).eq("qr_id", qr_id);
-      if (error) throw error;
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.warn("retireTag Supabase sync warning:", err?.message || err);
-    }
   };
 
   const value = {

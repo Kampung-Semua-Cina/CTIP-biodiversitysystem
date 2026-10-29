@@ -6,7 +6,7 @@ import { View, Text, ScrollView, Pressable, Image, useWindowDimensions } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
-import { plantView, visiblePlants, shownCoords, nameOf } from '../../shared/selectors.js';
+import { plantView, visiblePlants, shownCoords, nameOf, speciesObservationPhotos } from '../../shared/selectors.js';
 import { can } from '../../shared/permissions.js';
 import { MAP_BOUNDS } from '../../shared/site.js';
 import { useTheme, font } from '../components/Theme.js';
@@ -82,7 +82,10 @@ export function SpeciesProfile({ nav, params }) {
     );
   }
   const plants = visiblePlants(db, role).filter((p) => p.species_id === sp.id);
-  const photos = plants.flatMap((p) => p.photos).slice(0, 6);
+  const media = db.species_media ? db.species_media.filter((m) => m.species_id === sp.id).sort((a, b) => a.sort_order - b.sort_order) : [];
+  const obsPhotos = speciesObservationPhotos(db, sp.id);
+  const effectiveMedia = media.length > 0 ? media.map((m) => ({ id: m.id, url: m.url })) : obsPhotos;
+  const photos = [...effectiveMedia, ...plants.flatMap((p) => p.photos)].slice(0, 6);
   const dots = plants.map((p) => shownCoords(p, role)).filter(Boolean).map((pt, i) => ({ ...mapPoint(pt), selected: i === 0 }));
 
   return (
@@ -127,7 +130,8 @@ export function TaggedPlant({ nav, params }) {
   const raw = db.plants.find((p) => p.qr_id === params?.qr && !p.is_deleted);
   const p = plantView(db, raw);
   const staff = can(role, 'pending');
-  if (!p || (!p.isPublic && !staff)) {
+  const hasPublishedSpecies = p?.species && p.species.is_published;
+  if (!p || (!p.isPublic && !hasPublishedSpecies && !staff)) {
     return (
       <Screen header={<Header left={<IconButton name="chevL" label="Back" onPress={nav.back} />} />}>
         <Empty icon="qr">{params?.qr} is not published yet. Check back once park staff have verified it.</Empty>
@@ -137,7 +141,7 @@ export function TaggedPlant({ nav, params }) {
   const obs = db.observations.filter((o) => o.specimen_id === p.id).sort((a, b) => a.observed_at.localeCompare(b.observed_at));
   const firstObs = obs[0];
   const lastObs = obs[obs.length - 1];
-  const where = shownCoords(p, role);
+  const where = (!p.isPublic && !staff) ? null : shownCoords(p, role);
 
   return (
     <Page hero={<Hero photos={p.photos} height={220} onBack={nav.back} />}>
@@ -152,7 +156,9 @@ export function TaggedPlant({ nav, params }) {
       </View>
       {!staff ? (
         <Txt v="body" style={{ lineHeight: 25 }}>
-          You found tagged plant {p.qr_id}. It was recorded by park botanists on {longDate(firstObs?.observed_at)}.
+          {p.isPublic
+            ? `You found tagged plant ${p.qr_id}. It was recorded by park botanists on ${longDate(firstObs?.observed_at)}.`
+            : `Tag ${p.qr_id} is on a ${p.name} (${p.scientific}). This field observation is currently being verified by park staff.`}
         </Txt>
       ) : null}
       <Section title="This plant">

@@ -199,4 +199,40 @@ test.describe("Web Portal: Automated Role & Page Verification", () => {
 
     watchdog.assertClean("Admin pages verification");
   });
+
+  test("Add Plant: Provides interactive species suggestions and auto-fills morphology", async ({ page }) => {
+    const watchdog = attachBugWatchdog(page);
+    await switchToRole(page, "Botanist");
+
+    await page.goto("#/add");
+    await page.waitForLoadState("domcontentloaded");
+
+    const speciesInput = page.locator('input[placeholder*="Start typing a botanical"]');
+    await expect(speciesInput).toBeVisible();
+
+    // Check common species pills are visible
+    const pills = page.locator(".species-pills-row .species-pill-btn");
+    await expect(pills.first()).toBeVisible();
+
+    // Type partial name to trigger dropdown suggestions
+    await speciesInput.fill("Nep");
+    const dropdown = page.locator(".species-dropdown");
+    await expect(dropdown).toBeVisible();
+
+    const suggestionItems = dropdown.locator(".species-dropdown-item");
+    const count = await suggestionItems.count();
+    expect(count).toBeGreaterThan(0);
+
+    // Click the first suggestion
+    await suggestionItems.first().click();
+
+    // Verify input is populated with scientific name and recognized hint is displayed
+    const val = await speciesInput.inputValue();
+    expect(val).toContain("Nepenthes");
+
+    const recognizedHint = page.locator(".success-hint");
+    await expect(recognizedHint).toBeVisible();
+
+    watchdog.assertClean("Add plant species suggestions verification");
+  });
 });

@@ -1,9 +1,9 @@
 // apps/web/src/pages/AddPlant.jsx
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Shell from "../components/Shell.jsx";
-import { Mono } from "../components/Bits.jsx";
+import { Mono, Sci } from "../components/Bits.jsx";
 import TagPrint from "../components/TagPrint.jsx";
 import { useStore } from "../../../shared/store.js";
 import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
@@ -29,14 +29,85 @@ export default function AddPlant() {
   const hasSpot = spot.lat != null && spot.lng != null;
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const suggestRef = useRef(null);
 
   const unused = db.tags.filter((t) => t.status === "unused");
   // My plants saved without their record (an earlier send failed): sending again finishes them.
   const unfinished = unfinishedPlants(db, me?.id);
+  const activeSpecies = (db.species || []).filter((s) => !s.is_deleted);
+
+  const needle = guess.trim().toLowerCase();
+  const exactMatch = activeSpecies.find(
+    (s) => s.scientific_name.toLowerCase() === needle || (s.common_name && s.common_name.toLowerCase() === needle)
+  );
+
+  const suggestions = needle.length >= 1 && !exactMatch
+    ? activeSpecies
+        .filter((s) => {
+          const matchSci = s.scientific_name.toLowerCase().includes(needle);
+          const matchCom = s.common_name && s.common_name.toLowerCase().includes(needle);
+          const matchFam = s.family && s.family.toLowerCase().includes(needle);
+          const matchGen = s.genus && s.genus.toLowerCase().includes(needle);
+          return matchSci || matchCom || matchFam || matchGen;
+        })
+        .slice(0, 6)
+    : [];
+
+  const popularSuggestions = activeSpecies.slice(0, 4);
+
+  // Close suggestion dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (suggestRef.current && !suggestRef.current.contains(e.target)) {
+        setSuggestOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectSpecies = (sp) => {
+    setGuess(sp.scientific_name);
+    if (!morphology.trim() && (sp.description || sp.morphology)) {
+      setMorphology(sp.description || sp.morphology);
+    }
+    setSuggestOpen(false);
+  };
 
   // Demo scan: the next unused tag is used. Real scanning comes with the camera in the mobile app.
-  const onScanFile = (e) => {
-    if (!e.target.files.length) return;
+  const onScanFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      if ("BarcodeDetector" in window) {
+        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+        const barcodes = await detector.detect(img);
+        if (barcodes && barcodes.length > 0) {
+          const raw = barcodes[0].rawValue;
+          const match = String(raw || "").toUpperCase().match(/NIAH-\d{4}/);
+          const foundTag = match ? match[0] : String(raw || "").trim().toUpperCase();
+          if (foundTag) {
+            setQr(foundTag);
+            notify(`QR code ${foundTag} detected from image`);
+            e.target.value = "";
+            return;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const nameMatch = file.name.toUpperCase().match(/NIAH-\d{4}/);
+    if (nameMatch) {
+      setQr(nameMatch[0]);
+      notify(`Tag ${nameMatch[0]} found from filename`);
+      e.target.value = "";
+      return;
+    }
     if (!unused.length) return notify("No unused tags left. Generate a new QR.");
     setQr(unused[0].qr_id);
     e.target.value = "";
@@ -133,7 +204,71 @@ export default function AddPlant() {
         )}
 
         <h3 className="step"><span>2</span> Record what you see</h3>
-        <label>Species guess<input value={guess} onChange={(e) => setGuess(e.target.value)} placeholder="Your best guess. An officer confirms it." /></label>
+        <label>
+          Species guess
+          <div className="species-suggest-box" ref={suggestRef}>
+            <input
+              list="species-datalist"
+              value={guess}
+              onChange={(e) => {
+                setGuess(e.target.value);
+                setSuggestOpen(true);
+              }}
+              onFocus={() => setSuggestOpen(true)}
+              placeholder="Start typing a botanical or common name..."
+              autoComplete="off"
+              aria-label="Species guess"
+            />
+            <datalist id="species-datalist">
+              {activeSpecies.map((s) => (
+                <option key={s.id} value={s.scientific_name}>
+                  {s.common_name ? `${s.common_name} (${s.family})` : s.family}
+                </option>
+              ))}
+            </datalist>
+
+            {suggestOpen && suggestions.length > 0 && (
+              <div className="species-dropdown" role="listbox" aria-label="Species suggestions">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="option"
+                    className="species-dropdown-item"
+                    onClick={() => selectSpecies(s)}
+                  >
+                    <div className="species-item-main">
+                      <span className="species-item-common">{s.common_name || s.scientific_name}</span>
+                      <span className="species-item-sci"><Sci>{s.scientific_name}</Sci></span>
+                    </div>
+                    {s.family && <span className="chip subtle">{s.family}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </label>
+
+        {exactMatch ? (
+          <p className="success-hint">
+            ✓ Recognized: <b>{exactMatch.common_name}</b> · <Sci>{exactMatch.scientific_name}</Sci> ({exactMatch.family})
+          </p>
+        ) : (
+          <div className="species-pills-row">
+            <span className="mute small">Common species:</span>
+            {popularSuggestions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="species-pill-btn"
+                onClick={() => selectSpecies(s)}
+              >
+                {s.common_name || s.scientific_name}
+              </button>
+            ))}
+          </div>
+        )}
+
         <label>Appearance<textarea rows="3" value={morphology} onChange={(e) => setMorphology(e.target.value)} placeholder="Leaves, flowers, trunk, pitchers..." /></label>
         <label>Height (cm)<input type="number" min="0" value={height} onChange={(e) => setHeight(e.target.value)} /></label>
         <label>Notes<textarea rows="2" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
+import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 
 // Observation review (CTIP-86): the officer's review queue (CTIP-29) and the
 // botanist's submission status (CTIP-45). Queries run as the signed-in user,
@@ -114,6 +115,51 @@ export const observationHandlers = {
       const known = RPC_ERRORS[error.code];
       if (known) return res.status(known[0]).json({ code: known[1], message: error.message });
       return dbError(res, error);
+    }
+    if (body.decision === 'approve') {
+      try {
+        const db = supabaseAs(req.user);
+        const { data: obs } = await db.from('observations').select('id, specimen_id').eq('id', req.params.id).maybeSingle();
+        if (obs?.specimen_id) {
+          const { data: spec } = await db.from('specimens').select('id, species_id').eq('id', obs.specimen_id).maybeSingle();
+          if (spec?.species_id) {
+            const { count } = await db.from('species_media').select('id', { count: 'exact', head: true }).eq('species_id', spec.species_id);
+            if (!count) {
+              const { data: photos } = await db.from('observation_photos')
+                .select('id, s3_bucket, s3_key, caption')
+                .eq('observation_id', req.params.id)
+                .order('created_at', { ascending: true })
+                .limit(1);
+              if (photos && photos.length > 0) {
+                const ph = photos[0];
+                const { data: dlBlob } = await db.storage.from(ph.s3_bucket || 'observation-photos').download(ph.s3_key);
+                if (dlBlob) {
+                  const buf = Buffer.from(await dlBlob.arrayBuffer());
+                  const type = detectImageType(buf) || 'image/jpeg';
+                  const mediaId = crypto.randomUUID();
+                  const targetKey = `${spec.species_id}/${mediaId}.${EXTENSIONS[type] || 'jpg'}`;
+                  const stripped = stripMetadata(buf, type);
+                  const uploadRes = await db.storage.from('species-media').upload(targetKey, stripped, { contentType: type, upsert: true });
+                  if (!uploadRes.error) {
+                    await db.from('species_media').insert({
+                      id: mediaId,
+                      species_id: spec.species_id,
+                      s3_bucket: 'species-media',
+                      s3_key: targetKey,
+                      caption: ph.caption || 'Field observation photo',
+                      is_primary: true,
+                      sort_order: 0,
+                      uploaded_by: req.user.id,
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (autoErr) {
+        console.warn('[API] Auto-sync species media notice:', autoErr);
+      }
     }
     res.status(201).json(data);
   },

@@ -368,6 +368,37 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .site .search input { padding-left: 44px; }
 .search.wide { max-width: 440px; margin: var(--s-4) 0 !important; }
 
+/* Species Autocomplete & Suggestions */
+.species-suggest-box { position: relative; width: 100%; }
+.species-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
+  max-height: 260px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 2px;
+}
+.species-dropdown-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 12px; border-radius: var(--r-sm); border: none; background: transparent;
+  color: var(--ink); text-align: left; cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
+}
+.species-dropdown-item:hover, .species-dropdown-item:focus {
+  background: var(--acc-soft); color: var(--acc); outline: none;
+}
+.species-item-main { display: flex; flex-direction: column; gap: 2px; }
+.species-item-common { font-weight: 700; font-size: 14px; }
+.species-item-sci { font-style: italic; font-size: 13px; color: var(--ink2); }
+.species-dropdown-item:hover .species-item-sci { color: var(--acc); }
+.species-pills-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.species-pill-btn {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: var(--r-pill);
+  border: 1px solid var(--line); background: var(--sunken); color: var(--ink2); cursor: pointer;
+  transition: all 0.15s ease;
+}
+.species-pill-btn:hover { border-color: var(--acc); color: var(--acc); background: var(--acc-soft); }
+.success-hint { color: var(--ok); margin-top: 6px; font-size: 13px; font-weight: 600; }
+
+
 /* ---------- 4. Chips, pills, tables, detail lists ---------- */
 /* Status chip: a coloured dot and label. One meaning per colour (STATUS_TONE in tokens.js). */
 .chip {
@@ -552,6 +583,80 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .site .pcaption { width: 100%; min-height: 68px; padding: 6px var(--s-2); font-size: var(--t-small-size); line-height: var(--t-small-line); }
 /* Caption under a species photo in the gallery */
 .caption { margin: var(--s-2) 2px 0; color: var(--ink2); font-size: var(--t-small-size); line-height: var(--t-small-line); }
+
+/* Field observation photos picker in species photo editor */
+.obs-picker {
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: var(--r-card, 12px);
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+.obs-picker .obs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.obs-thumb-btn {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-control, 8px);
+  overflow: hidden;
+  background: var(--surface);
+  cursor: pointer;
+  padding: 0;
+  border: 1px solid var(--line);
+  display: block;
+}
+.obs-thumb-btn.selected {
+  border: 3px solid var(--acc);
+}
+.obs-thumb-btn img,
+.obs-thumb-img,
+.obs-picker img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+.obs-thumb-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 4px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 2;
+}
+.obs-thumb-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--acc);
+  color: var(--on-acc);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 2;
+}
 
 /* Account settings: four cards in two columns, one column on phones. */
 .settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); align-items: start; }

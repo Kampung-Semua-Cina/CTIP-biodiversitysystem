@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { scanFromURLAsync } from 'expo-camera';
 
 import { useStore } from '../../shared/store.js';
 import { plantView } from '../../shared/selectors.js';
@@ -15,6 +16,8 @@ import {
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
+import { uid } from '../../shared/utils.js';
+import { extractTag } from '../../shared/selectors.js';
 
 const MAX_PHOTOS = 6;
 
@@ -23,9 +26,18 @@ async function takePhoto() {
   try {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     const result = cam.granted
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    if (!result.canceled && result.assets?.length) return [{ url: result.assets[0].uri }];
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: true });
+    if (!result.canceled && result.assets?.length) {
+      const a = result.assets[0];
+      return [{
+        id: uid(),
+        url: a.uri,
+        base64: a.base64 || null,
+        name: a.fileName || `photo_${Date.now()}.jpg`,
+        type: a.mimeType || 'image/jpeg',
+      }];
+    }
   } catch {
     // Camera not available (e.g. simulator)
   }
@@ -47,10 +59,17 @@ async function pickFromGallery() {
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.7,
+      base64: true,
       selectionLimit: MAX_PHOTOS,
     });
     if (!result.canceled && result.assets?.length) {
-      return result.assets.map((a) => ({ url: a.uri }));
+      return result.assets.map((a, i) => ({
+        id: uid(),
+        url: a.uri,
+        base64: a.base64 || null,
+        name: a.fileName || `photo_${Date.now()}_${i}.jpg`,
+        type: a.mimeType || 'image/jpeg',
+      }));
     }
   } catch {
     // Gallery not available
@@ -208,10 +227,11 @@ function SpeciesField({ value, onChange, onPick, species, error }) {
 }
 
 export function AddPlant({ nav, params = {} }) {
-  const { db, addPlant } = useStore();
+  const { db, addPlant, generateTags } = useStore();
   const { c } = useTheme();
-  const qr = params.qr;
+  const [qr, setQr] = useState(params.qr || '');
   const species = db.species.filter((s) => !s.is_deleted);
+  const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
   const [photos, setPhotos] = useState([]);
   const [sp, setSp] = useState('');
   const [height, setHeight] = useState('');
@@ -222,7 +242,90 @@ export function AddPlant({ nav, params = {} }) {
   const [gpsError, setGpsError] = useState('');
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [tried, setTried] = useState(false);
+
+  useEffect(() => {
+    if (params.qr && params.qr !== qr) {
+      setQr(params.qr);
+    }
+  }, [params.qr]);
+
+  const generateNewTag = async () => {
+    setGenerating(true);
+    try {
+      const ids = await generateTags(1, 'field');
+      if (ids && ids.length > 0) {
+        setQr(ids[0]);
+        Alert.alert('Tag Generated', `Created new QR tag: ${ids[0]}`);
+      }
+    } catch (err) {
+      Alert.alert('Tag Generation Failed', err?.message || 'Could not generate QR tag.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const pickQrFromGallery = async () => {
+    try {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!lib.granted) {
+        const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!ask.granted) {
+          Alert.alert('Permission needed', 'Allow photo library access to choose images.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      let foundData = null;
+
+      try {
+        if (typeof scanFromURLAsync === 'function') {
+          const barcodes = await scanFromURLAsync(uri, ['qr']);
+          if (barcodes && barcodes.length > 0) {
+            foundData = barcodes[0].data;
+          }
+        }
+      } catch (scanErr) {
+        console.warn('scanFromURLAsync error:', scanErr?.message || scanErr);
+      }
+
+      const tagCandidate = extractTag(foundData || asset.fileName || uri);
+      if (tagCandidate && /NIAH-\d{4}/.test(tagCandidate)) {
+        // Check if plant already exists with this tag
+        const existingPlant = (db.plants || []).find(
+          (p) => p && p.qr_id && String(p.qr_id).toUpperCase() === tagCandidate && !p.is_deleted
+        );
+        if (existingPlant) {
+          Alert.alert(
+            'Tag Already In Use',
+            `Tag ${tagCandidate} is already on plant "${existingPlant.species?.common_name || existingPlant.proposed_species || 'Recorded plant'}". Would you like to record a revisit instead?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Record Revisit', onPress: () => nav.replace('revisit', { qr: tagCandidate }) },
+            ]
+          );
+          return;
+        }
+        setQr(tagCandidate);
+        Alert.alert('QR Tag Bound', `Loaded tag: ${tagCandidate}`);
+      } else {
+        Alert.alert(
+          'No QR Code Detected',
+          'Could not detect a plant QR tag in the selected image. You can scan with camera, generate a new QR tag, or pick an unused tag.'
+        );
+      }
+    } catch (err) {
+      Alert.alert('Gallery Error', err?.message || 'Could not load photo from gallery.');
+    }
+  };
 
   const fetchGps = async () => {
     setGpsLoading(true);
@@ -261,9 +364,50 @@ export function AddPlant({ nav, params = {} }) {
 
   if (!qr) {
     return (
-      <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />}>
-        <Empty icon="qr">Scan an unused tag first. The record starts from the tag on the plant.</Empty>
-        <Button label="Scan a tag" icon="scan" onPress={() => nav.replace('scan')} />
+      <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />} gap={20}>
+        <View style={{ gap: 6 }}>
+          <Txt v="title1">Add Plant</Txt>
+          <Txt v="body" color={c.ink2}>
+            Every plant record starts from a QR tag. Choose how you want to tag this plant:
+          </Txt>
+        </View>
+
+        <View style={{ gap: 12 }}>
+          <Button label="Scan tag with camera" icon="camera" onPress={() => nav.replace('scan')} />
+          <Button
+            label={generating ? "Generating QR tag..." : "Generate new QR tag"}
+            icon="qr"
+            kind="secondary"
+            disabled={generating}
+            onPress={generateNewTag}
+          />
+          <Button label="Choose QR from gallery" icon="plus" kind="secondary" onPress={pickQrFromGallery} />
+        </View>
+
+        {unusedTags.length > 0 && (
+          <Section title={`Or pick an unused tag (${unusedTags.length} available)`} gap={10}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {unusedTags.slice(0, 10).map((t) => (
+                <Pressable
+                  key={t.qr_id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pick unused tag ${t.qr_id}`}
+                  onPress={() => setQr(t.qr_id)}
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 16,
+                    borderRadius: 10,
+                    backgroundColor: c.bg,
+                    borderWidth: 1,
+                    borderColor: c.line,
+                  }}
+                >
+                  <Mono size={15} color={c.ink}>{t.qr_id}</Mono>
+                </Pressable>
+              ))}
+            </View>
+          </Section>
+        )}
       </Screen>
     );
   }
@@ -348,11 +492,15 @@ export function AddPlant({ nav, params = {} }) {
     >
       <View style={{ gap: 6 }}>
         <Txt v="title1">New plant</Txt>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Icon name="qr" size={18} color={c.ink2} />
           <Txt v="body" color={c.ink2} style={{ fontSize: 15 }}>Tag</Txt>
           <Mono size={15}>{qr}</Mono>
-          <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
+          <View style={{ flexDirection: 'row', gap: 12, marginLeft: 'auto' }}>
+            <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
+            <TextLink label="Generate" onPress={generateNewTag} />
+            <TextLink label="Gallery" onPress={pickQrFromGallery} />
+          </View>
         </View>
         {restoredDraft && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, padding: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.accentSoft }}>

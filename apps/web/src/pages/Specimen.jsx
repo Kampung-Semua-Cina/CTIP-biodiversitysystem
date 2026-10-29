@@ -297,9 +297,29 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
           </select>
         </label>
         {rawPlant?.proposed_species && (
-          <p className="mute small" style={{ marginTop: 4 }}>
-            Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci>
-          </p>
+          <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
+            <p className="mute small" style={{ margin: 0 }}>
+              Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci>
+            </p>
+            {!rawPlant?.species_id && (() => {
+              const needle = rawPlant.proposed_species.trim().toLowerCase();
+              const match = speciesList.find(
+                (s) => s.scientific_name.toLowerCase() === needle ||
+                       (s.common_name && s.common_name.toLowerCase() === needle) ||
+                       needle.includes(s.scientific_name.toLowerCase()) ||
+                       s.scientific_name.toLowerCase().includes(needle)
+              );
+              return match ? (
+                <button
+                  type="button"
+                  className="btn ghost small-btn"
+                  onClick={() => setPlantSpecies(rawPlant.id, match.id)}
+                >
+                  Use guess: {match.scientific_name}
+                </button>
+              ) : null;
+            })()}
+          </div>
         )}
       </div>
 
@@ -418,6 +438,31 @@ function Visits({ db, visits, photos, rawPlant, canReview, speciesList, reviewOb
                           ))}
                         </select>
                       </label>
+                      {rawPlant?.proposed_species && (
+                        <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
+                          <p className="mute small" style={{ margin: 0 }}>
+                            Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci>
+                          </p>
+                          {!rawPlant?.species_id && (() => {
+                            const needle = rawPlant.proposed_species.trim().toLowerCase();
+                            const match = speciesList.find(
+                              (s) => s.scientific_name.toLowerCase() === needle ||
+                                     (s.common_name && s.common_name.toLowerCase() === needle) ||
+                                     needle.includes(s.scientific_name.toLowerCase()) ||
+                                     s.scientific_name.toLowerCase().includes(needle)
+                            );
+                            return match ? (
+                              <button
+                                type="button"
+                                className="btn ghost small-btn"
+                                onClick={() => setPlantSpecies(rawPlant.id, match.id)}
+                              >
+                                Use guess: {match.scientific_name}
+                              </button>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
                     </div>
                     <div className="field gap-bottom-s">
                       <label>
@@ -428,6 +473,31 @@ function Visits({ db, visits, photos, rawPlant, canReview, speciesList, reviewOb
                           placeholder="Note or reason..."
                         />
                       </label>
+                      {rawPlant?.proposed_species && (
+                        <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
+                          <p className="mute small" style={{ margin: 0 }}>
+                            Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci>
+                          </p>
+                          {!rawPlant?.species_id && (() => {
+                            const needle = rawPlant.proposed_species.trim().toLowerCase();
+                            const match = speciesList.find(
+                              (s) => s.scientific_name.toLowerCase() === needle ||
+                                     (s.common_name && s.common_name.toLowerCase() === needle) ||
+                                     needle.includes(s.scientific_name.toLowerCase()) ||
+                                     s.scientific_name.toLowerCase().includes(needle)
+                            );
+                            return match ? (
+                              <button
+                                type="button"
+                                className="btn ghost small-btn"
+                                onClick={() => setPlantSpecies(rawPlant.id, match.id)}
+                              >
+                                Use guess: {match.scientific_name}
+                              </button>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
                     </div>
                     <div className="decide row wrap">
                       <button className="btn" type="button" onClick={() => handleVisitDecide(v.id, "approve")}>

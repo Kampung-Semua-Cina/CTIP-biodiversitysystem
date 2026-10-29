@@ -9,7 +9,7 @@ import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
 import { AppearanceSection, PrototypeRoleSection } from '../components/Chrome.js';
 import {
-  Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, Row, DotLabel,
+  Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, SortBar, Row, DotLabel,
   Field, Segmented, Empty,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
@@ -56,11 +56,20 @@ const ROLE_FILTERS = [
   { key: 'off', label: 'Deactivated' },
 ];
 
+const SORT_USERS = [
+  { key: 'active', label: 'Active first' },
+  { key: 'name', label: 'Name (A–Z)' },
+  { key: 'nameDesc', label: 'Name (Z–A)' },
+  { key: 'role', label: 'Role' },
+  { key: 'email', label: 'Email' },
+];
+
 export function Users({ nav }) {
   const { db, addUser, notify } = useStore();
   const { c } = useTheme();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('active');
   const [inviting, setInviting] = useState(false);
   const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist' });
   const [error, setError] = useState('');
@@ -68,7 +77,14 @@ export function Users({ nav }) {
   const rows = db.profiles
     .filter((p) => (filter === 'all' ? true : filter === 'off' ? !p.is_active : p.role === filter && p.is_active))
     .filter((p) => !needle || `${p.full_name} ${p.email}`.toLowerCase().includes(needle))
-    .sort((a, b) => b.is_active - a.is_active || a.full_name.localeCompare(b.full_name));
+    ;
+  const sorted = [...rows].sort((a, b) => {
+    if (sort === 'name') return a.full_name.localeCompare(b.full_name);
+    if (sort === 'nameDesc') return b.full_name.localeCompare(a.full_name);
+    if (sort === 'role') return (a.role || '').localeCompare(b.role || '') || a.full_name.localeCompare(b.full_name);
+    if (sort === 'email') return (a.email || '').localeCompare(b.email || '');
+    return (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name);
+  });
   const off = db.profiles.filter((p) => !p.is_active).length;
 
   const invite = () => {
@@ -98,13 +114,14 @@ export function Users({ nav }) {
       ) : null}
       <SearchField value={q} onChangeText={setQ} placeholder="Search name or email" />
       <Pills value={filter} onChange={setFilter} items={ROLE_FILTERS} />
+      <SortBar items={SORT_USERS} value={sort} onChange={setSort} />
       <View>
-        {rows.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
-        {rows.map((p, i) => (
+        {sorted.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
+        {sorted.map((p, i) => (
           <Row key={p.id} serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={p.full_name}
             sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
             right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
-            last={i === rows.length - 1} />
+            last={i === sorted.length - 1} />
         ))}
       </View>
       <Button label="Audit log" kind="text" icon="shield" height={48} size={15} onPress={() => nav.go('audit')} />
@@ -141,6 +158,7 @@ export function Audit({ nav }) {
   const { db } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('active');
   const rows = db.audit
     .filter((a) => filter === 'all' || (filter === 'accounts' ? a.table_name === 'profiles' : a.table_name !== 'profiles'))
     .sort((a, b) => b.changed_at.localeCompare(a.changed_at));

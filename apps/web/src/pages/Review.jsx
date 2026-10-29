@@ -26,6 +26,7 @@ export default function Review() {
   const [picked, setPicked] = useState(null);
   const [queue, setQueue] = useState(null); // null while loading
   const [error, setError] = useState(null);
+  const [sort, setSort] = useState("newest");
 
   const reload = useCallback(() => loadReviewQueue().then((r) => {
     setError(r.ok ? null : r.message);
@@ -40,7 +41,25 @@ export default function Review() {
   const list = known
     .filter(cur.test)
     // Oldest first while waiting, so nothing sits at the bottom forever; newest first otherwise.
-    .sort((a, b) => (filter === "synced" ? 1 : -1) * (a.last_synced_at || a.observed_at || "").localeCompare(b.last_synced_at || b.observed_at || ""));
+    .sort((a, b) => {
+      if (sort === "oldest") return (a.last_synced_at || a.observed_at || "").localeCompare(b.last_synced_at || b.observed_at || "");
+      if (sort === "plant") {
+        const pa = plantView(db, db.plants.find((x) => x.id === a.specimen_id));
+        const pb = plantView(db, db.plants.find((x) => x.id === b.specimen_id));
+        return (pa.name || "").localeCompare(pb.name || "");
+      }
+      if (sort === "botanist") {
+        const ba = nameOf(db, a.recorded_by);
+        const bb = nameOf(db, b.recorded_by);
+        return ba.localeCompare(bb);
+      }
+      if (sort === "tag") {
+        const pa = db.plants.find((x) => x.id === a.specimen_id);
+        const pb = db.plants.find((x) => x.id === b.specimen_id);
+        return (pa?.qr_id || "").localeCompare(pb?.qr_id || "");
+      }
+      return (b.last_synced_at || b.observed_at || "").localeCompare(a.last_synced_at || a.observed_at || "");
+    });
   const obs = list.find((o) => o.id === picked) || list[0];
   const waiting = counts.synced;
 
@@ -53,8 +72,20 @@ export default function Review() {
             {waiting ? `${waiting} field ${waiting === 1 ? "record is" : "records are"} waiting for a decision.` : "Nothing is waiting for a decision."}
           </p>
         </div>
-        <Pills label="Show" value={filter} onChange={(k) => { setFilter(k); setPicked(null); }}
+        <div className="row wrap" style={{ alignItems: "center", gap: 16 }}>
+          <Pills label="Show" value={filter} onChange={(k) => { setFilter(k); setPicked(null); }}
           items={FILTERS.map((f) => ({ key: f.key, label: f.label, count: f.key === "all" ? undefined : counts[f.key] }))} />
+          <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Sort</span>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort review records">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="plant">Plant name A–Z</option>
+              <option value="botanist">Botanist A–Z</option>
+              <option value="tag">Tag ID</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {error && <p className="mute small" role="alert">Could not load the review queue from the API: {error}</p>}
@@ -140,7 +171,29 @@ function ReviewDetail({ obs, onDecided }) {
             {species.map((s) => <option key={s.id} value={s.id}>{s.scientific_name}</option>)}
           </select>
         </label>
-        {rawPlant.proposed_species && <p className="mute small">Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>}
+        {rawPlant.proposed_species && (
+          <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
+            <p className="mute small" style={{ margin: 0 }}>Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>
+            {open && !rawPlant.species_id && (() => {
+              const needle = rawPlant.proposed_species.trim().toLowerCase();
+              const match = species.find(
+                (s) => s.scientific_name.toLowerCase() === needle ||
+                       (s.common_name && s.common_name.toLowerCase() === needle) ||
+                       needle.includes(s.scientific_name.toLowerCase()) ||
+                       s.scientific_name.toLowerCase().includes(needle)
+              );
+              return match ? (
+                <button
+                  type="button"
+                  className="btn ghost small-btn"
+                  onClick={() => setPlantSpecies(rawPlant.id, match.id)}
+                >
+                  Use guess: {match.scientific_name}
+                </button>
+              ) : null;
+            })()}
+          </div>
+        )}
       </div>
 
       {!hasCoords && (

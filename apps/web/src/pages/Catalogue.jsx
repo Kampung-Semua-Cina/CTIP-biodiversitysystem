@@ -24,7 +24,7 @@ export default function Catalogue() {
   const family = query.family || "all";
   const genus = query.genus || "all";
   const status = staff && query.status ? query.status : "all"; // visitors never filter by status
-  const sort = query.sort === "tagged" ? "tagged" : "name";
+  const sort = ["scientific", "family", "endangered", "tagged"].includes(query.sort) ? query.sort : "name";
   const view = query.view === "list" ? "list" : "grid";
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   // A new filter starts again at page 1. "all" is the default, so it is left out of the URL.
@@ -39,7 +39,17 @@ export default function Catalogue() {
     .filter((s) => family === "all" || s.family === family)
     .filter((s) => genus === "all" || s.genus === genus)
     .filter((s) => status === "all" || s.conservation_status === status)
-    .sort((a, b) => (sort === "tagged" ? b.plants.length - a.plants.length : 0) || a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      if (sort === "scientific") return (a.scientific_name || "").localeCompare(b.scientific_name || "");
+      if (sort === "family") return (a.family || "").localeCompare(b.family || "") || a.name.localeCompare(b.name);
+      if (sort === "endangered") {
+        const ea = a.conservation_status === "endangered" ? 1 : 0;
+        const eb = b.conservation_status === "endangered" ? 1 : 0;
+        return eb - ea || a.name.localeCompare(b.name);
+      }
+      if (sort === "tagged") return b.plants.length - a.plants.length || a.name.localeCompare(b.name);
+      return a.name.localeCompare(b.name);
+    });
 
   // Counts next to each filter come from the searched list, so they match what you'd get.
   const familyCounts = Object.entries(
@@ -83,7 +93,10 @@ export default function Catalogue() {
         </label>
         <label className="inline">Sort
           <select value={sort} onChange={(e) => setQuery({ sort: e.target.value === "name" ? null : e.target.value })}>
-            <option value="name">Name A–Z</option>
+            <option value="name">Common name A–Z</option>
+            <option value="scientific">Scientific name A–Z</option>
+            <option value="family">Family A–Z</option>
+            <option value="endangered">Endangered first</option>
             <option value="tagged">Most tagged</option>
           </select>
         </label>

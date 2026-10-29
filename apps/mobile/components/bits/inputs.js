@@ -128,3 +128,46 @@ export function Segmented({ items, value, onChange }) {
     </View>
   );
 }
+
+// Compact horizontal sort bar: items: [{ key, label }]
+export function SortBar({ items = [], value, onChange, label = 'Sort' }) {
+  const { c } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Icon name="arrowRight" size={13} color={c.ink2} style={{ transform: [{ rotate: '90deg' }] }} />
+        <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink2, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {label}
+        </Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 12 }}>
+        {items.map((opt) => {
+          const on = opt.key === value;
+          return (
+            <Pressable
+              key={opt.key}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`Sort by ${opt.label}`}
+              onPress={() => onChange(opt.key)}
+              style={{
+                height: 28,
+                paddingHorizontal: 10,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: on ? c.accentSoft : c.bg,
+                borderWidth: 1,
+                borderColor: on ? c.accent : 'transparent',
+              }}
+            >
+              <Text style={{ fontFamily: font('text', on ? 700 : 500), fontSize: 12, color: on ? c.accent : c.ink2 }}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}

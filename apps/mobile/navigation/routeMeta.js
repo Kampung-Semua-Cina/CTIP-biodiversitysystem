@@ -20,7 +20,6 @@ export const NEEDS = {
   audit: "audit",
   alerts: "bell",
   discussion: "discuss",
-  tagged: "pending",
   staffMore: "pending",
 };
 

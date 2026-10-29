@@ -13,18 +13,41 @@ import { OBS_STATUS } from "../../../shared/data.js";
 export default function Records() {
   const { db, me } = useStore();
   const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("recent");
 
   const unfinished = unfinishedPlants(db, me?.id);
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id && (filter === "all" || o.status === filter))
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    .sort((a, b) => {
+      if (sort === "oldest") return (a.observed_at || "").localeCompare(b.observed_at || "");
+      if (sort === "name") {
+        const pa = plantView(db, db.plants.find((x) => x.id === a.specimen_id));
+        const pb = plantView(db, db.plants.find((x) => x.id === b.specimen_id));
+        return (pa?.name || "").localeCompare(pb?.name || "");
+      }
+      if (sort === "tag") {
+        const pa = db.plants.find((x) => x.id === a.specimen_id);
+        const pb = db.plants.find((x) => x.id === b.specimen_id);
+        return (pa?.qr_id || "").localeCompare(pb?.qr_id || "");
+      }
+      return (b.observed_at || "").localeCompare(a.observed_at || "");
+    });
 
   return (
     <Shell seg="records">
       <h2>My records</h2>
-      <div className="gap-bottom gap-top-s">
+      <div className="row wrap between gap-bottom gap-top-s" style={{ alignItems: "center" }}>
         <Pills label="Status" value={filter} onChange={setFilter}
           items={["all", ...OBS_STATUS].map((s) => ({ key: s, label: s === "all" ? "All" : STATUS_TEXT[s] || s[0].toUpperCase() + s.slice(1) }))} />
+        <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort my records">
+            <option value="recent">Recent first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name">Plant name A–Z</option>
+            <option value="tag">Tag ID</option>
+          </select>
+        </label>
       </div>
 
       {unfinished.length > 0 && (filter === "all" || filter === "draft") && (

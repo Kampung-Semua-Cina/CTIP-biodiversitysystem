@@ -64,11 +64,11 @@ export const staffLinks = (role) => STAFF_LINKS[role] || [];
 // Bottom bar on phones (5 icons at most). `main` is the raised button in the middle.
 export const bottomLinks = (role) => {
   // Staff get their dashboard here; "Plants" means the public catalogue everywhere (visitors' list below).
-  const dash = { to: "/dashboard", label: "Dashboard", icon: "dashboard" };
+  const plants = { to: "/plants", label: "Plants", icon: "leaf" };
   const map = { to: "/map", label: "Map", icon: "map" };
   const alerts = { to: "/notifications", label: "Alerts", icon: "bell", bell: true };
-  if (role === "botanist") return [dash, map, { to: "/add", label: "Scan", icon: "qr", main: true }, alerts, { to: "/records", label: "My records", icon: "file" }];
-  if (role === "officer") return [dash, map, { to: "/review", label: "Review", icon: "clipboard", main: true }, alerts, { to: "/monitoring", label: "Monitor", icon: "activity" }];
-  if (role === "admin") return [dash, map, { to: "/monitoring", label: "Monitor", icon: "activity", main: true }, alerts, { to: "/users", label: "Users", icon: "users" }];
-  return [{ to: "/", label: "Home", icon: "home" }, { to: "/plants", label: "Plants", icon: "leaf" }, map];
+  if (role === "botanist") return [{ to: "/records", label: "My records", icon: "file" }, plants, { to: "/add", label: "Add plant", icon: "plus", main: true }, map, alerts];
+  if (role === "officer") return [{ to: "/review", label: "Review", icon: "clipboard" }, plants, { to: "/scan", label: "Scan/Add", icon: "qr", main: true }, map, alerts];
+  if (role === "admin") return [{ to: "/users", label: "Users", icon: "users" }, plants, { to: "/scan", label: "Scan/Add", icon: "qr", main: true }, map, alerts];
+  return [{ to: "/", label: "Home", icon: "home" }, plants, { to: "/scan", label: "Scan", icon: "qr", main: true }, map, { to: "/about", label: "About", icon: "info" }];
 };

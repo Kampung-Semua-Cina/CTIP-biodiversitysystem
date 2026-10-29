@@ -9,7 +9,7 @@ import { CAPTION_MAX, PHOTO_MAX_MB, PHOTO_TYPES, nowIso, photoProblem, uid } fro
 // The first card is the primary photo. Arrow buttons do the same job as dragging on a phone.
 // captions: every photo needs a caption (species catalogue). min: fewest photos the list may keep.
 export default function PhotoEditor({
-  photos,
+  photos = [],
   observationPhotos = [],
   onSave,
   onClose,
@@ -47,6 +47,8 @@ export default function PhotoEditor({
         id: uid(),
         observation_id: obs.observation_id || null,
         url: obs.url,
+        s3_bucket: obs.s3_bucket || "observation-photos",
+        s3_key: obs.s3_key || null,
         file: null,
         caption: obs.caption || (obs.plant_qr ? `Observation from ${obs.plant_qr}` : "Field observation"),
         created_at: obs.created_at || nowIso(),
@@ -111,70 +113,32 @@ export default function PhotoEditor({
         </div>
 
         {showObs && observationPhotos.length > 0 && (
-          <div className="obs-picker" style={{ margin: "14px 0", padding: "12px", borderRadius: "var(--r-card, 12px)", background: "var(--sunken)", border: "1px solid var(--line)" }}>
+          <div className="obs-picker">
             <div className="row between wrap gap-bottom-s" style={{ alignItems: "center", marginBottom: 8 }}>
               <b>Field observation photos</b>
               <span className="mute small">Click any photo to add or remove it from the species display</span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8, maxHeight: 220, overflowY: "auto", padding: 2 }}>
+            <div className="obs-grid">
               {observationPhotos.map((obs) => {
                 const isSelected = list.some((p) => p.url === obs.url || (p.id && obs.id && p.id === obs.id));
                 return (
                   <button
                     key={obs.id || obs.url}
                     type="button"
+                    className={`obs-thumb-btn ${isSelected ? "selected" : ""}`}
                     onClick={() => toggleObsPhoto(obs)}
-                    style={{
-                      position: "relative",
-                      aspectRatio: "1",
-                      borderRadius: "var(--r-control, 8px)",
-                      overflow: "hidden",
-                      border: isSelected ? "3px solid var(--acc)" : "1px solid var(--line)",
-                      background: "var(--surface)",
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
                     title={obs.caption || obs.plant_qr || "Observation photo"}
                   >
-                    <Img src={obs.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    <span
-                      style={{
-                        position: "absolute",
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        background: "rgba(0,0,0,0.7)",
-                        color: "#fff",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: "2px 4px",
-                        textAlign: "center",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
+                    <Img
+                      src={obs.url}
+                      alt=""
+                      className="obs-thumb-img"
+                    />
+                    <span className="obs-thumb-label">
                       {obs.plant_qr || "Observation"}
                     </span>
                     {isSelected && (
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: 4,
-                          right: 4,
-                          background: "var(--acc)",
-                          color: "var(--on-acc)",
-                          borderRadius: "50%",
-                          width: 22,
-                          height: 22,
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: 13,
-                          fontWeight: "bold",
-                        }}
-                      >
-                        ✓
-                      </span>
+                      <span className="obs-thumb-check">✓</span>
                     )}
                   </button>
                 );

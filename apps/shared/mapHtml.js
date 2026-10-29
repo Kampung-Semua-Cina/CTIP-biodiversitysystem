@@ -30,7 +30,10 @@ export function generateMapHtml({
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500&family=Nunito:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
@@ -96,6 +99,40 @@ export function generateMapHtml({
     @keyframes pulseAnim {
       0% { transform: scale(0.6); opacity: 0.9; }
       100% { transform: scale(1.7); opacity: 0; }
+    }
+
+    /* Marker Clustering (CTIP-70) */
+    .daun-cluster-wrap {
+      background: transparent !important;
+      border: none !important;
+    }
+    .daun-cluster {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      transition: transform 0.15s ease;
+      cursor: pointer;
+    }
+    .daun-cluster:hover, .daun-cluster:active {
+      transform: scale(1.1);
+    }
+    .daun-cluster-small {
+      background: linear-gradient(135deg, #10b981, #059669);
+    }
+    .daun-cluster-medium {
+      background: linear-gradient(135deg, #059669, #047857);
+    }
+    .daun-cluster-large {
+      background: linear-gradient(135deg, #047857, #064e3b);
     }
 
     /* User Actual Location Marker */
@@ -290,7 +327,25 @@ export function generateMapHtml({
         map.setView(center, ${DEFAULT_ZOOM});
       }
 
-      var markersGroup = L.layerGroup().addTo(map);
+      // Markers layer group with clustering support (CTIP-70)
+      var markersGroup = typeof L.markerClusterGroup === 'function'
+        ? L.markerClusterGroup({
+            showCoverageOnHover: false,
+            maxClusterRadius: 40,
+            spiderfyOnMaxZoom: true,
+            disableClusteringAtZoom: 17,
+            iconCreateFunction: function(cluster) {
+              var count = cluster.getChildCount();
+              var size = count < 10 ? 'small' : count < 30 ? 'medium' : 'large';
+              return L.divIcon({
+                html: '<div class="daun-cluster daun-cluster-' + size + '"><span>' + count + '</span></div>',
+                className: 'daun-cluster-wrap',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+              });
+            },
+          }).addTo(map)
+        : L.layerGroup().addTo(map);
       var markersMap = {};
 
       function createIcon(pt, isSelected) {
@@ -337,7 +392,13 @@ export function generateMapHtml({
         selectedId = id;
         renderMarkers();
         if (latlng) {
-          map.panTo(latlng, { animate: true, duration: 0.4 });
+          if (markersGroup.zoomToShowLayer && markersMap[id] && markersMap[id].marker) {
+            markersGroup.zoomToShowLayer(markersMap[id].marker, function() {
+              map.panTo(latlng, { animate: true, duration: 0.4 });
+            });
+          } else {
+            map.panTo(latlng, { animate: true, duration: 0.4 });
+          }
         }
         sendToHost({ type: 'SELECT_PLANT', id: id, qr_id: qr_id });
       }
@@ -453,7 +514,13 @@ export function generateMapHtml({
             renderMarkers();
             if (data.id && markersMap[data.id]) {
               var target = markersMap[data.id].point;
-              map.panTo([target.lat, target.lng], { animate: true });
+              if (markersGroup.zoomToShowLayer && markersMap[data.id].marker) {
+                markersGroup.zoomToShowLayer(markersMap[data.id].marker, function() {
+                  map.panTo([target.lat, target.lng], { animate: true });
+                });
+              } else {
+                map.panTo([target.lat, target.lng], { animate: true });
+              }
             }
           } else if (data.type === 'UPDATE_POINTS') {
             points = data.points || [];

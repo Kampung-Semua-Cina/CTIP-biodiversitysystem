@@ -9,7 +9,7 @@ import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Bar, TitleBlock, Pills, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Field, Avatar, Empty,
+  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
@@ -20,15 +20,28 @@ const GROUPS = [
   { key: 'rejected', title: 'Rejected', statuses: ['rejected'] },
 ];
 
+const SORT_RECORDS = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Oldest' },
+  { key: 'name', label: 'Plant (A–Z)' },
+  { key: 'tag', label: 'Tag ID' },
+];
+
 export function MyRecords({ nav }) {
   const { db, me } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id)
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
     .filter((o) => o.plant)
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    .sort((a, b) => {
+      if (sort === 'oldest') return a.observed_at.localeCompare(b.observed_at);
+      if (sort === 'name') return (a.plant?.name || '').localeCompare(b.plant?.name || '');
+      if (sort === 'tag') return (a.plant?.qr_id || '').localeCompare(b.plant?.qr_id || '');
+      return b.observed_at.localeCompare(a.observed_at);
+    });
   const count = (g) => mine.filter((o) => g.statuses.includes(o.status)).length;
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
   // A plant's later visits are labelled as revisits.
@@ -42,6 +55,7 @@ export function MyRecords({ nav }) {
         onChange={setFilter}
         items={[{ key: 'all', label: `All ${mine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
       />
+      <SortBar items={SORT_RECORDS} value={sort} onChange={setSort} />
       {mine.length === 0 ? <Empty icon="file">No records yet. Scan an unused tag to add your first plant.</Empty> : null}
       {groups.map((g, gi) => {
         const rows = mine.filter((o) => g.statuses.includes(o.status));
