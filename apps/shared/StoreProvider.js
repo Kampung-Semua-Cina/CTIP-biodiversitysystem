@@ -809,7 +809,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   // Approve, return or reject: through the API only (CTIP-29: "only Officer and
   // Admin can decide, enforced by the API"). There is no direct-to-database
-  // fallback any more: the old one skipped the version check (bugs.md M2).
+  // fallback any more: the old one skipped the version check (docs/updates/rick3-bugs.md, M2).
   // When the API is down the decision is not saved, and the officer is told.
   const reviewObservation = async (id, decision, comment) => {
     const obs = db.observations.find((o) => o.id === id);

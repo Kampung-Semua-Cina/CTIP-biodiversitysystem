@@ -33,27 +33,27 @@ Before this change, the web app wrote species and read the review queue **straig
 ## What changed, file by file
 
 ### API (`services/api`)
-- [src/species.js](services/api/src/species.js): `conservation_status` must be an IUCN category (`IUCN_STATUSES`). Any case is accepted and it is saved lower case ("Critically Endangered" → "critically endangered").
-- [test/species.test.js](services/api/test/species.test.js): new test for the IUCN check on create and update.
-- [packages/api-contract/openapi.yaml](packages/api-contract/openapi.yaml): new `ConservationStatusValue` enum, used by `SpeciesInput` and `SpeciesUpdate`.
+- [src/species.js](../../services/api/src/species.js): `conservation_status` must be an IUCN category (`IUCN_STATUSES`). Any case is accepted and it is saved lower case ("Critically Endangered" → "critically endangered").
+- [test/species.test.js](../../services/api/test/species.test.js): new test for the IUCN check on create and update.
+- [packages/api-contract/openapi.yaml](../../packages/api-contract/openapi.yaml): new `ConservationStatusValue` enum, used by `SpeciesInput` and `SpeciesUpdate`.
 
 ### Shared code (`apps/shared`, used by web and mobile)
-- [api.js](apps/shared/api.js): new calls `fetchStaffSpecies`, `createSpeciesApi`, `updateSpeciesApi` and `fetchObservations`. List calls fetch every page (100 at a time). Blank form fields are sent as `null`, because the API rejects empty strings.
-- [StoreProvider.js](apps/shared/StoreProvider.js):
+- [api.js](../../apps/shared/api.js): new calls `fetchStaffSpecies`, `createSpeciesApi`, `updateSpeciesApi` and `fetchObservations`. List calls fetch every page (100 at a time). Blank form fields are sent as `null`, because the API rejects empty strings.
+- [StoreProvider.js](../../apps/shared/StoreProvider.js):
   - `saveSpecies` now goes through the API and returns `{ ok, message }`. **There is no Supabase fallback**, because that would bypass the API's checks. If the API is down, the save fails with "Cannot reach the API server. Start it with npm run api."
   - New `loadStaffSpecies()` loads the staff species list from the API. Deleted species still come from Supabase, because the API's list leaves them out; they are needed for "Recently deleted".
   - New `loadReviewQueue()` loads the queue from the API.
-- [data.js](apps/shared/data.js): `CONSERVATION` now has all 9 IUCN categories. New `THREATENED` list: `endangered` and `critically endangered`.
-- [selectors.js](apps/shared/selectors.js): plants of **critically endangered** species now get their location hidden from visitors, the same as endangered ones. This matches the API's `distribution.js`. Without it, adding the new category would have exposed those locations.
-- [tokens.js](apps/shared/tokens.js): colours for the new categories (extinct and critically endangered: red; data deficient and not evaluated: grey).
+- [data.js](../../apps/shared/data.js): `CONSERVATION` now has all 9 IUCN categories. New `THREATENED` list: `endangered` and `critically endangered`.
+- [selectors.js](../../apps/shared/selectors.js): plants of **critically endangered** species now get their location hidden from visitors, the same as endangered ones. This matches the API's `distribution.js`. Without it, adding the new category would have exposed those locations.
+- [tokens.js](../../apps/shared/tokens.js): colours for the new categories (extinct and critically endangered: red; data deficient and not evaluated: grey).
 
 ### Web (`apps/web`)
-- [pages/Species.jsx](apps/web/src/pages/Species.jsx): loads the list from the API when the page opens and shows a message if that fails. When saving, the form waits for the API: it closes only on success and stays open with the error if not. The Save button shows "Saving…" while waiting.
-- [pages/Review.jsx](apps/web/src/pages/Review.jsx): the queue comes from the API, with "Loading…" and error states. There is a map in the detail view. After approve/return/reject the queue reloads from the API.
-- [App.css](apps/web/src/App.css): chip colours for the new categories.
+- [pages/Species.jsx](../../apps/web/src/pages/Species.jsx): loads the list from the API when the page opens and shows a message if that fails. When saving, the form waits for the API: it closes only on success and stays open with the error if not. The Save button shows "Saving…" while waiting.
+- [pages/Review.jsx](../../apps/web/src/pages/Review.jsx): the queue comes from the API, with "Loading…" and error states. There is a map in the detail view. After approve/return/reject the queue reloads from the API.
+- [App.css](../../apps/web/src/App.css): chip colours for the new categories.
 
 ### Mobile (`apps/mobile`)
-- [pages/Dashboard.js](apps/mobile/pages/Dashboard.js): the "endangered" dot now also shows for critically endangered species. No other mobile changes.
+- [pages/Dashboard.js](../../apps/mobile/pages/Dashboard.js): the "endangered" dot now also shows for critically endangered species. No other mobile changes.
 
 ## Notes and known limits
 
@@ -109,24 +109,24 @@ Checked on 2026-10-28: with the API running, the website reaches it, the login t
 
 Before, the top bar always said **"API Connected"**: the code set it to "connected" even when the check failed. Now:
 
-- The store checks the API **on load, every 30 seconds, and when you come back to the tab** (`checkApi` in [StoreProvider.js](apps/shared/StoreProvider.js)). Any call that cannot reach the API also marks it down straight away.
-- Top bar: a red **"API Down"** badge ([RoleSwitch.jsx](apps/web/src/components/RoleSwitch.jsx)).
-- Every staff page: a red banner saying *"API down. Cannot reach the API server. Start it with npm run api (needs services/api/.env)."* ([Shell.jsx](apps/web/src/components/Shell.jsx), `.apidown` in [App.css](apps/web/src/App.css)).
-- The 502 the dev server sends when the API is not running is now treated as "API down" instead of showing "Bad Gateway" ([api.js](apps/shared/api.js)).
+- The store checks the API **on load, every 30 seconds, and when you come back to the tab** (`checkApi` in [StoreProvider.js](../../apps/shared/StoreProvider.js)). Any call that cannot reach the API also marks it down straight away.
+- Top bar: a red **"API Down"** badge ([RoleSwitch.jsx](../../apps/web/src/components/RoleSwitch.jsx)).
+- Every staff page: a red banner saying *"API down. Cannot reach the API server. Start it with npm run api (needs services/api/.env)."* ([Shell.jsx](../../apps/web/src/components/Shell.jsx), `.apidown` in [App.css](../../apps/web/src/App.css)).
+- The 502 the dev server sends when the API is not running is now treated as "API down" instead of showing "Bad Gateway" ([api.js](../../apps/shared/api.js)).
 - Both clear by themselves once the API is back.
 
 ## Botanists can now edit and send their records
 
 | Problem | Fix |
 |---|---|
-| A **returned** record could not be edited. The page only had a reply box and "Send again". | Web [Records.jsx](apps/web/src/pages/Records.jsx) and mobile [Records.js](apps/mobile/pages/Records.js) now show **Appearance, Height and Notes** to fix before sending again. |
+| A **returned** record could not be edited. The page only had a reply box and "Send again". | Web [Records.jsx](../../apps/web/src/pages/Records.jsx) and mobile [Records.js](../../apps/mobile/pages/Records.js) now show **Appearance, Height and Notes** to fix before sending again. |
 | "Send again" and "Sync now" **ignored the database's answer** and always said they worked. | `resubmit` and `syncObservation` now check the result. On failure the page keeps your edits and shows the reason. |
 | A stale screen could re-send a record that was already approved or rejected. | Updates only apply while the record is still `returned` (or `draft`/`queued` for sync). |
 | **Plants left half-saved by the earlier bug** (the plant was saved, its record was not) could not be reopened, because their tag counted as "used". | Web: **My records** lists them under "Not sent yet" with a **Finish and send** button, and they appear in the tag picker on **Add plant** as "(not sent yet)". Mobile: scanning that tag offers **Finish and send**, and opens the form with your saved draft. Sending finishes the existing plant instead of making a new one. |
 | Mobile had no "Send" button for a `draft` or `queued` record. | Added "Send for review" to the record screen. |
 | The Scan page linked to `#/add?tag=X`, but the router splits on `/` and does not handle `?`, so the tag was lost. | It now links to `#/add/X`, and Add plant reads the tag from there. |
 
-The QR-tag bug fixes from the same day (`specimens_qr_id_key`) are described in [bugs.md](bugs.md).
+The QR-tag bug fixes from the same day (`specimens_qr_id_key`) are described in [rick3-bugs.md](rick3-bugs.md).
 
 ## Testing done (update 2)
 
@@ -163,7 +163,7 @@ The QR-tag bug fixes from the same day (`specimens_qr_id_key`) are described in 
 ## Approve, Reject or Request Changes (CTIP-29 split)
 
 - **The API enforces "confirm the species before approving".** It answers `422 SPECIES_REQUIRED` when the plant has no species, or its species was deleted. The check is inside `review_observation()`, so it also covers anyone calling the database directly. Return and reject still work without a species.
-- **Decisions only go through the API.** The website and app no longer write to the database when the API is down (that skipped the version check, bugs.md M2). The migration also removes the officer's direct insert into `observation_reviews` and the old `approve_observation()`.
+- **Decisions only go through the API.** The website and app no longer write to the database when the API is down (that skipped the version check, rick3-bugs.md M2). The migration also removes the officer's direct insert into `observation_reviews` and the old `approve_observation()`.
 - Web Review disables the three buttons while the API is down and says why. Mobile Review waits for the result instead of always saying "approved".
 
 ## Species photos with captions
@@ -189,7 +189,7 @@ The QR-tag bug fixes from the same day (`specimens_qr_id_key`) are described in 
 ## GPS: "location not captured" instead of a made-up position
 
 - Web and mobile send no location when there's no real fix, instead of a default or random spot near the trail head. The botanist sees a warning, and the officer sees "Location not captured" on the review screen. These plants stay off every map.
-- Older records still have their fake positions. `bugs.md` T9 has a query to find them.
+- Older records still have their fake positions. `rick3-bugs.md` T9 has a query to find them.
 
 ## Testing done (update 3)
 
