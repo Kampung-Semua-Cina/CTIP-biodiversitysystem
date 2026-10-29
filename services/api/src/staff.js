@@ -218,9 +218,14 @@ export const staffHandlers = {
 
   // New ids follow the highest one in the database. Two officers printing at
   // the same moment can pick the same ids; the loser tries again with fresh ones.
+  // A botanist with no printed tag to hand makes one for the plant in front of
+  // them (CTIP-27); printing batches stays with officers and admins.
   'post /qr-tags/batch': async (req, res) => {
     const body = parseBody(TagBatch, req, res);
     if (!body) return;
+    if (req.user.role === 'botanist' && body.count !== 1) {
+      return fail(res, 403, 'FORBIDDEN', 'Botanists can create one tag at a time. Ask an officer to print a batch.');
+    }
     const db = supabaseAs(req.user);
     for (let attempt = 0; attempt < 3; attempt++) {
       const existing = await db.from('qr_tags').select('qr_id');

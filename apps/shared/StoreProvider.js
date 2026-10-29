@@ -1119,9 +1119,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   // The API picks the next free ids (POST /v1/qr-tags/batch). No local stand-in
   // tags: a tag that is not in the database cannot go on a plant.
+  // Officers and admins print batches; a botanist with no printed tag to hand
+  // makes one for the plant in front of them (CTIP-27).
   const generateTags = async (count, batch_label = "field") => {
-    if (!can(role, "tags")) {
-      notify("Only officers and admins can create QR tags");
+    if (!can(role, "tags") && !(can(role, "add") && count === 1)) {
+      notify("Only officers and admins can create batches of QR tags");
       return [];
     }
     const res = await callApi(createTagBatchApi, count, batch_label);

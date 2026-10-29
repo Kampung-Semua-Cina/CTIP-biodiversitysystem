@@ -183,8 +183,8 @@ export default function AddPlant() {
             <Icon name="camera" size={18} /> Scan or upload QR
             <input type="file" accept="image/*" capture="environment" hidden onChange={onScanFile} />
           </label>
-          {/* Only officers and admins may create tags (qr_tags RLS); botanists use printed ones. */}
-          {can(role, "tags") && <button type="button" className="btn ghost" onClick={generate}><Icon name="qr" size={18} /> Generate new QR</button>}
+          {/* No printed tag to hand: make one for this plant (CTIP-27). Botanists get one at a time. */}
+          {(can(role, "add") || can(role, "tags")) && <button type="button" className="btn ghost" onClick={generate}><Icon name="qr" size={18} /> Generate new QR</button>}
           <select value={qr} onChange={(e) => setQr(e.target.value)} aria-label="Pick an unused tag">
             <option value="">Pick an unused tag</option>
             {unused.map((t) => <option key={t.qr_id} value={t.qr_id}>{t.qr_id}</option>)}

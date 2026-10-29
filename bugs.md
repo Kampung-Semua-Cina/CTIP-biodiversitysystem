@@ -1,4 +1,4 @@
-# Bugs and security notes for vulnerability testing
+ene# Bugs and security notes for vulnerability testing
 
 **For:** the cybersecurity team · **Branch:** `rick3` · **Date:** 2026-10-28 · **Prepared by:** Ricardo (with Claude Code)
 
@@ -61,7 +61,7 @@ App-side integrity fixes:
 
 | ID | Issue | Fix |
 |---|---|---|
-| F5 | When the database refused to create tags (for example, for botanists), `generateTags` made **fake tags in the browser only**, which then failed when used. | It now reports the error. Creating tags needs the `tags` permission, and the "Generate new QR" button is hidden from botanists. |
+| F5 | When the database refused to create tags (for example, for botanists), `generateTags` made **fake tags in the browser only**, which then failed when used. | It now reports the error. Botanists can again generate **one** tag for the plant in front of them (CTIP-27, after the database allowed it); batches stay with officers and admins (`POST /v1/qr-tags/batch`). |
 | F6 | A failed photo upload saved the phone's local `blob:` URL as the photo's storage key. | The upload error is now raised and retried. |
 | F7 | A failed species photo save showed "Species photos updated" and put **fake photos** on screen. It also deleted the existing photos *before* uploading the new ones. | It now uploads first, deletes after, and reports failures honestly. |
 
@@ -269,7 +269,7 @@ Accounts: use a **botanist** and an **officer** test account, both active. Keep 
   3. Pick a tag in one tab, use it in another tab, then send from the first.
      - Expected: "Tag ... is already on another plant", and the tag field is cleared.
   4. Double-click **Send for review**. Expected: only one record.
-  5. A botanist must not see **Generate new QR** on Add plant (only officers and admins can create tags).
+  5. A botanist sees **Generate new QR** on Add plant and gets one new tag (CTIP-27); a batch of tags is refused for botanists.
 - **Similar places to check:** revisits (**Record a revisit**) on a slow or offline network must not create two records; species photo upload failing half-way must not delete the existing photos.
 
 ### T6 · Scan page lost the tag when starting a new plant

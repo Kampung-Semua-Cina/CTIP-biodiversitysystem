@@ -245,6 +245,15 @@ test('tag batch: next ids after the highest one, created_by from the token', asy
   assert.ok(res.body.every((t) => t.created_by === users.officer && t.status === 'unassigned'));
 });
 
+test('botanist can create one tag for a plant, but not a batch', async () => {
+  const one = await request(app).post('/v1/qr-tags/batch').set(as('botanist')).send({ count: 1, batch_label: 'field' });
+  assert.equal(one.status, 201);
+  assert.equal(one.body[0].created_by, users.botanist);
+  const batch = await request(app).post('/v1/qr-tags/batch').set(as('botanist')).send({ count: 5, batch_label: 'field' });
+  assert.equal(batch.status, 403);
+  assert.equal(db.qr_tags.length, 1);
+});
+
 test('a tag on a plant cannot be deleted (409); an unused one can (204)', async () => {
   tag('NIAH-0001');
   tag('NIAH-0002');

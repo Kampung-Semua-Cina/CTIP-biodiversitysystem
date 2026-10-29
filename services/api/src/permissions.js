@@ -26,7 +26,7 @@ export const routes = [
 
   // QR tags
   ['get', '/qr-tags', ANY_STAFF],
-  ['post', '/qr-tags/batch', OFFICER_ADMIN],
+  ['post', '/qr-tags/batch', ANY_STAFF], // botanists: one tag at a time (CTIP-27)
   ['get', '/qr-tags/:qrId', ANY_STAFF],
   ['delete', '/qr-tags/:qrId', OFFICER_ADMIN],
   ['post', '/qr-tags/:qrId/retire', OFFICER_ADMIN],
