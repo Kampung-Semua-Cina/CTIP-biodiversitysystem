@@ -7,7 +7,7 @@ import { useStore } from '../../shared/store.js';
 import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field,
+  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
