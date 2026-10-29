@@ -2,8 +2,9 @@
 
 Context for Claude Code working in this repository.
 
-*Last checked against `main` (`683215a`), Jira and the live Supabase project on
-29 Oct 2026.*
+*Last checked against `main` (`7cc8efa`) on 30 Oct 2026. Jira and the live
+Supabase project were last fully checked on 29 Oct; the CTIP-26, 27, 63, 107,
+111 and 116 statuses and the live `qr_tags` policy were rechecked on 30 Oct.*
 
 ## Project
 
@@ -126,7 +127,16 @@ rather than silently building something different.
   hard-code a hex value in a page. The rules are in `DESIGN.md` at the repo root.
 - **Botanists search species through `GET /public/species`** (published species
   only, same search as CTIP-87). `GET /species` stays Officer and Admin only.
-  Settled 27 Oct 2026.
+  Settled 27 Oct 2026. On mobile (CTIP-26) the Add plant species field always
+  searches the API; the Plants tab searches it only for botanists and visitors,
+  while officers and admins search the loaded list (it has unpublished species),
+  and tag IDs are always looked up locally. The list returns one cover photo
+  (`primary_image_url`), genus and description; paging is opt-in (`page`/`limit`),
+  so the web catalogue still gets every species in one call.
+- **QR tags link to `https://ctip-biodiversitysystem.pages.dev/#/dashboard/<tag>`**
+  (`tagUrl()` in `apps/shared/selectors.js`; on the web it uses the current
+  address). That route has no permission check and shows the public plant page
+  to visitors, so tags printed on the web and made on the phone (CTIP-27) match.
 - **One app version for web and mobile:** `1.0.<commit count>` from
   `scripts/version.mjs` (MAJOR.MINOR from the root `package.json`). Shown in
   the web footer and stamped into APK builds.
@@ -156,8 +166,9 @@ apps/
     navigation/     AppNavigator, TabBar, tabs.js (TABS per role), routes, routeMeta
     pages/          one file per screen
     components/     Theme (light/dark), Bits.js (re-exports bits/), Icon (Lucide),
-                    Chrome, LeafletMap, Toast, Logo, PhotoGallery, format
-    draftStore.js   SQLite crash-safe draft cache (CTIP-57)
+                    Chrome, LeafletMap, Toast, Logo, PhotoGallery, SpeciesPicker, format
+    hooks/          useSpeciesSearch (debounced, paged GET /public/species, CTIP-26)
+    draftStore.js   SQLite crash-safe draft cache (CTIP-57), encrypted (CTIP-107)
     api.js, apiAddress.js   API client; defaults to the Render API
     eas.json        APK build profiles (EXPO_PUBLIC_API_URL lives here)
     tests/          Playwright/emulator + Ollama agent tests
@@ -176,6 +187,7 @@ apps/
     StoreProvider.js, store.js, selectors.js, permissions.js   app state and rules
     tokens.js       design tokens
     mapConfig.js, mapHtml.js   Leaflet settings and the WebView map page
+    speciesSearch.js   species search and pre-fill rules (CTIP-26, CTIP-63), no imports
     data.js, site.js, publicContent.js, utils.js
     test/           node --test tests, run in CI
   firmware/   ESP32 sensor node (Arduino IDE sketch, not committed yet)
@@ -242,6 +254,12 @@ database (Docker is not installed), so every push goes straight to it.
   again.
 - As of 29 Oct 2026 the history is in step: all 13 migration files, up to
   `20261029120000_approve_requires_species`, are applied and recorded.
+- **One exception, CTIP-111:** the live `qr: staff write` policy on `qr_tags` was
+  edited by hand to allow botanists for **all** commands (so a botanist can make
+  one tag, CTIP-27). The migration still says officer and admin only. A fresh
+  database built from the migrations would refuse a botanist's tag, and the live
+  one lets a botanist update or delete any tag through Supabase directly. Fix it
+  with a new migration (botanist: insert only), not in the SQL Editor.
 - `supabase/scripts/reset.sql` deletes every table. It is for setup only.
 
 ## Sensor data flow
@@ -285,11 +303,11 @@ Progress, no mark = To Do.
 | Stream | Owner | Stories |
 |---|---|---|
 | **A. Mobile app UI** | Patrick | CTIP-42 app shell & login R, CTIP-15 QR scan, CTIP-55 photos P, CTIP-56 GPS P, CTIP-57 crash-safe draft P, CTIP-58 submit with retry, CTIP-45 submission status P, CTIP-31 map ✓, CTIP-70 clustering & filters P, CTIP-71 hide endangered coordinates ✓, CTIP-51 innovation (optional) |
-| **B. Mobile data & offline** | Albian | CTIP-27 QR generation P, CTIP-26 species search via API, CTIP-63 pre-fill from species. Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68 |
+| **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R (all three merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
 | **C. Backend API & database** | Nicole (API), Amberlyn | Nicole: CTIP-46, 54, 85, 86, 87, 88, 89 ✓. Amberlyn: CTIP-32 report export P. Capture flow CTIP-103 to 106 ✓ (unassigned). **Unassigned:** CTIP-108 remaining specimen and observation routes |
 | **D. Web knowledge system** | Ricardo | CTIP-43 login ✓, CTIP-28 species ✓, CTIP-64 photos ✓, CTIP-65 soft delete ✓, CTIP-29 review queue ✓, CTIP-69 approve/reject ✓, CTIP-30 search ✓, CTIP-33 visitor QR page, CTIP-109 zone filter |
 | **E. IoT & anomaly detection** | Norman | CTIP-17, 48, 59, 60, 61 ✓ in Jira (no code on `main` yet). To do: CTIP-47 simulator, CTIP-62 webcam images, CTIP-38 threshold rules, CTIP-75 statistical model, CTIP-76 node silent, CTIP-77 notifications, CTIP-78 acknowledge/resolve |
-| **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption R (branch not merged), CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage |
+| **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption ✓, CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage |
 | **G. Security testing & QA** | Michelle | CTIP-18 threat model ✓, CTIP-36 test plan P (branch not merged), CTIP-37 run assessment P, CTIP-49 CI & tests, CTIP-74 reassessment. IoT dashboard: CTIP-39 P, CTIP-79, CTIP-81, CTIP-82 |
 
 Project management: Albian owns CTIP-91 (final report); its section subtasks
@@ -302,6 +320,9 @@ Notes:
   people**, so nobody tests their own code. G finds, F fixes (CTIP-37 → CTIP-50).
 - Several stories are In Review although their code is already on `main`
   (CTIP-42, 102, 113, 114): move them on once their acceptance criteria are checked.
+  CTIP-26, 27 and 63 are the same: merged on 30 Oct (#33, #34, #35) without a
+  second approval, and their phone checks (plan tasks 3–4, 6 and 7) are not
+  recorded yet. CTIP-63 also waits on the species ID decision (Open decisions).
 
 Team: Albian (Product Owner), Nicole (Scrum Master), Amberlyn, Michelle, Norman,
 Patrick, Ricardo. All seven also act as developers.
@@ -355,22 +376,25 @@ Two sprints, Scrum.
 - **After Sprint 2:** the final report and each member's learning summary report
   are due Fri 27 Nov 2026 (CTIP-91, CTIP-92).
 
-## Current status (29 Oct 2026)
+## Current status (30 Oct 2026)
 
-Sprint 2 is in progress (ends 12 Nov). In Jira: 25 Sprint 2 stories Done, 6 In
-Review, 13 In Progress, the rest To Do (see Workstreams).
+Sprint 2 is in progress (ends 12 Nov). In Jira on 29 Oct: 25 Sprint 2 stories
+Done, 6 In Review, 13 In Progress, the rest To Do (see Workstreams). Since then
+CTIP-107 is Done and CTIP-26, 27 and 63 are In Review.
 
-**On `main`** (`683215a`, 29 Oct). `rick3` (PR #26) was merged on 29 Oct after
+**On `main`** (`7cc8efa`, 30 Oct). `rick3` (PR #26) was merged on 29 Oct after
 its blockers were fixed (no secret key, no direct Supabase access, CI green,
 endangered coordinates protected); then CTIP-113, CTIP-28 and the switch to the
-Render API (#27, #28, #30).
+Render API (#27, #28, #30), CTIP-107 SQLite encryption (#31), and on 30 Oct
+CTIP-26 species search (#33), CTIP-27 QR generation (#34) and CTIP-63 pre-fill
+(#35).
 
 - **Both apps run on live data through the API.** Staff sign in through
   `POST /v1/auth/sign-in`; the store loads with `GET /v1/workspace` (staff) or
   `GET /v1/public/workspace` (visitors). The sample data in
   `apps/shared/data.js` is now an empty seed, except the leftovers listed below.
 - **API** (`services/api`): 70 routes, all with token and role checks; **55
-  built**, about 110 tests in CI. The 15 that still answer 501:
+  built**, about 117 tests in CI. The 15 that still answer 501:
   - `GET /species/:id/media`, `GET /specimens`, `GET /specimens/:id`,
     `PATCH /observations/:id`, `DELETE /observations/:id`,
     `POST /observations/:id/photos/:photoId/confirm` (CTIP-108)
@@ -388,10 +412,23 @@ Render API (#27, #28, #30).
 - **Deployed:** API on Render, website on Cloudflare Pages, APK on EAS. Both apps
   default to the Render API (see Gotchas).
 - **CI** on every PR and every push to `main`: API tests, shared tests, and web lint
-  and build. The mobile app has no CI job.
+  and build. The mobile app has no CI job; check it with
+  `cd apps/mobile && npx expo export --platform android --output-dir <tmp folder>`
+  (catches broken imports), and delete the folder afterwards.
+- **Mobile capture extras (30 Oct):** species search and pick in Add plant
+  (`SpeciesPicker`), API search in the Plants tab, and a `tagQr` screen that
+  draws a tag's QR and shares or saves it as a PNG (`react-native-qrcode-svg`,
+  `react-native-view-shot`, `expo-sharing`).
+- **Known gap (CTIP-27):** a botanist cannot reach Add plant's "Generate new QR
+  tag" screen without a tag. The Add plant tab opens Scan, and Scan only goes
+  on to Add plant with a known unused tag. Botanists can still generate from
+  inside a started record (tag row "Generate", which swaps the record to the
+  new tag) and show any plant's QR from its page ("Show QR code").
 
-**Not merged:** `feature/CTIP-107-encrypt-the-mobile-SQLite-database-(ready-to-commit)`
-(Nicole), `CTIP-36-Test-Plan` (Michelle), `rick-CTIP-33` (visitor QR page).
+**Not merged:** `CTIP-36-Test-Plan` (Michelle), `rick-CTIP-33` (visitor QR page),
+`docs/CTIP-26-27-63-implementation-plan` (Albian; its tasks 5–6 still say
+`#/tag/`, the code uses `#/dashboard/`). `feature/CTIP-63-prefill-from-species`
+is merged and can be deleted.
 
 **Not started or not committed:** ESP32 firmware (`apps/firmware/` is empty),
 MQTT bridge, sensor simulator and anomaly detection (`services/anomaly-detection/`
@@ -410,7 +447,8 @@ in mobile `Chrome.js`, S8).
 `docs/updates/rick3-bugs.md` §3. Still open: new sign-ups default to active
 botanists (H1, also CTIP-72), deactivated accounts can still write through RLS
 (M1), sessions kept in `localStorage` on the web (L1), 24-hour private photo
-links (L2). Supabase advisor (29 Oct): leaked password protection is off, and
+links (L2), the hand-edited `qr_tags` policy (CTIP-111, see Database changes).
+Supabase advisor (29 Oct): leaked password protection is off, and
 the `SECURITY DEFINER` functions `my_role` and `review_observation` can be
 called by any signed-in user through `/rest/v1/rpc/` (`review_observation`
 checks the role itself).
@@ -420,6 +458,10 @@ checks the role itself).
 - Where the MQTT bridge lives (`services/api` or `services/anomaly-detection`).
 - New accounts are created as active botanists (`profiles` defaults), but the
   threat model says they get no role until an Admin approves them (CTIP-72).
+- Picking a species on mobile (CTIP-63) fills only the name: the record keeps
+  `proposed_species_name`, and officers link the species at review. Decide
+  whether that meets "taxonomy is pre-filled", or let botanists send the
+  species ID when creating a specimen.
 
 ## Security requirements that affect code
 
