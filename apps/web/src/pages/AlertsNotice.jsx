@@ -9,7 +9,7 @@ import { go } from "../useRoute.js";
 export default function AlertsNotice() {
   const { db, me, role, markRead, markAllRead } = useStore();
   const mine = db.notifications
-    .filter((n) => n.user_id === me.id)
+    .filter((n) => n.user_id === me?.id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const unread = mine.filter((n) => !n.is_read).length;
 
@@ -19,6 +19,7 @@ export default function AlertsNotice() {
     else if (n.type === "comment_reply") go("/discussion/" + n.related_id);
     else if (role === "botanist") go("/records");
     else if (role === "officer") go("/review");
+    else go("/dashboard"); // admins see the "Needs review" card there; they have no review queue
   };
 
   return (

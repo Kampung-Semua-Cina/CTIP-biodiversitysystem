@@ -27,12 +27,16 @@ export function extractTag(raw) {
 }
 
 // What a scanned ID refers to. Supabase: GET /tags/{qrId} once the apps use the API.
-export function lookupTag(db, id) {
+// meId: the signed-in user, to spot their own plant saved without its record.
+export function lookupTag(db, id, meId) {
   const cleanId = String(id || '').trim().toUpperCase();
   if (!cleanId || !db) return { kind: 'unknown', id: cleanId };
   const plants = db.plants || [];
   const tags = db.tags || [];
   const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
+  if (plant && meId && plant.registered_by === meId && !(db.observations || []).some((o) => o.specimen_id === plant.id)) {
+    return { kind: 'unfinished', id: cleanId, plant }; // an earlier send failed half-way
+  }
   if (plant) return { kind: 'used', id: cleanId, plant: plantView(db, plant) };
   const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
   if (tag?.status === 'unused') return { kind: 'unused', id: cleanId, tag };
@@ -41,11 +45,11 @@ export function lookupTag(db, id) {
 }
 
 export default function Scan({ nav, params = {} }) {
-  const { db, role } = useStore();
+  const { db, role, me } = useStore();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
-  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code)) : null);
+  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code), me?.id) : null);
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState('');
 
@@ -53,7 +57,7 @@ export default function Scan({ nav, params = {} }) {
 
   const handle = (raw) => {
     if (result) return; // ignore repeat reads while a result is showing
-    const r = lookupTag(db, extractTag(raw));
+    const r = lookupTag(db, extractTag(raw), me?.id);
     // A visitor who scans a published plant goes straight to its page.
     if (r.kind === 'used' && role !== 'botanist') return nav.replace('tag', { qr: r.id });
     setTyping(false);
@@ -165,6 +169,22 @@ function ManualEntry({ value, onChange, onSubmit, onCancel }) {
 function Result({ result, role, nav, onAgain }) {
   const { c } = useTheme();
   const { db } = useStore();
+
+  if (result.kind === 'unfinished') {
+    return (
+      <Sheet>
+        <Mono size={20}>{result.id}</Mono>
+        <View style={{ gap: 6 }}>
+          <Txt v="title2" style={{ fontSize: 26, lineHeight: 32 }}>Finish this plant record?</Txt>
+          <Txt v="body" color={c.ink2}>You saved this plant, but its record did not reach the server. Send it again to put it in the review queue.</Txt>
+        </View>
+        <View style={{ gap: 4 }}>
+          <Button label="Finish and send" onPress={() => nav.replace('add', { qr: result.id })} />
+          <Button label="Scan a different tag" kind="text" height={48} size={15} onPress={onAgain} />
+        </View>
+      </Sheet>
+    );
+  }
 
   if (result.kind === 'unused') {
     const botanist = role === 'botanist';

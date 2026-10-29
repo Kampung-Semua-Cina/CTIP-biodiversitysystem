@@ -1,29 +1,36 @@
 // apps/web/src/pages/AddPlant.jsx
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Shell from "../components/Shell.jsx";
 import { Mono } from "../components/Bits.jsx";
 import TagPrint from "../components/TagPrint.jsx";
 import { useStore } from "../../../shared/store.js";
-import { tagUrl } from "../../../shared/selectors.js";
-import { go } from "../useRoute.js";
+import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
+import { can } from "../../../shared/permissions.js";
+import { go, useRoute } from "../useRoute.js";
 
 // Botanist form. Step 1 binds a QR tag to the plant (scan, pick an unused tag, or generate a new one).
 // Step 2 records what was seen. Location comes from the phone's GPS.
 export default function AddPlant() {
-  const { db, addPlant, generateTags, notify } = useStore();
-  const [qr, setQr] = useState("");
-  const [guess, setGuess] = useState("");
+  const { db, me, role, addPlant, generateTags, notify } = useStore();
+  const { arg } = useRoute(); // #/add/NIAH-0001 starts with that tag
+  const sending = useRef(false); // blocks a second submit before "saving" re-renders the button
+  const [qr, setQr] = useState(arg || "");
+  // Finishing a plant saved without its record: start from what was saved.
+  const saved = arg ? db.plants.find((p) => p.qr_id === arg && p.registered_by === me?.id) : null;
+  const [guess, setGuess] = useState(saved?.proposed_species || "");
   const [morphology, setMorphology] = useState("");
   const [height, setHeight] = useState("");
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState([]);
-  const [spot, setSpot] = useState({ lat: 3.8031, lng: 113.7762, acc: null });
+  const [spot, setSpot] = useState(saved?.lat != null ? { lat: saved.lat, lng: saved.lng, acc: saved.gps_accuracy_m ?? null } : { lat: 3.8031, lng: 113.7762, acc: null });
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const unused = db.tags.filter((t) => t.status === "unused");
+  // My plants saved without their record (an earlier send failed): sending again finishes them.
+  const unfinished = unfinishedPlants(db, me?.id);
 
   // Demo scan: the next unused tag is used. Real scanning comes with the camera in the mobile app.
   const onScanFile = (e) => {
@@ -65,20 +72,31 @@ export default function AddPlant() {
     e.target.value = "";
   };
 
+  // Changed their mind: drop the photo before sending, and free its preview.
+  const removePhoto = (url) => {
+    URL.revokeObjectURL(url);
+    setPhotos(photos.filter((p) => p.url !== url));
+  };
+
   const save = async (e) => {
     e.preventDefault();
     if (!qr) return notify("Choose or generate a QR tag first");
     if (!guess.trim()) return notify("Please select or enter a species before submitting");
     if (!photos.length) return notify("Add at least one photo");
+    if (sending.current) return;
+    sending.current = true;
     setSaving(true);
     const res = await addPlant({
       qr_id: qr, proposed_species: guess, morphology, height_cm: height, notes, photos,
       lat: spot.lat, lng: spot.lng, gps_accuracy_m: spot.acc ?? 10,
     });
+    sending.current = false;
     setSaving(false);
-    if (res?.ok !== false) {
+    if (res?.ok) {
       notify("Plant sent for review");
       go("/records");
+    } else if (res?.error?.code === "TAG_IN_USE") {
+      setQr(""); // the tag turned out to be taken; make them pick another
     }
   };
 
@@ -92,11 +110,13 @@ export default function AddPlant() {
             <Icon name="camera" size={18} /> Scan or upload QR
             <input type="file" accept="image/*" capture="environment" hidden onChange={onScanFile} />
           </label>
-          <button type="button" className="btn ghost" onClick={generate}><Icon name="qr" size={18} /> Generate new QR</button>
+          {/* Only officers and admins may create tags (qr_tags RLS); botanists use printed ones. */}
+          {can(role, "tags") && <button type="button" className="btn ghost" onClick={generate}><Icon name="qr" size={18} /> Generate new QR</button>}
           <select value={qr} onChange={(e) => setQr(e.target.value)} aria-label="Pick an unused tag">
             <option value="">Pick an unused tag</option>
             {unused.map((t) => <option key={t.qr_id} value={t.qr_id}>{t.qr_id}</option>)}
-            {qr && !unused.some((t) => t.qr_id === qr) && <option value={qr}>{qr}</option>}
+            {unfinished.map((p) => <option key={p.qr_id} value={p.qr_id}>{p.qr_id} (not sent yet)</option>)}
+            {qr && !unused.some((t) => t.qr_id === qr) && !unfinished.some((p) => p.qr_id === qr) && <option value={qr}>{qr}</option>}
           </select>
         </div>
         {qr && (
@@ -118,7 +138,13 @@ export default function AddPlant() {
 
         <label>Photos</label>
         <div className="row wrap">
-          {photos.map((p) => <img key={p.url} className="mini" src={p.url} alt="" />)}
+          {photos.map((p, i) => (
+            <span key={p.url} className="minibox">
+              <img className="mini" src={p.url} alt={`Photo ${i + 1}`} />
+              <button type="button" className="miniremove" onClick={() => removePhoto(p.url)} disabled={saving}
+                aria-label={`Remove photo ${i + 1}`} title="Remove this photo"><Icon name="x" size={14} /></button>
+            </span>
+          ))}
           <label className="upl add"><Icon name="plus" /><span className="sr">Add photos</span><input type="file" accept="image/*" multiple hidden onChange={onPhotos} /></label>
         </div>
 

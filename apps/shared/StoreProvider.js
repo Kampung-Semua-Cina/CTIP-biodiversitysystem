@@ -16,6 +16,10 @@ import {
   pingBackend,
   submitReviewApi,
   fetchDistribution,
+  fetchStaffSpecies,
+  createSpeciesApi,
+  updateSpeciesApi,
+  fetchObservations,
 } from "./api.js";
 
 const ACTIVE_DEMO_PASSWORD =
@@ -23,6 +27,10 @@ const ACTIVE_DEMO_PASSWORD =
   (typeof process !== "undefined" && (process.env?.VITE_DEMO_PASSWORD || process.env?.DEMO_PASSWORD)) ||
   DEMO_PASSWORD ||
   "Niah@1234";
+
+// Shown wherever a page needs the Express API and cannot reach it.
+export const API_DOWN = "Cannot reach the API server. Start it with npm run api (needs services/api/.env).";
+const API_CHECK_MS = 30000;
 
 // Database store fully integrated with Supabase and the backend API.
 // Live Supabase tables (species, specimens, observations, qr_tags, alerts, profiles, etc.)
@@ -100,7 +108,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         sb.from("species").select("*").order("created_at", { ascending: true }),
         sb.from("species_media").select("*").order("sort_order", { ascending: true }),
         sb.from("qr_tags").select("*").order("qr_id", { ascending: true }),
-        sb.from("specimens").select("*").eq("is_deleted", false),
+        sb.from("specimens").select("*"), // deleted ones too: their tags stay taken
         sb.from("observations").select("*").eq("is_deleted", false).order("observed_at", { ascending: false }),
         sb.from("observation_photos").select("*").order("created_at", { ascending: true }),
         sb.from("observation_reviews").select("*").order("created_at", { ascending: false }),
@@ -113,9 +121,15 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         sb.from("profiles").select("*"),
       ]);
 
+      // A tag counts as used when a plant is on it. If plants or tags failed to
+      // load, keep what we had: an empty plant list would show every tag as unused.
+      const coreError = specRes.error || tagRes.error || obsRes.error;
+      if (coreError) throw coreError;
+
       const photoRows = photoRes.data || [];
       const obsRows = obsRes.data || [];
-      const specRows = specRes.data || [];
+      const allSpecRows = specRes.data || [];
+      const specRows = allSpecRows.filter((s) => !s.is_deleted);
 
       // Resolve signed URLs for private observation photos
       const privatePaths = photoRows
@@ -179,7 +193,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         };
       });
 
-      const assignedTagIds = new Set(specRows.map((s) => s.qr_id).filter(Boolean));
+      // The database allows one plant per tag, deleted plants included.
+      const assignedTagIds = new Set(allSpecRows.map((s) => s.qr_id).filter(Boolean));
       const tags = (tagRes.data || []).map((t) => ({
         qr_id: t.qr_id,
         status: assignedTagIds.has(t.qr_id) ? "assigned" : (t.status === "unassigned" ? "unused" : t.status),
@@ -287,8 +302,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
       const ping = await pingBackend();
       if (!ping.online) {
-        setApiStatus("connected"); // Supabase is primary
-        setApiError(null);
+        // Supabase pages still work; species and the review queue need the API.
+        setApiStatus("offline");
+        setApiError(API_DOWN);
         return { ok: true };
       }
 
@@ -342,7 +358,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         setAuthTokenState(session.access_token);
       }
       fetchFromSupabase(true);
-      setApiStatus("connected");
     }).catch(() => {
       if (mounted) fetchFromSupabase(true);
     });
@@ -372,6 +387,50 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       subscription?.unsubscribe();
     };
   }, [fetchFromSupabase]);
+
+  // Is the Express API up? Checked on load, every 30 s and when the tab comes
+  // back into view, so the "API down" notice appears and clears by itself.
+  const checkApi = useCallback(async () => {
+    const ping = await pingBackend();
+    setApiStatus(ping.online ? "connected" : "offline");
+    setApiError(ping.online ? null : API_DOWN);
+    return ping.online;
+  }, []);
+  // A call that could not reach the API marks it down straight away.
+  const noteOffline = (res) => {
+    if (res?.offline) { setApiStatus("offline"); setApiError(API_DOWN); }
+    return res;
+  };
+  useEffect(() => {
+    checkApi();
+    const id = setInterval(checkApi, API_CHECK_MS);
+    const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") checkApi(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [checkApi]);
+
+  // New notifications without a reload: the signed-in person's rows (RLS
+  // returns only their own), on the same 30 s beat and when the tab comes back.
+  const refreshNotifications = useCallback(async () => {
+    if (!userId) return;
+    const { data, error } = await getSupabase()
+      .from("notifications").select("*").order("created_at", { ascending: false });
+    if (error) return console.warn("refreshNotifications:", error.message);
+    setDb((prev) => ({ ...prev, notifications: [...data, ...prev.notifications.filter((n) => n.user_id !== userId)] }));
+  }, [userId]);
+  useEffect(() => {
+    if (!userId) return undefined;
+    const id = setInterval(refreshNotifications, API_CHECK_MS);
+    const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") refreshNotifications(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [userId, refreshNotifications]);
 
   /* ---------- session & authentication ---------- */
   const setRole = async (key) => {
@@ -657,97 +716,121 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       .from(bucket)
       .upload(storagePath, fileToUpload, { contentType, upsert: true });
 
-    if (upRes.error) {
-      console.warn(`Storage upload to ${bucket} failed:`, upRes.error);
-      return { s3_key: photoObj.url || storagePath, contentType, sizeBytes, photoId };
-    }
+    // Fail instead of saving the phone's local blob: URL, which nobody else can open.
+    if (upRes.error) throw upRes.error;
 
     return { s3_key: storagePath, contentType, sizeBytes, photoId };
   };
 
-  const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos, lat, lng, gps_accuracy_m, idempotency_key }) => {
+  // The plant already registered on a tag, if any: { id, registered_by, observations }.
+  const findSpecimenByQr = async (qr_id) => {
+    const { data, error } = await getSupabase()
+      .from("specimens")
+      .select("id, registered_by, observations(id)")
+      .eq("qr_id", qr_id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+
+  const tagInUse = (qr_id) =>
+    Object.assign(new Error(`Tag ${qr_id} is already on another plant. Pick or scan an unused tag.`), { code: "TAG_IN_USE", retryable: false });
+
+  // New plant on an unused tag: specimen, first observation, photos.
+  // Each step runs once. The ids are made here, so a retry after a dropped
+  // connection finds the row it already saved instead of adding a second one
+  // (that second specimen insert is what raised "specimens_qr_id_key").
+  // Returns { ok, ... } and never throws.
+  const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos = [], lat, lng, gps_accuracy_m }) => {
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const now = nowIso();
-    const clientId = idempotency_key || uid();
+    const done = { specimenId: null, obsId: uid(), observation: false, photoRows: [] };
+    const photoIds = photos.map((p) => p.id || uid());
 
     try {
-      return await withExponentialRetry(async () => {
-        // 1. Mark tag as assigned in Supabase
-        try {
-          if (db.tags.some((t) => t.qr_id === qr_id)) {
-            await sb.from("qr_tags").update({ status: "assigned" }).eq("qr_id", qr_id);
+      const result = await withExponentialRetry(async () => {
+        // 1. Specimen. The database marks the tag assigned (migration 20261028000000).
+        if (!done.specimenId) {
+          const existing = await findSpecimenByQr(qr_id);
+          if (existing) {
+            // Our own plant left without an observation by an earlier failed send: finish it.
+            if (existing.registered_by !== authUid || existing.observations?.length) throw tagInUse(qr_id);
+            done.specimenId = existing.id;
           } else {
-            await sb.from("qr_tags").insert({ qr_id, status: "assigned", batch_label: "field", created_by: authUid });
-          }
-        } catch (tagErr) {
-          console.warn("tag status sync warning:", tagErr);
-        }
-
-        // 2. Insert specimen
-        const { data: specData, error: specErr } = await sb.from("specimens").insert({
-          qr_id,
-          species_id: null,
-          proposed_species_name: proposed_species || null,
-          registered_by: authUid,
-          lat,
-          lng,
-          gps_accuracy_m: gps_accuracy_m || null,
-          endangered_override: false,
-          is_deleted: false,
-        }).select().single();
-
-        if (specErr) throw specErr;
-        const specimenId = specData.id;
-
-        // 3. Insert observation
-        const { data: obsData, error: obsErr } = await sb.from("observations").insert({
-          specimen_id: specimenId,
-          recorded_by: authUid,
-          observed_at: now,
-          height_cm: Number(height_cm) || null,
-          morphology: morphology || null,
-          notes: notes || null,
-          lat,
-          lng,
-          gps_accuracy_m: gps_accuracy_m || null,
-          status: "synced",
-          version: 1,
-          device_id: deviceId,
-          client_id: clientId,
-          last_synced_at: now,
-        }).select().single();
-
-        if (obsErr) throw obsErr;
-        const obsId = obsData.id;
-
-        // 4. Upload and insert photos
-        if (photos && photos.length > 0) {
-          const photoPayload = [];
-          for (let i = 0; i < photos.length; i++) {
-            const p = photos[i];
-            const uploaded = await uploadPhotoFile("observation-photos", obsId, p);
-            photoPayload.push({
-              id: uploaded.photoId,
-              observation_id: obsId,
-              s3_bucket: "observation-photos",
-              s3_key: uploaded.s3_key,
-              content_type: uploaded.contentType,
-              size_bytes: uploaded.sizeBytes,
-              upload_status: "uploaded",
+            const specimenId = uid();
+            const { error } = await sb.from("specimens").insert({
+              id: specimenId,
+              qr_id,
+              species_id: null,
+              proposed_species_name: proposed_species || null,
+              registered_by: authUid,
+              lat,
+              lng,
+              gps_accuracy_m: gps_accuracy_m || null,
+              endangered_override: false,
+              is_deleted: false,
             });
+            if (error?.code === "23505") throw tagInUse(qr_id); // someone took the tag a moment ago
+            if (error?.code === "23503") {
+              throw Object.assign(new Error(`Tag ${qr_id} is not in the tag list. Ask an officer to create it.`), { retryable: false });
+            }
+            if (error) throw error;
+            done.specimenId = specimenId;
           }
-          await sb.from("observation_photos").insert(photoPayload);
         }
 
-        notify(`Plant tagged with ${qr_id}`);
-        await fetchFromSupabase(true);
-        return { ok: true, id: specimenId, obsId, clientId };
+        // 2. First observation, waiting for review.
+        if (!done.observation) {
+          const { error } = await sb.from("observations").insert({
+            id: done.obsId,
+            specimen_id: done.specimenId,
+            recorded_by: authUid,
+            observed_at: now,
+            height_cm: Number(height_cm) || null,
+            morphology: morphology || null,
+            notes: notes || null,
+            lat,
+            lng,
+            gps_accuracy_m: gps_accuracy_m || null,
+            status: "synced",
+            version: 1,
+            device_id: deviceId,
+            last_synced_at: now,
+          });
+          if (error && error.code !== "23505") throw error; // 23505: saved on an earlier try
+          done.observation = true;
+        }
+
+        // 3. Photos: upload each file once, then save the rows together.
+        for (let i = done.photoRows.length; i < photos.length; i++) {
+          const uploaded = await uploadPhotoFile("observation-photos", done.obsId, { ...photos[i], id: photoIds[i] });
+          done.photoRows.push({
+            id: uploaded.photoId,
+            observation_id: done.obsId,
+            s3_bucket: "observation-photos",
+            s3_key: uploaded.s3_key,
+            content_type: uploaded.contentType,
+            size_bytes: uploaded.sizeBytes,
+            upload_status: "uploaded",
+          });
+        }
+        if (done.photoRows.length) {
+          const { error } = await sb.from("observation_photos").upsert(done.photoRows, { onConflict: "id", ignoreDuplicates: true });
+          if (error) throw error;
+        }
+
+        return { ok: true, id: done.specimenId, obsId: done.obsId };
       }, { maxRetries: 3 });
+
+      notify(`Plant tagged with ${qr_id}`);
+      await fetchFromSupabase(true);
+      return result;
     } catch (err) {
       console.error("addPlant error:", err);
       notify(`Failed to add plant: ${err.message || err}`);
-      return { ok: false, error: err };
+      await fetchFromSupabase(true); // so the tag list shows what the database now holds
+      return { ok: false, error: err, message: err.message || String(err) };
     }
   };
 
@@ -790,7 +873,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
             upload_status: "uploaded",
           });
         }
-        await sb.from("observation_photos").insert(photoPayload);
+        const { error: photoErr } = await sb.from("observation_photos").insert(photoPayload);
+        if (photoErr) throw photoErr;
       }
 
       notify("Revisit recorded");
@@ -817,42 +901,65 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   };
 
   /* ---------- observations and review ---------- */
+  // Send a draft or a record waiting for a signal. Returns { ok, message }.
   const syncObservation = async (id) => {
     const sb = getSupabase();
-    const now = nowIso();
-    try {
-      await sb.from("observations").update({ status: "synced", last_synced_at: now }).eq("id", id);
-      notify("Observation synced");
-      await fetchFromSupabase(true);
-    } catch (e) {
-      console.warn("syncObservation error:", e);
+    const { data, error } = await sb.from("observations")
+      .update({ status: "synced", last_synced_at: nowIso() })
+      .eq("id", id)
+      .in("status", ["draft", "queued"])
+      .select("id");
+    await fetchFromSupabase(true);
+    if (error || !data?.length) {
+      const message = error?.message || "This record can no longer be sent. Refresh and check its status.";
+      console.warn("syncObservation error:", error);
+      notify(`Failed to send record: ${message}`);
+      return { ok: false, message };
     }
+    notify("Record sent for review");
+    return { ok: true };
   };
 
-  const resubmit = async (id, message) => {
+  // Send a returned record again, with the botanist's fixes and an optional
+  // reply. `changes` may hold height_cm, morphology and notes.
+  // The version goes up so the officer reviews the new one. Returns { ok, message }.
+  const resubmit = async (id, message, changes = {}) => {
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const obs = db.observations.find((o) => o.id === id);
-    const now = nowIso();
+    const edits = {};
+    if ("height_cm" in changes) edits.height_cm = changes.height_cm === "" || changes.height_cm == null ? null : Number(changes.height_cm);
+    if ("morphology" in changes) edits.morphology = changes.morphology?.trim() || null;
+    if ("notes" in changes) edits.notes = changes.notes?.trim() || null;
+    if (edits.height_cm != null && !(edits.height_cm >= 0)) return { ok: false, message: "Height must be a number of 0 or more" };
 
     try {
-      await sb.from("observations").update({
+      // Only while still returned, so a stale screen cannot overwrite a decided record.
+      const { data, error } = await sb.from("observations").update({
+        ...edits,
         status: "synced",
         version: (obs?.version || 1) + 1,
-        last_synced_at: now,
-      }).eq("id", id);
+        last_synced_at: nowIso(),
+      }).eq("id", id).eq("status", "returned").select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error("This record is no longer waiting for your changes. Refresh to see its status.");
 
       if (message && message.trim()) {
-        await sb.from("observation_comments").insert({
+        const { error: commentErr } = await sb.from("observation_comments").insert({
           observation_id: id,
           author_id: authUid,
           body: message.trim(),
         });
+        if (commentErr) console.warn("resubmit reply not saved:", commentErr); // the record itself was sent
       }
-      notify("Record resubmitted");
+      notify("Record sent for review again");
       await fetchFromSupabase(true);
+      return { ok: true };
     } catch (e) {
       console.warn("resubmit error:", e);
+      notify(`Failed to send again: ${e.message || e}`);
+      await fetchFromSupabase(true);
+      return { ok: false, message: e.message || String(e) };
     }
   };
 
@@ -993,47 +1100,69 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   };
 
   /* ---------- species ---------- */
-  const saveSpecies = async (sp) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
-    const isNew = !sp.id;
+  // The freshest token: Supabase refreshes the session, the stored one can be expired.
+  const currentToken = async () =>
+    (await getSupabase().auth.getSession())?.data?.session?.access_token || authToken || getAuthToken();
 
-    try {
-      if (isNew) {
-        const { error } = await sb.from("species").insert({
-          scientific_name: sp.scientific_name,
-          common_name: sp.common_name || "",
-          family: sp.family || "",
-          genus: sp.genus || sp.scientific_name.split(" ")[0] || "",
-          description: sp.description || "",
-          conservation_status: sp.conservation_status || "least concern",
-          cultural_significance: sp.cultural_significance || "",
-          is_published: false,
-          is_deleted: false,
-          created_by: authUid,
-        });
-        if (error) throw error;
-        notify(`Species "${sp.scientific_name}" created`);
-      } else {
-        const { error } = await sb.from("species").update({
-          scientific_name: sp.scientific_name,
-          common_name: sp.common_name || "",
-          family: sp.family || "",
-          genus: sp.genus || sp.scientific_name.split(" ")[0] || "",
-          description: sp.description || "",
-          conservation_status: sp.conservation_status || "least concern",
-          cultural_significance: sp.cultural_significance || "",
-          updated_by: authUid,
-        }).eq("id", sp.id);
-        if (error) throw error;
-        notify(`Species "${sp.scientific_name}" updated`);
-      }
-      await fetchFromSupabase(true);
-    } catch (err) {
-      console.error("saveSpecies error:", err);
-      notify(`Failed to save species: ${err.message || err}`);
+  // API rows replace the matching species in the store; others are kept as they are.
+  const mergeSpecies = (rows) => setDb((prevDb) => {
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const kept = prevDb.species.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s));
+    const added = rows.filter((r) => !prevDb.species.some((s) => s.id === r.id));
+    return { ...prevDb, species: [...kept, ...added] };
+  });
+
+  // Staff species list through the API (CTIP-46): GET /v1/species. The API
+  // only answers Officer and Admin. Deleted species are not in it, so the
+  // "Recently deleted" rows loaded from Supabase stay.
+  const loadStaffSpecies = useCallback(async () => {
+    const res = noteOffline(await fetchStaffSpecies({ token: await currentToken() }));
+    if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
+    setDb((prevDb) => {
+      const byId = new Map(prevDb.species.map((s) => [s.id, s]));
+      return {
+        ...prevDb,
+        species: [...res.data.map((r) => ({ ...byId.get(r.id), ...r })), ...prevDb.species.filter((s) => s.is_deleted)],
+      };
+    });
+    return { ok: true };
+  }, [authToken]);
+
+  // Create or edit through the API (CTIP-46): POST /v1/species or PATCH /v1/species/:id.
+  // The API checks the role and the IUCN status and records who edited it.
+  // No Supabase fallback: that would skip the API's checks.
+  const saveSpecies = async (sp) => {
+    const token = await currentToken();
+    const res = noteOffline(sp.id ? await updateSpeciesApi(sp.id, sp, { token }) : await createSpeciesApi(sp, { token }));
+    if (!res.ok) {
+      const fields = res.details?.fields?.map((f) => f.path).join(", ");
+      const message = res.offline
+        ? API_DOWN
+        : `${res.message}${fields ? ` (${fields})` : ""}`;
+      notify(`Failed to save species: ${message}`);
+      return { ok: false, message };
     }
+    mergeSpecies([res.data]);
+    notify(`Species "${res.data.scientific_name}" ${sp.id ? "updated" : "created"}`);
+    return { ok: true, species: res.data };
   };
+
+  // Review queue through the API (CTIP-29, CTIP-86): GET /v1/observations.
+  // "pending" is what waits for a decision; the others are for looking back.
+  const loadReviewQueue = useCallback(async () => {
+    const token = await currentToken();
+    const results = await Promise.all(
+      ["pending", "returned", "approved", "rejected"].map(async (status) => noteOffline(await fetchObservations({ status, token }))),
+    );
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      return {
+        ok: false,
+        message: failed.offline ? API_DOWN : failed.message,
+      };
+    }
+    return { ok: true, observations: results.flatMap((r) => r.data) };
+  }, [authToken]);
 
   const togglePublish = async (id) => {
     const sb = getSupabase();
@@ -1099,25 +1228,26 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
 
     try {
-      await sb.from("species_media").delete().eq("species_id", speciesId);
-
-      if (list.length > 0) {
-        const payload = [];
-        for (let i = 0; i < list.length; i++) {
-          const p = list[i];
-          const uploaded = await uploadPhotoFile("species-media", speciesId, p);
-          payload.push({
-            id: uploaded.photoId,
-            species_id: speciesId,
-            s3_bucket: "species-media",
-            s3_key: uploaded.s3_key,
-            caption: p.caption.trim(),
-            credit: p.credit ?? null,
-            is_primary: i === 0,
-            sort_order: i,
-            uploaded_by: authUid,
-          });
-        }
+      // Upload first: if a file fails, the photos already saved are left alone.
+      const payload = [];
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        const uploaded = await uploadPhotoFile("species-media", speciesId, p);
+        payload.push({
+          id: uploaded.photoId,
+          species_id: speciesId,
+          s3_bucket: "species-media",
+          s3_key: uploaded.s3_key,
+          caption: p.caption.trim(),
+          credit: p.credit ?? null,
+          is_primary: i === 0,
+          sort_order: i,
+          uploaded_by: authUid,
+        });
+      }
+      const { error: delErr } = await sb.from("species_media").delete().eq("species_id", speciesId);
+      if (delErr) throw delErr;
+      if (payload.length > 0) {
         const { error } = await sb.from("species_media").insert(payload);
         if (error) throw error;
       }
@@ -1126,25 +1256,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       return { ok: true };
     } catch (err) {
       console.error("setSpeciesMedia error:", err);
-      const updatedMedia = list.map((p, i) => ({
-        id: p.id || uid(),
-        species_id: speciesId,
-        url: p.url,
-        caption: p.caption?.trim() || "",
-        credit: p.credit ?? null,
-        is_primary: i === 0,
-        sort_order: i,
-        uploaded_by: authUid,
-      }));
-      setDb((prev) => ({
-        ...prev,
-        species_media: [
-          ...(prev.species_media || []).filter((m) => m.species_id !== speciesId),
-          ...updatedMedia,
-        ],
-      }));
-      notify("Species photos updated");
-      return { ok: true };
+      return { ok: false, message: `Photos not saved: ${err.message || err}` };
     }
   };
 
@@ -1349,6 +1461,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   };
 
   const generateTags = async (count, batch_label = "field") => {
+    if (!can(role, "tags")) {
+      notify("Only officers and admins can create QR tags");
+      return [];
+    }
     const sb = getSupabase();
     const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const ids = nextTagIds(db.tags, count);
@@ -1366,21 +1482,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       await fetchFromSupabase(true);
       return ids;
     } catch (err) {
-      console.warn("generateTags offline fallback:", err?.message || err);
-      const now = new Date().toISOString();
-      const localNewTags = ids.map((qr_id) => ({
-        qr_id,
-        status: "unused",
-        batch_label,
-        created_by: authUid || "demo",
-        created_at: now,
-      }));
-      setDb((prev) => ({
-        ...prev,
-        tags: [...localNewTags, ...(prev.tags || [])],
-      }));
-      notify(`Generated ${ids.length} tag${ids.length > 1 ? "s" : ""}`);
-      return ids;
+      // No local stand-in tags: a tag that is not in the database cannot go on a plant.
+      console.error("generateTags error:", err);
+      notify(`Failed to create tags: ${err?.message || err}`);
+      return [];
     }
   };
 
@@ -1427,7 +1532,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     setRole, logout, login, signIn, changePassword, updateProfile, changeMyPassword,
     setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
-    saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,
+    saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,

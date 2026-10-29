@@ -40,8 +40,8 @@ export default function SpeciesPage({ id }) {
   // The species' own captioned photos. Until it has some, up to 3 photos from each tagged plant.
   const obsPhotos = speciesObservationPhotos(db, s.id);
   const photos = s.media.length > 0 ? s.media : obsPhotos;
-  const savePhotos = (list) => {
-    const r = setSpeciesMedia(s.id, list);
+  const savePhotos = async (list) => {
+    const r = await setSpeciesMedia(s.id, list);
     notify(r.ok ? "Photos saved" : r.message);
     if (r.ok) setEditing(false);
   };

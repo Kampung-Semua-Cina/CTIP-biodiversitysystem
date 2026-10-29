@@ -1,5 +1,5 @@
 // apps/web/src/pages/Species.jsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
@@ -16,8 +16,15 @@ const BLANK = {
 
 // Officer and admin page for the species encyclopedia: add, edit, photos, publish, delete, restore.
 export default function Species() {
-  const { db, saveSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia, notify } = useStore();
+  const { db, saveSpecies, loadStaffSpecies, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia, notify } = useStore();
   const [q, setQ] = useState("");
+  const [loadError, setLoadError] = useState(null); // the API could not give us the list
+  const [saving, setSaving] = useState(false);
+
+  // The list comes from the API (GET /v1/species), which only answers Officer and Admin.
+  useEffect(() => {
+    loadStaffSpecies().then((r) => setLoadError(r.ok ? null : r.message));
+  }, [loadStaffSpecies]);
   const [form, setForm] = useState(null); // species being edited, or BLANK for a new one
   const [removing, setRemoving] = useState(null);
   const [photosOf, setPhotosOf] = useState(null); // species whose photos are open in the editor
@@ -39,20 +46,21 @@ export default function Species() {
     notify(restoreSpecies(s.id) ? "Species restored" : "Only officers and admins can restore species");
   };
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
     const name = form.scientific_name.trim();
     if (!name) return notify("Enter the scientific name");
     if (db.species.some((s) => !s.is_deleted && s.id !== form.id && s.scientific_name.toLowerCase() === name.toLowerCase())) {
       return notify("This species is already in the list");
     }
-    saveSpecies({ ...form, scientific_name: name });
-    setForm(null);
-    notify("Species saved");
+    setSaving(true);
+    const r = await saveSpecies({ ...form, scientific_name: name, conservation_status: form.conservation_status || "not evaluated" });
+    setSaving(false);
+    if (r.ok) setForm(null); // on failure the form stays open with what was typed
   };
 
-  const savePhotos = (list) => {
-    const r = setSpeciesMedia(photosOf.id, list);
+  const savePhotos = async (list) => {
+    const r = await setSpeciesMedia(photosOf.id, list);
     notify(r.ok ? "Photos saved" : r.message);
     if (r.ok) setPhotosOf(null);
   };
@@ -66,6 +74,7 @@ export default function Species() {
         <h2>Species</h2>
         <button className="btn" onClick={() => setForm(BLANK)}><Icon name="plus" size={18} /> Add species</button>
       </div>
+      {loadError && <p className="mute small" role="alert">Could not load species from the API: {loadError}. Showing the last saved list.</p>}
       <label className="search wide">
         <Icon name="search" size={18} />
         <input placeholder="Search by name or family" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search species" />
@@ -123,20 +132,20 @@ export default function Species() {
         <Modal title={form.id ? "Edit species" : "Add species"} onClose={() => setForm(null)}>
           <form onSubmit={save}>
             <label>Scientific name<input value={form.scientific_name} onChange={set("scientific_name")} required /></label>
-            <label>Common name<input value={form.common_name} onChange={set("common_name")} /></label>
+            <label>Common name<input value={form.common_name || ""} onChange={set("common_name")} /></label>
             <div className="two">
-              <label>Family<input value={form.family} onChange={set("family")} /></label>
-              <label>Genus<input value={form.genus} onChange={set("genus")} /></label>
+              <label>Family<input value={form.family || ""} onChange={set("family")} /></label>
+              <label>Genus<input value={form.genus || ""} onChange={set("genus")} /></label>
             </div>
             <label>Conservation status
-              <select value={form.conservation_status} onChange={set("conservation_status")}>
+              <select value={form.conservation_status || "not evaluated"} onChange={set("conservation_status")}>
                 {CONSERVATION.map((c) => <option key={c} value={c}>{label(c)}</option>)}
               </select>
             </label>
-            <label>Description<textarea rows="3" value={form.description} onChange={set("description")} /></label>
-            <label>Cultural significance<textarea rows="2" value={form.cultural_significance} onChange={set("cultural_significance")} /></label>
+            <label>Description<textarea rows="3" value={form.description || ""} onChange={set("description")} /></label>
+            <label>Cultural significance<textarea rows="2" value={form.cultural_significance || ""} onChange={set("cultural_significance")} /></label>
             <div className="row wrap gap-top" style={{ alignItems: "center" }}>
-              <button className="btn" type="submit"><Icon name="check" size={18} /> Save species</button>
+              <button className="btn" type="submit" disabled={saving}><Icon name="check" size={18} /> {saving ? "Saving…" : "Save species"}</button>
               {form.id && (
                 <button
                   type="button"

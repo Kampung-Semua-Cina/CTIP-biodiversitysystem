@@ -1,8 +1,9 @@
 // apps/web/src/pages/Review.jsx
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
+import MiniMap from "../components/MiniMap.jsx";
 import { Chip, Empty, Mono, Pills, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { nameOf, plantView } from "../../../shared/selectors.js";
@@ -17,14 +18,26 @@ const FILTERS = [
 ];
 
 // Officer review queue: records synced from the field and waiting for a decision.
+// The records come from the API (GET /v1/observations, CTIP-86), which only
+// lets a botanist see their own. Photos, plant and comments come from the store.
 export default function Review() {
-  const { db } = useStore();
+  const { db, loadReviewQueue } = useStore();
   const [filter, setFilter] = useState("synced");
   const [picked, setPicked] = useState(null);
+  const [queue, setQueue] = useState(null); // null while loading
+  const [error, setError] = useState(null);
 
-  const counts = Object.fromEntries(FILTERS.map((f) => [f.key, db.observations.filter(f.test).length]));
+  const reload = useCallback(() => loadReviewQueue().then((r) => {
+    setError(r.ok ? null : r.message);
+    setQueue(r.ok ? r.observations : []);
+  }), [loadReviewQueue]);
+  useEffect(() => { reload(); }, [reload]);
+
+  // Only records whose plant has loaded can be shown with photos and details.
+  const known = (queue || []).filter((o) => db.plants.some((p) => p.id === o.specimen_id));
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.key, known.filter(f.test).length]));
   const cur = FILTERS.find((f) => f.key === filter);
-  const list = db.observations
+  const list = known
     .filter(cur.test)
     // Oldest first while waiting, so nothing sits at the bottom forever; newest first otherwise.
     .sort((a, b) => (filter === "synced" ? 1 : -1) * (a.last_synced_at || a.observed_at || "").localeCompare(b.last_synced_at || b.observed_at || ""));
@@ -44,7 +57,11 @@ export default function Review() {
           items={FILTERS.map((f) => ({ key: f.key, label: f.label, count: f.key === "all" ? undefined : counts[f.key] }))} />
       </div>
 
-      {!obs ? (
+      {error && <p className="mute small" role="alert">Could not load the review queue from the API: {error}</p>}
+
+      {queue === null ? (
+        <div className="glass pad"><p className="mute">Loading the review queue…</p></div>
+      ) : !obs ? (
         <div className="glass pad">
           <Empty icon="clipboard">{filter === "synced" ? "No records are waiting for review." : "No records here."}</Empty>
         </div>
@@ -65,14 +82,14 @@ export default function Review() {
               );
             })}
           </div>
-          <ReviewDetail key={obs.id} obs={obs} />
+          <ReviewDetail key={obs.id} obs={obs} onDecided={reload} />
         </div>
       )}
     </Shell>
   );
 }
 
-function ReviewDetail({ obs }) {
+function ReviewDetail({ obs, onDecided }) {
   const { db, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
   const [comment, setComment] = useState("");
   const [note, setNote] = useState("");
@@ -84,11 +101,15 @@ function ReviewDetail({ obs }) {
   const species = db.species.filter((s) => !s.is_deleted);
   const open = obs.status === "synced"; // only records waiting for review can be decided
 
-  const decide = (decision) => {
+  // Where this visit was recorded; older records only have the plant's position.
+  const coords = { lat: obs.lat ?? rawPlant.lat, lng: obs.lng ?? rawPlant.lng };
+  const hasCoords = coords.lat != null && coords.lng != null;
+
+  const decide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
-    reviewObservation(obs.id, decision, comment.trim());
-    notify(decision === "approve" ? "Record approved and published" : decision === "return" ? "Record returned to the botanist" : "Record rejected");
+    const r = await reviewObservation(obs.id, decision, comment.trim()); // shows its own message
+    if (r?.ok) onDecided();
   };
 
   return (
@@ -118,12 +139,14 @@ function ReviewDetail({ obs }) {
         {rawPlant.proposed_species && <p className="mute small">Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>}
       </div>
 
+      {hasCoords && <MiniMap points={[{ p: plant, c: coords }]} height={180} highlight={plant.qr_id} label={`Where ${plant.qr_id} was recorded`} />}
+
       <dl>
         <dt>Recorded by</dt><dd>{nameOf(db, obs.recorded_by)} · {fmtDateTime(obs.observed_at)}</dd>
         <dt>Height</dt><dd>{obs.height_cm != null ? `${obs.height_cm} cm` : "-"}</dd>
         <dt>Appearance</dt><dd>{obs.morphology || "-"}</dd>
         <dt>Notes</dt><dd>{obs.notes || "-"}</dd>
-        <dt>Location</dt><dd><Mono>{rawPlant.lat.toFixed(5)}, {rawPlant.lng.toFixed(5)}</Mono> <span className="mute">±{obs.gps_accuracy_m} m</span></dd>
+        <dt>Location</dt><dd>{hasCoords ? <Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono> : "-"} {obs.gps_accuracy_m != null && <span className="mute">±{obs.gps_accuracy_m} m</span>}</dd>
         <dt>Device</dt><dd><Mono>{obs.device_id}</Mono></dd>
       </dl>
 

@@ -3,6 +3,7 @@
 
 import { can } from "./permissions.js";
 import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
+import { THREATENED } from "./data.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -21,6 +22,14 @@ export function plantStatus(db, specimenId) {
   return obs[0]?.status || "draft";
 }
 
+// Plants this user registered that have no observation: a send that failed
+// half-way (the plant was saved, its record was not). Adding a plant on the
+// same tag again finishes them.
+export function unfinishedPlants(db, userId) {
+  if (!userId) return [];
+  return db.plants.filter((p) => p.registered_by === userId && !p.is_deleted && !db.observations.some((o) => o.specimen_id === p.id));
+}
+
 // One plant = a specimen + its species + its photos + its record status.
 export function plantView(db, p) {
   if (!p) return null;
@@ -29,7 +38,7 @@ export function plantView(db, p) {
   const obs = db.observations
     .filter((o) => o.specimen_id === p.id && o.status === "approved")
     .sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
-  const endangered = p.endangered_override || species?.conservation_status === "endangered";
+  const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
   return {
     ...p,
     species,
@@ -162,7 +171,7 @@ export function speciesCatalogue(db, role) {
         plants: mine,
         media,
         photo: media[0]?.url || obsPhotos[0]?.url || mine.find((p) => p.photos?.length)?.photos[0]?.url || null,
-        endangered: s.conservation_status === "endangered",
+        endangered: THREATENED.includes(s.conservation_status),
       };
     });
 }

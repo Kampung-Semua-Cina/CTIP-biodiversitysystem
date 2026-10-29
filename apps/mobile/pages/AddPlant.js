@@ -15,7 +15,6 @@ import {
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
-import { uid } from '../../shared/utils.js';
 
 const MAX_PHOTOS = 6;
 
@@ -303,7 +302,7 @@ export function AddPlant({ nav, params = {} }) {
     }
     setSubmitting(true);
     try {
-      await addPlant({
+      const res = await addPlant({
         qr_id: qr,
         proposed_species: sp.trim(),
         morphology: looks.trim(),
@@ -313,8 +312,9 @@ export function AddPlant({ nav, params = {} }) {
         lat: gps.lat,
         lng: gps.lng,
         gps_accuracy_m: gps.acc,
-        idempotency_key: uid(),
       });
+      // addPlant reports failure instead of throwing. Keep the draft so nothing is lost.
+      if (!res?.ok) throw new Error(res?.message || 'Failed to submit observation.');
       await clearDraft(qr); // Clean up crash draft after successful submit (CTIP-57)
       nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, acc: gps.acc, cover: photos[0]?.url });
     } catch (err) {
@@ -466,8 +466,9 @@ export function Revisit({ nav, params = {} }) {
     });
   };
 
-  const submit = () => {
-    addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: gps.acc });
+  const submit = async () => {
+    const obsId = await addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: gps.acc });
+    if (!obsId) return; // addRevisit already showed why; keep what was entered
     notify(`Revisit of ${plant.qr_id} sent for review`);
     nav.tab('records');
   };

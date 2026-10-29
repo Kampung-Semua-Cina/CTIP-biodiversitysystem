@@ -16,7 +16,7 @@ const height = (cm) => (cm == null ? "-" : cm >= 100 ? `${(cm / 100).toFixed(cm 
 // One tagged plant (a specimen): the page a QR tag opens.
 // Tabs: Overview and Photos for everyone; Visits, Sensor and Discussion for staff.
 export default function Specimen({ qr }) {
-  const { db, role, setPlantPhotos, setPlantSpecies, reviewObservation, notify } = useStore();
+  const { db, me, role, setPlantPhotos, setPlantSpecies, reviewObservation, notify } = useStore();
   const staff = can(role, "pending");
   const canReview = can(role, "review");
   const [tab, setTab] = useState("overview");
@@ -99,6 +99,14 @@ export default function Specimen({ qr }) {
           {can(role, "tags") && <a className="btn ghost" href="#/tags"><Icon name="printer" size={16} /> Print tags</a>}
         </div>
       </section>
+
+      {/* Saved without its record (an earlier send failed half-way): only the botanist who tagged it can finish it. */}
+      {visits.length === 0 && me?.id === plant.registered_by && can(role, "add") && (
+        <div className="callout">
+          <p><b>Not sent yet.</b> This plant was saved, but its record did not reach the server, so no officer can see it. Add the details and photos, then send it for review.</p>
+          <p><a className="btn" href={`#/add/${encodeURIComponent(plant.qr_id)}`}><Icon name="send" size={18} /> Finish and send</a></p>
+        </div>
+      )}
 
       {/* Officer review panel displayed directly on the tag's page */}
       {canReview && (pendingObs || showReviewPanel) && activeObsForReview && (

@@ -138,6 +138,12 @@ export async function apiFetch(path, options = {}) {
       };
     }
 
+    // 502/504 without our JSON envelope: the Vite dev proxy answered because
+    // the API itself is not running. Treat it like a network failure.
+    if (!json && (res.status === 502 || res.status === 504)) {
+      return { ok: false, offline: true, status: res.status, code: "API_UNREACHABLE", message: "Cannot reach the API server" };
+    }
+
     // Backend returned an error envelope (e.g. { code, message, details })
     return {
       ok: false,
@@ -187,6 +193,67 @@ export async function fetchPublicSpeciesById(id) {
  */
 export async function fetchMe(token) {
   return apiFetch("/me", { token });
+}
+
+/**
+ * Every page of a paged list endpoint ({ data, meta: { page, limit, total } }).
+ * Stops at the first failed page and returns that error.
+ */
+async function fetchAllPages(path, { token, query = {} } = {}) {
+  const rows = [];
+  for (let page = 1; ; page++) {
+    const qStr = new URLSearchParams({ ...query, page: String(page), limit: "100" }).toString();
+    const res = await apiFetch(`${path}?${qStr}`, { token });
+    if (!res.ok) return res;
+    const data = Array.isArray(res.data) ? res.data : [];
+    rows.push(...data);
+    const total = res.raw?.meta?.total ?? rows.length;
+    if (!data.length || rows.length >= total) return { ok: true, status: res.status, data: rows };
+  }
+}
+
+// The API rejects empty strings, so blank optional fields are sent as null.
+const SPECIES_FIELDS = ["scientific_name", "common_name", "family", "genus", "description", "conservation_status", "cultural_significance"];
+function speciesBody(sp) {
+  const body = {};
+  for (const k of SPECIES_FIELDS) {
+    const v = typeof sp[k] === "string" ? sp[k].trim() : sp[k];
+    body[k] = v === "" || v === undefined ? null : v;
+  }
+  return body;
+}
+
+/**
+ * Staff species list (Officer/Admin): GET /v1/species, every page.
+ * Deleted species are not included.
+ */
+export async function fetchStaffSpecies({ token } = {}) {
+  return fetchAllPages("/species", { token });
+}
+
+/**
+ * Create a species (Officer/Admin): POST /v1/species (CTIP-46).
+ * The API records created_by and updated_by from the token.
+ */
+export async function createSpeciesApi(sp, { token } = {}) {
+  return apiFetch("/species", { method: "POST", token, body: speciesBody(sp) });
+}
+
+/**
+ * Edit a species (Officer/Admin): PATCH /v1/species/:id (CTIP-46).
+ * The API records updated_by; the database trigger sets updated_at.
+ */
+export async function updateSpeciesApi(id, sp, { token } = {}) {
+  return apiFetch(`/species/${encodeURIComponent(id)}`, { method: "PATCH", token, body: speciesBody(sp) });
+}
+
+/**
+ * Observations (CTIP-86), every page: GET /v1/observations?status=...
+ * status "pending" is the review queue (waiting for a decision), oldest first.
+ * Botanists only ever get their own records back.
+ */
+export async function fetchObservations({ status, token } = {}) {
+  return fetchAllPages("/observations", { token, query: status ? { status } : {} });
 }
 
 /**

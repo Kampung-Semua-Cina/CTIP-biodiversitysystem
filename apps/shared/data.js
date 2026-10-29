@@ -16,7 +16,13 @@ export const DEMO_EMAILS = {
 
 export const DEMO_PASSWORD = "Niah@1234";
 
-export const CONSERVATION = ["least concern", "near threatened", "vulnerable", "endangered"];
+// IUCN Red List categories, the only values the API accepts (CTIP-46).
+export const CONSERVATION = [
+  "least concern", "near threatened", "vulnerable", "endangered", "critically endangered",
+  "extinct in the wild", "extinct", "data deficient", "not evaluated",
+];
+// Statuses whose exact locations are hidden from visitors. Matches the API (distribution.js).
+export const THREATENED = ["endangered", "critically endangered"];
 export const OBS_STATUS = ["draft", "queued", "synced", "returned", "approved", "rejected"];
 
 export const initialProfiles = [

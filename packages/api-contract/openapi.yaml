@@ -1451,6 +1451,12 @@ components:
         created_at: { type: string, format: date-time }
 
     # ---------- species
+    ConservationStatusValue:
+      description: IUCN Red List category. Any case is accepted; it is stored lower case.
+      type: [string, 'null']
+      enum: ['least concern', 'near threatened', 'vulnerable', 'endangered', 'critically endangered',
+        'extinct in the wild', 'extinct', 'data deficient', 'not evaluated', null]
+
     SpeciesInput:
       type: object
       required: [scientific_name]
@@ -1460,7 +1466,7 @@ components:
         family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
-        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        conservation_status: { $ref: '#/components/schemas/ConservationStatusValue' }
         cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     SpeciesCreate:
@@ -1486,7 +1492,7 @@ components:
         family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
-        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        conservation_status: { $ref: '#/components/schemas/ConservationStatusValue' }
         cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     Species:

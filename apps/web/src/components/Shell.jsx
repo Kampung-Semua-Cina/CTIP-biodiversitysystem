@@ -10,7 +10,7 @@ import { useStore } from "../../../shared/store.js";
 // the staff tools show as a row of pills instead.
 // `plain` pages lay out their own cards; other pages sit on one card.
 export default function Shell({ seg, children, plain }) {
-  const { role, db, me } = useStore();
+  const { role, db, me, apiStatus, apiError } = useStore();
   const links = staffLinks(role);
   const counts = staffCounts(db, me);
   const isOn = (to) => seg === to.slice(1);
@@ -30,6 +30,11 @@ export default function Shell({ seg, children, plain }) {
         {links.map((l) => link(l.to, l.icon, l.label, l.badge))}
       </aside>
       <section className="content">
+        {apiStatus === "offline" && (
+          <p className="apidown" role="alert">
+            <Icon name="wifiOff" size={18} /> <span><b>API down.</b> {apiError} Species and the review queue cannot load until it is back.</span>
+          </p>
+        )}
         {links.length > 0 && (
           <nav className="quick" aria-label="Staff tools">
             {links.map((l) => (

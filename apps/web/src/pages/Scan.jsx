@@ -38,7 +38,7 @@ export default function Scan() {
     } else {
       const unusedTag = (db.tags || []).find((t) => t.qr_id.toUpperCase() === clean);
       if (unusedTag && unusedTag.status === "unused" && canAdd) {
-        window.location.hash = `#/add?tag=${clean}`;
+        window.location.hash = `#/add/${clean}`;
       } else {
         window.location.hash = `#/tag/${clean}`;
       }

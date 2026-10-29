@@ -61,7 +61,17 @@ export const label = (s = "") => {
  * Exponential backoff retry wrapper (CTIP-58).
  * Retries on transient failure with exponential delay and randomized jitter.
  */
-export async function withExponentialRetry(fn, { maxRetries = 3, initialDelayMs = 400, factor = 2, maxDelayMs = 4000 } = {}) {
+// Database and permission errors come back the same every time, so only
+// network problems and server hiccups are worth another try.
+export function isRetryable(err) {
+  if (err?.retryable === false) return false;
+  const code = String(err?.code ?? "");
+  if (/^[0-9A-Z]{5}$/.test(code) || code.startsWith("PGRST")) return false; // Postgres / PostgREST
+  const status = Number(err?.status ?? err?.statusCode ?? 0);
+  return !status || status >= 500 || status === 408 || status === 429;
+}
+
+export async function withExponentialRetry(fn, { maxRetries = 3, initialDelayMs = 400, factor = 2, maxDelayMs = 4000, retryIf = isRetryable } = {}) {
   let attempt = 0;
   let delay = initialDelayMs;
   while (true) {
@@ -69,7 +79,7 @@ export async function withExponentialRetry(fn, { maxRetries = 3, initialDelayMs 
       return await fn(attempt);
     } catch (err) {
       attempt++;
-      if (attempt > maxRetries) {
+      if (attempt > maxRetries || !retryIf(err)) {
         throw err;
       }
       const jitter = (Math.random() - 0.5) * 0.4 * delay;

@@ -41,8 +41,8 @@ export default function RoleSwitch({ role, setRole }) {
             <Icon name="refresh" size={12} /> Checking API...
           </span>
         ) : (
-          <span className="api-badge off" title={apiError || "Backend API is offline (using local sample data)"}>
-            <Icon name="wifiOff" size={12} /> Offline (Sample Data)
+          <span className="api-badge off" role="status" title={apiError || "The API server is not answering"}>
+            <Icon name="wifiOff" size={12} /> API Down
           </span>
         )}
         <button

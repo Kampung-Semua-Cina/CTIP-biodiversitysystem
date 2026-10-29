@@ -9,7 +9,7 @@ import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Bar, TitleBlock, Pills, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty,
+  Screen, Bar, TitleBlock, Pills, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Field, Avatar, Empty,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords } from '../components/format.js';
 
@@ -75,10 +75,13 @@ export function MyRecords({ nav }) {
 const lastReview = (db, obsId) => db.reviews.filter((r) => r.observation_id === obsId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
 export function RecordDetail({ nav, params = {} }) {
-  const { db, me, resubmit, notify } = useStore();
+  const { db, me, resubmit, syncObservation } = useStore();
   const { c } = useTheme();
   const [message, setMessage] = useState('');
   const o = db.observations.find((x) => x.id === params.id);
+  // Editable copy while the record is returned; saved only when it is sent again.
+  const [fix, setFix] = useState(() => ({ morphology: o?.morphology || '', height_cm: o?.height_cm != null ? String(o.height_cm) : '', notes: o?.notes || '' }));
+  const [sending, setSending] = useState(false);
   const plant = o ? plantView(db, db.plants.find((p) => p.id === o.specimen_id)) : null;
   if (!o || !plant) {
     return <Screen header={<Bar title="Record" onBack={nav.back} />}><Empty>This record no longer exists.</Empty></Screen>;
@@ -88,10 +91,20 @@ export function RecordDetail({ nav, params = {} }) {
   const photos = plant.photos.filter((p) => p.observation_id === o.id);
   const returned = o.status === 'returned';
 
-  const send = () => {
-    resubmit(o.id, message.trim());
-    notify(`${plant.qr_id} sent for review again`);
-    nav.back();
+  const send = async () => {
+    if (sending) return;
+    setSending(true);
+    const r = await resubmit(o.id, message.trim(), fix); // shows its own success or error message
+    setSending(false);
+    if (r.ok) nav.back(); // on failure the edits stay on screen
+  };
+  const unsent = o.status === 'draft' || o.status === 'queued';
+  const sendDraft = async () => {
+    if (sending) return;
+    setSending(true);
+    const r = await syncObservation(o.id);
+    setSending(false);
+    if (r.ok) nav.back();
   };
 
   return (
@@ -99,7 +112,9 @@ export function RecordDetail({ nav, params = {} }) {
       header={<Bar title={plant.qr_id} sub={`${o.status === 'returned' ? 'Returned' : o.status === 'approved' ? 'Published' : 'Recorded'} ${shortDate(returned ? review?.created_at : o.observed_at)}`} onBack={nav.back} />}
       gap={20}
       top={20}
-      footer={returned ? <View style={{ flex: 1 }}><Button label="Resubmit for review" onPress={send} /></View> : null}
+      footer={returned
+        ? <View style={{ flex: 1 }}><Button label={sending ? 'Sending…' : 'Resubmit for review'} onPress={send} disabled={sending} /></View>
+        : unsent ? <View style={{ flex: 1 }}><Button label={sending ? 'Sending…' : 'Send for review'} onPress={sendDraft} disabled={sending} /></View> : null}
     >
       <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
         <Thumb uri={plant.photos[0]?.url} size={64} />
@@ -142,6 +157,14 @@ export function RecordDetail({ nav, params = {} }) {
           ) : null}
         </View>
       </Section>
+
+      {returned ? (
+        <Section title="Fix the record" gap={12}>
+          <Area label="Appearance" value={fix.morphology} onChangeText={(t) => setFix({ ...fix, morphology: t })} />
+          <Field label="Height (cm)" value={fix.height_cm} onChangeText={(t) => setFix({ ...fix, height_cm: t.replace(/[^\d.]/g, '') })} keyboardType="decimal-pad" width={140} />
+          <Area label="Field notes" optional value={fix.notes} onChangeText={(t) => setFix({ ...fix, notes: t })} rows={2} />
+        </Section>
+      ) : null}
 
       <Section title="Record" gap={0}>
         <KV rows={[
