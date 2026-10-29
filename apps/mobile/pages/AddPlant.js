@@ -17,6 +17,7 @@ import {
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
+import { TagQrView } from './TagQr.js';
 import { prefillFromSpecies } from '../../shared/speciesSearch.js';
 import { uid } from '../../shared/utils.js';
 import { extractTag } from '../../shared/selectors.js';
@@ -219,6 +220,7 @@ export function AddPlant({ nav, params = {} }) {
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [showQr, setShowQr] = useState(false); // the tag's QR, shown over the form (CTIP-27)
   const [tried, setTried] = useState(false);
 
   useEffect(() => {
@@ -233,7 +235,11 @@ export function AddPlant({ nav, params = {} }) {
       const ids = await generateTags(1, 'field');
       if (ids && ids.length > 0) {
         setQr(ids[0]);
-        Alert.alert('Tag Generated', `Created new QR tag: ${ids[0]}`);
+        // Next step: print the code and fix it to the plant (CTIP-27).
+        Alert.alert('New tag ready', `${ids[0]} is now this plant's tag. Show its QR code to print or share it.`, [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Show QR', onPress: () => setShowQr(true) },
+        ]);
       }
     } catch (err) {
       Alert.alert('Tag Generation Failed', err?.message || 'Could not generate QR tag.');
@@ -339,25 +345,33 @@ export function AddPlant({ nav, params = {} }) {
     }
   }, [qr, sp, picked, looks, height, notes, photos, gps]);
 
+  if (showQr && qr) {
+    return <TagQrView qr={qr} onBack={() => setShowQr(false)} />;
+  }
+
   if (!qr) {
     return (
       <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />} gap={20}>
         <View style={{ gap: 6 }}>
-          <Txt v="title1">Add Plant</Txt>
+          <Txt v="title1">{params.make ? 'New tag' : 'Add plant'}</Txt>
           <Txt v="body" color={c.ink2}>
-            Every plant record starts from a QR tag. Choose how you want to tag this plant:
+            {params.make
+              ? 'Make a tag for this plant. You can then print its QR code and fix it to the plant.'
+              : 'Every plant record starts from a QR tag. Choose how you want to tag this plant:'}
           </Txt>
         </View>
 
+        {/* Coming from "No tag? Make a new one" on Scan, making a tag is the main action (CTIP-27). */}
         <View style={{ gap: 12 }}>
-          <Button label="Scan tag with camera" icon="camera" onPress={() => nav.replace('scan')} />
+          {params.make ? null : <Button label="Scan tag with camera" icon="camera" onPress={() => nav.replace('scan')} />}
           <Button
             label={generating ? "Generating QR tag..." : "Generate new QR tag"}
             icon="qr"
-            kind="secondary"
+            kind={params.make ? 'primary' : 'secondary'}
             disabled={generating}
             onPress={generateNewTag}
           />
+          {params.make ? <Button label="Scan tag with camera" icon="camera" kind="secondary" onPress={() => nav.replace('scan')} /> : null}
           <Button label="Choose QR from gallery" icon="plus" kind="secondary" onPress={pickQrFromGallery} />
         </View>
 
@@ -472,16 +486,20 @@ export function AddPlant({ nav, params = {} }) {
     >
       <View style={{ gap: 6 }}>
         <Txt v="title1">New plant</Txt>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Icon name="qr" size={18} color={c.ink2} />
           <Txt v="body" color={c.ink2} style={{ fontSize: 15 }}>Tag</Txt>
           <Mono size={15}>{qr}</Mono>
-          <View style={{ flexDirection: 'row', gap: 12, marginLeft: 'auto' }}>
-            <TextLink label="Show QR" onPress={() => nav.go('tagQr', { qr })} />
-            <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
-            <TextLink label="Generate" onPress={generateNewTag} />
-            <TextLink label="Gallery" onPress={pickQrFromGallery} />
+          <View style={{ marginLeft: 'auto' }}>
+            <TextLink label="Show QR" onPress={() => setShowQr(true)} />
           </View>
+        </View>
+        {/* Changing the tag is rare once a record is started, so these stay small. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <Txt v="caption" color={c.ink2}>Wrong tag?</Txt>
+          <TextLink label="Scan" size={14} onPress={() => nav.replace('scan')} />
+          <TextLink label={generating ? 'Making…' : 'New tag'} size={14} onPress={generating ? undefined : generateNewTag} />
+          <TextLink label="Gallery" size={14} onPress={pickQrFromGallery} />
         </View>
         {restoredDraft && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, padding: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.accentSoft }}>
