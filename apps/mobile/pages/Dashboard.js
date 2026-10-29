@@ -12,17 +12,18 @@ import { THREATENED } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
   TitleBlock, SearchField, Pills, Segmented, SortBar, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,
-  SkeletonRow, LoadingMore, Empty,
+  SkeletonRow, LoadingMore, Empty, Notice, Button,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
+import { useSpeciesSearch } from '../hooks/useSpeciesSearch.js';
+import { cleanTerm } from '../../shared/speciesSearch.js';
 
 const PAGE_SIZE = 20; // same as the API's default `limit`
 const ROW_HEIGHT = 77; // fixed row height lets the list jump straight to a letter
 const LETTER_HEIGHT = 42;
 
-// Pages through `items` the way the API will: page 1, 2, 3… of PAGE_SIZE.
-// Swap the setTimeout for `GET /public/species?page=&limit=` (or /plants) when the
-// apps are connected to the API (CTIP-26, CTIP-87). `total` comes from the response meta.
+// Pages through `items` already in the store: page 1, 2, 3… of PAGE_SIZE.
+// Typing a species name searches the API instead (useSpeciesSearch, CTIP-26).
 function usePaged(items, resetKey) {
   const [page, setPage] = useState({ key: resetKey, count: 0, loading: true });
   // A new search or filter starts again from page 1.
@@ -97,10 +98,21 @@ export function SpeciesList({ nav, params = {} }) {
     return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
   });
 
-  const { shown, loading, loadMore, total, done } = usePaged(sorted, `${q}|${family}|${sort}`);
+  const local = usePaged(sorted, `${q}|${family}|${sort}`);
+
+  // Typing a name searches published species through the API, a page at a time
+  // (CTIP-26). A tag ID ("NIAH-0007") is looked up among the plants already loaded,
+  // and browsing without a search term keeps the full list with its sorts.
+  const apiMode = !/NIAH-\d{4}/i.test(q) && cleanTerm(q).length >= 2;
+  const search = useSpeciesSearch({ q: apiMode ? q : '', family: apiMode ? family : undefined });
+  const shown = apiMode ? search.items : local.shown;
+  const loading = apiMode ? search.loading : local.loading;
+  const loadMore = apiMode ? search.loadMore : local.loadMore;
+  const total = apiMode ? (search.total ?? 0) : local.total;
+  const done = apiMode ? !search.hasMore : local.done;
 
   // Insert a letter heading before the first species of each letter (when sorted alphabetically).
-  const isAlphaSort = ['common', 'scientific'].includes(sort);
+  const isAlphaSort = !apiMode && ['common', 'scientific'].includes(sort);
   const rows = [];
   let last = '';
   for (const s of shown) {
@@ -132,7 +144,13 @@ export function SpeciesList({ nav, params = {} }) {
         <Segmented value="species" onChange={(k) => k === 'tagged' && nav.go('tagged')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
         <SearchField value={q} onChangeText={setQ} placeholder="Search name or tag ID" />
         <Pills value={family} onChange={setFamily} items={[{ key: 'all', label: 'All families' }, ...families.map((f) => ({ key: f, label: f }))]} />
-        <SortBar items={SORT_SPECIES} value={sort} onChange={setSort} />
+        {apiMode ? null : <SortBar items={SORT_SPECIES} value={sort} onChange={setSort} />}
+        {apiMode && search.error ? (
+          <View style={{ gap: 8 }}>
+            <Notice tone="warning" icon="info" title="Species search unavailable" body={search.error} />
+            <Button label="Try again" kind="secondary" height={44} size={15} onPress={search.retry} />
+          </View>
+        ) : null}
       </ListHeader>
     </View>
   );
@@ -156,7 +174,7 @@ export function SpeciesList({ nav, params = {} }) {
             <SpeciesRow s={item.s} plants={plants} staff={staff} onPress={() => nav.go('species', { id: item.s.id })} />
           )
         }
-        ListEmptyComponent={loading ? null : <Empty icon="search">No species match. Try another name or family.</Empty>}
+        ListEmptyComponent={loading || (apiMode && search.error) ? null : <Empty icon="search">No species match. Try another name or family.</Empty>}
         ListFooterComponent={
           loading ? (
             <View>
@@ -172,7 +190,7 @@ export function SpeciesList({ nav, params = {} }) {
 }
 
 function SpeciesRow({ s, plants, staff, onPress }) {
-  const photo = s.photo || plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
+  const photo = s.photo || s.primary_image_url || plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
   return (
     <View style={{ height: ROW_HEIGHT }}>
       <Row
@@ -182,7 +200,7 @@ function SpeciesRow({ s, plants, staff, onPress }) {
           <>
             <Sci size={14}>{s.scientific_name}</Sci>
             {THREATENED.includes(s.conservation_status) ? <DotLabel status="endangered" /> : null}
-            {staff && !s.is_published ? <DotLabel tone="neutral" label="Not published" /> : null}
+            {staff && s.is_published === false ? <DotLabel tone="neutral" label="Not published" /> : null}
           </>
         }
         onPress={onPress}
