@@ -147,7 +147,7 @@ export default function Scan({ nav, params = {} }) {
                 </Pressable>
               </View>
               {role === 'botanist' ? (
-                <Pressable accessibilityRole="button" onPress={() => nav.replace('add')} hitSlop={8}
+                <Pressable accessibilityRole="button" onPress={() => nav.replace('add', { make: true })} hitSlop={8}
                   style={{ height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 }}>
                   <Icon name="qr" size={18} color={CAMERA_TEXT} />
                   <Text style={{ fontFamily: font('text', 700), fontSize: 14, color: CAMERA_TEXT, textDecorationLine: 'underline' }}>No tag? Make a new one</Text>
@@ -311,7 +311,7 @@ function Result({ result, role, nav, onAgain }) {
       </View>
       <View style={{ gap: 4 }}>
         <Button label="Scan again" onPress={onAgain} />
-        {role === 'botanist' ? <Button label="Make a new tag instead" kind="text" height={48} size={15} onPress={() => nav.replace('add')} /> : null}
+        {role === 'botanist' ? <Button label="Make a new tag instead" kind="text" height={48} size={15} onPress={() => nav.replace('add', { make: true })} /> : null}
       </View>
     </Sheet>
   );
