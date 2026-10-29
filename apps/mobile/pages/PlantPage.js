@@ -11,6 +11,7 @@ import { can } from '../../shared/permissions.js';
 import { MAP_BOUNDS } from '../../shared/site.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
+import LeafletMap from '../components/LeafletMap.js';
 import {
   Txt, Sci, Mono, Chip, Section, TextLink, Row, Thumb, MiniMap, KV, Button, Empty, Header, IconButton, Screen,
 } from '../components/Bits.js';
@@ -33,7 +34,7 @@ function Hero({ photos, height = 260, onBack }) {
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
           {photos.map((p, i) => (
-            <Image key={p.id} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height, backgroundColor: c.accentSoft }} />
+            <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height, backgroundColor: c.accentSoft }} />
           ))}
         </ScrollView>
       ) : (
@@ -85,7 +86,14 @@ export function SpeciesProfile({ nav, params }) {
   const media = db.species_media ? db.species_media.filter((m) => m.species_id === sp.id).sort((a, b) => a.sort_order - b.sort_order) : [];
   const obsPhotos = speciesObservationPhotos(db, sp.id);
   const effectiveMedia = media.length > 0 ? media.map((m) => ({ id: m.id, url: m.url })) : obsPhotos;
-  const photos = [...effectiveMedia, ...plants.flatMap((p) => p.photos)].slice(0, 6);
+  const rawPhotos = [...effectiveMedia, ...plants.flatMap((p) => p.photos)];
+  const seenKeys = new Set();
+  const photos = rawPhotos.filter((p) => {
+    const k = p?.id || p?.url;
+    if (!k || seenKeys.has(k)) return false;
+    seenKeys.add(k);
+    return true;
+  }).slice(0, 6);
   const dots = plants.map((p) => shownCoords(p, role)).filter(Boolean).map((pt, i) => ({ ...mapPoint(pt), selected: i === 0 }));
 
   return (
@@ -102,7 +110,40 @@ export function SpeciesProfile({ nav, params }) {
       ) : null}
       <Section title="Where it grows" right={dots.length ? <TextLink label="Open map" size={14} onPress={() => nav.go('map', { species: sp.id })} /> : null}>
         {dots.length ? (
-          <MiniMap dots={dots} label={`${plants.length} tagged plant${plants.length === 1 ? '' : 's'}`} onPress={() => nav.go('map', { species: sp.id })} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open map"
+            onPress={() => nav.go('map', { species: sp.id })}
+            style={{
+              height: 180,
+              borderRadius: 16,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: c.mapTile,
+            }}
+          >
+            <View pointerEvents="none" style={{ flex: 1 }}>
+              <LeafletMap
+                points={plants.map((p) => {
+                  const pt = shownCoords(p, role);
+                  return pt ? {
+                    id: p.id,
+                    qr_id: p.qr_id,
+                    name: p.name || sp.common_name,
+                    scientific: sp.scientific_name,
+                    color: c.accent,
+                    lat: pt.lat,
+                    lng: pt.lng,
+                  } : null;
+                }).filter(Boolean)}
+                bounds={MAP_BOUNDS}
+                interactive={false}
+                rounded
+                height="100%"
+              />
+            </View>
+          </Pressable>
         ) : (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Icon name="lock" size={18} color={c.ink2} />
@@ -172,7 +213,50 @@ export function TaggedPlant({ nav, params }) {
           ['Location', where ? <Mono size={14}>{coords(where.lat, where.lng)}</Mono> : p.lat == null ? 'Not captured when recorded.' : HIDDEN_NOTE],
         ]} />
       </Section>
-      {where ? <Section title="Where it is"><MiniMap height={140} dots={[{ ...mapPoint(where), selected: true }]} /></Section> : null}
+      {where ? (
+        <Section
+          title="Where it is"
+          right={<TextLink label="Open full map" size={14} onPress={() => nav.go('map', { species: p.species?.id })} />}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open full map"
+            onPress={() => nav.go('map', { species: p.species?.id })}
+            style={{
+              height: 180,
+              borderRadius: 16,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: c.line,
+              backgroundColor: c.mapTile,
+            }}
+          >
+            <View pointerEvents="none" style={{ flex: 1 }}>
+              <LeafletMap
+                points={[{
+                  id: p.id,
+                  qr_id: p.qr_id,
+                  name: p.name,
+                  scientific: p.scientific || '',
+                  color: c.accent,
+                  lat: where.lat,
+                  lng: where.lng,
+                }]}
+                selectedId={p.id}
+                bounds={{
+                  minLat: where.lat - 0.003,
+                  maxLat: where.lat + 0.003,
+                  minLng: where.lng - 0.003,
+                  maxLng: where.lng + 0.003,
+                }}
+                interactive={false}
+                rounded
+                height="100%"
+              />
+            </View>
+          </Pressable>
+        </Section>
+      ) : null}
       <View style={{ gap: 8 }}>
         {role === 'botanist' ? <Button label="Record a revisit" icon="plus" onPress={() => nav.go('revisit', { qr: p.qr_id })} /> : null}
         {role === 'officer' && (obs.find((o) => o.status === 'synced') || lastObs) ? (

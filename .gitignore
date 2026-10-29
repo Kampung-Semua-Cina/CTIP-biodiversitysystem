@@ -170,3 +170,6 @@ infra/mosquitto/certs/
 # OS
 .DS_Store
 Thumbs.db
+
+# JetBrains / Android Studio project files
+.idea/

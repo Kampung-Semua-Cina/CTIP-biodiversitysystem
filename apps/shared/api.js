@@ -1,9 +1,19 @@
 // apps/shared/api.js
 // Client interface to the Daun Sense REST API (services/api).
 // Works in both browser (Vite) and React Native (Expo/Metro).
+import { decodeBase64ToArrayBuffer } from "./utils.js";
 
 let inMemorySession = null;
 let customBaseUrl = null;
+let customStorage = null;
+
+export function setStorageAdapter(adapter) {
+  customStorage = adapter;
+}
+
+export function getStorageAdapter() {
+  return customStorage;
+}
 
 // Storage accessor that safely works in browser and falls back in non-browser environments
 const storage = {
@@ -62,8 +72,32 @@ export function getSession() {
 export function setSession(session) {
   inMemorySession = session?.access_token ? session : null;
   storage.remove(OLD_TOKEN_KEY);
-  if (inMemorySession) storage.set(SESSION_KEY, JSON.stringify(inMemorySession));
-  else storage.remove(SESSION_KEY);
+  if (inMemorySession) {
+    storage.set(SESSION_KEY, JSON.stringify(inMemorySession));
+    if (customStorage?.setItem) {
+      Promise.resolve(customStorage.setItem(SESSION_KEY, JSON.stringify(inMemorySession))).catch(() => {});
+    }
+  } else {
+    storage.remove(SESSION_KEY);
+    if (customStorage?.removeItem) {
+      Promise.resolve(customStorage.removeItem(SESSION_KEY)).catch(() => {});
+    }
+  }
+}
+
+export async function restoreSession() {
+  if (inMemorySession) return inMemorySession;
+  try {
+    if (customStorage?.getItem) {
+      const saved = await customStorage.getItem(SESSION_KEY);
+      if (saved && !inMemorySession) {
+        inMemorySession = JSON.parse(saved);
+      }
+    }
+  } catch {
+    inMemorySession = null;
+  }
+  return getSession();
 }
 
 export function getAuthToken() {
@@ -110,6 +144,9 @@ let refreshing = null; // one refresh at a time: each refresh token works once
  * `force` renews even when the token looks fresh: the API has just said it expired.
  */
 export async function freshAuthToken({ force = false } = {}) {
+  if (!inMemorySession && customStorage?.getItem) {
+    await restoreSession();
+  }
   const session = getSession();
   if (!session?.access_token) return null;
   const exp = expiresAt(session);
@@ -136,18 +173,22 @@ export function setApiBaseUrl(url) {
 }
 
 export function getApiBaseUrl() {
-  if (customBaseUrl) return customBaseUrl;
-  // React Native also defines window, so check it first. A phone cannot use a
-  // relative path or its own localhost: set EXPO_PUBLIC_API_URL (apps/mobile/.env,
-  // eas.json) to the API's address, e.g. http://192.168.1.20:8000.
-  // Expo inlines EXPO_PUBLIC_ variables only when written out in full like this.
-  if (typeof navigator !== "undefined" && navigator.product === "ReactNative") {
+  if (customBaseUrl) return customBaseUrl.endsWith("/v1") ? customBaseUrl : customBaseUrl + "/v1";
+
+  // Check if we are running in React Native / Expo environment.
+  // In React Native, `document` is undefined, whereas in web browser `document` is defined.
+  const isRN =
+    (typeof navigator !== "undefined" && (navigator.product === "ReactNative" || /ReactNative/i.test(navigator.userAgent || ""))) ||
+    (typeof document === "undefined" && typeof window !== "undefined") ||
+    (typeof globalThis !== "undefined" && Boolean(globalThis.Expo || globalThis.HermesInternal || globalThis.__fbBatchedBridge || globalThis.nativeCallSyncHook));
+
+  if (isRN) {
     const fromEnv = typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL : undefined;
     return fromEnv ? fromEnv.replace(/\/+$/, "") + "/v1" : "https://ctip-biodiversitysystem.onrender.com/v1";
   }
+
   // Browser environment: use Vite proxy path or environment variable
-  if (typeof window !== "undefined") {
-    // If running under Vite in dev or preview, check env
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
     try {
       if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) {
         return import.meta.env.VITE_API_URL.replace(/\/+$/, "") + "/v1";
@@ -158,6 +199,7 @@ export function getApiBaseUrl() {
     // Default to /v1 in web browser (proxied by Vite to https://ctip-biodiversitysystem.onrender.com/v1)
     return "/v1";
   }
+
   // Default to Render API for node / mobile
   return "https://ctip-biodiversitysystem.onrender.com/v1";
 }
@@ -182,12 +224,13 @@ export async function apiFetch(path, options = {}) {
   }
 
   let body = options.body;
-  if (body && typeof body === "object" && !(body instanceof FormData)) {
+  const isFormData = (typeof FormData !== "undefined" && body instanceof FormData) || (body && typeof body.append === "function");
+  if (body && typeof body === "object" && !isFormData) {
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(body);
   }
 
-  const timeoutMs = options.timeout ?? 8000;
+  const timeoutMs = options.timeout ?? 30000;
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
@@ -454,7 +497,8 @@ export async function fetchWorkspace({ token } = {}) {
 }
 
 const enc = encodeURIComponent;
-const send = (method, path, body, token) => apiFetch(path, { method, token, body });
+const send = (method, path, body, token, options = {}) =>
+  apiFetch(path, { method, token, body, timeout: options?.timeout ?? 60000, ...options });
 
 // Own account
 export const updateMeApi = (changes, { token } = {}) => send("PATCH", "/me", changes, token);
@@ -472,25 +516,64 @@ export const createObservationApi = (obs, { token } = {}) => send("POST", "/obse
 export const submitObservationApi = (id, body = {}, { token } = {}) => send("POST", `/observations/${enc(id)}/submit`, body, token);
 export const addCommentApi = (id, body, { token } = {}) => send("POST", `/observations/${enc(id)}/comments`, { body }, token);
 
-// The file part of an upload. In the browser a File or Blob; in React Native
-// FormData takes { uri, name, type } and streams the file from the device.
-const isReactNative = typeof navigator !== "undefined" && navigator.product === "ReactNative";
+// The file part of an upload. In the browser a File or Blob; in React Native / Expo,
+// standard Blob, File or WinterCG part with bytes, with fallback to legacy URI.
 export async function filePart(photo) {
+  if (!photo) return null;
   if (photo.file) return photo.file;
-  if (!photo.url) return null;
-  if (isReactNative && !/^https?:/i.test(photo.url)) {
-    return { uri: photo.url, name: photo.name || "photo.jpg", type: photo.type || "image/jpeg" };
+  if (!photo.url && !photo.base64) return null;
+
+  const fileName = photo.name || "photo.jpg";
+  const mimeType = photo.type || "image/jpeg";
+
+  // 1. If base64 is available (from mobile camera/gallery with base64: true, or data URL)
+  const b64 = photo.base64 || (photo.url && photo.url.startsWith("data:") ? photo.url : null);
+  if (b64) {
+    const buffer = decodeBase64ToArrayBuffer(b64);
+    const uint8 = new Uint8Array(buffer);
+    let blob = null;
+    if (typeof Blob !== "undefined") {
+      try {
+        blob = new Blob([uint8], { type: mimeType });
+      } catch {}
+    }
+    const part = blob || {};
+    try { Object.defineProperty(part, "name", { value: fileName, writable: true, configurable: true }); } catch { part.name = fileName; }
+    try { Object.defineProperty(part, "bytes", { value: () => uint8, writable: true, configurable: true }); } catch { part.bytes = () => uint8; }
+    if (!part.type) {
+      try { Object.defineProperty(part, "type", { value: mimeType, writable: true, configurable: true }); } catch { part.type = mimeType; }
+    }
+    if (photo.url) {
+      try { Object.defineProperty(part, "uri", { value: photo.url, writable: true, configurable: true }); } catch { part.uri = photo.url; }
+    }
+    return part;
   }
-  try {
-    return await (await fetch(photo.url)).blob();
-  } catch {
-    return null;
+
+  // 2. Fetch url as Blob (standard web / modern Expo fetch)
+  if (photo.url) {
+    try {
+      const res = await fetch(photo.url);
+      const blob = await res.blob();
+      try { Object.defineProperty(blob, "name", { value: fileName, writable: true, configurable: true }); } catch { blob.name = fileName; }
+      try { Object.defineProperty(blob, "bytes", { value: async () => new Uint8Array(await blob.arrayBuffer()), writable: true, configurable: true }); } catch {}
+      try { Object.defineProperty(blob, "uri", { value: photo.url, writable: true, configurable: true }); } catch { blob.uri = photo.url; }
+      return blob;
+    } catch {
+      // In case fetch is not supported for this URI scheme, return the RN uri descriptor
+      return {
+        uri: photo.url,
+        name: fileName,
+        type: mimeType,
+      };
+    }
   }
+
+  return null;
 }
 
 /**
  * Field photo: POST /v1/observations/:id/photos. photo is the app's photo
- * object ({ file } on web, { url: file:// or content:// } on mobile). Its id is
+ * object ({ file } on web, { url: file:// or content://, base64 } on mobile). Its id is
  * sent too, so a retry does not save the same photo twice.
  */
 export async function uploadObservationPhotoApi(observationId, photo, { token } = {}) {
@@ -498,8 +581,19 @@ export async function uploadObservationPhotoApi(observationId, photo, { token } 
   if (!part) return { ok: false, code: "UNREADABLE_PHOTO", message: "This photo could not be read. Remove it and add it again." };
   const form = new FormData();
   if (photo.id) form.append("id", photo.id);
-  if (part.uri) form.append("file", part);
-  else form.append("file", part, part.name || photo.name || "photo");
+  const fileName = photo.name || part.name || "photo.jpg";
+
+  if (typeof Blob !== "undefined" && part instanceof Blob) {
+    form.append("file", part, fileName);
+  } else if (typeof part.bytes === "function") {
+    // Expo WinterCG fetch accepts any object with a bytes() method
+    form.append("file", part, fileName);
+  } else if (part.uri) {
+    // React Native legacy FormData
+    form.append("file", part);
+  } else {
+    form.append("file", part, fileName);
+  }
   return apiFetch(`/observations/${enc(observationId)}/photos`, { method: "POST", token, body: form, timeout: 60000 });
 }
 

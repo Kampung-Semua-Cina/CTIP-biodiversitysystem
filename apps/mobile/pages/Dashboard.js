@@ -7,7 +7,7 @@ import { View, Text, FlatList, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
-import { visiblePlants, nameOf } from '../../shared/selectors.js';
+import { visiblePlants, nameOf, speciesCatalogue } from '../../shared/selectors.js';
 import { THREATENED } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
@@ -112,7 +112,7 @@ function SpeciesCatalogue({ nav, params, onView }) {
   const staff = role !== 'visitor';
 
   // Published species only for visitors; staff also see unpublished ones.
-  const species = db.species.filter((s) => !s.is_deleted && (staff || s.is_published));
+  const species = speciesCatalogue(db, role);
   const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
   const plants = visiblePlants(db, role);
 
@@ -248,7 +248,7 @@ function SpeciesCatalogue({ nav, params, onView }) {
 }
 
 function SpeciesRow({ s, plants, staff, onPress }) {
-  const photo = s.photo || s.primary_image_url || plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
+  const photo = s.photo || s.primary_image_url || s.media?.[0]?.url || plants.find((p) => p.species_id === s.id && p.photos?.length)?.photos[0]?.url;
   return (
     <View style={{ height: ROW_HEIGHT }}>
       <Row

@@ -30,7 +30,7 @@
     "react-native-webview": "13.16.1"
   },
   "scripts": {
-    "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start             Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel            Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel      Alias for npm run tunnel\\n  npm run android           Launch directly on connected Android device or emulator\\n  npm run android:tunnel    Launch on Android device with tunnel enabled\\n  npm run ios               Launch on iOS simulator\\n  npm run web               Launch in web browser mode\\n  npm run app-version       Show the app version (1.0.<commit count>)\\n  npm run build:apk         Build the Android APK on EAS with that version\\n  npm run test:agent        Run automated Android emulator + local AI agent test suite\\n  npm run test:agent:ui     Launch interactive Web Test Studio dashboard\\n  npm run test:agent:watch  Run mobile agent tests in live watch mode\\n')\"",
+    "instructions": "node -e \"console.log('\\n=== MOBILE APP (EXPO) INSTRUCTIONS ===\\n\\n  npm run start             Start Expo dev server (local LAN - phone must be on same Wi-Fi)\\n  npm run tunnel            Start Expo with tunnel (connect from ANY network / cellular / remote)\\n  npm run start:tunnel      Alias for npm run tunnel\\n  npm run android           Launch directly on connected Android device or emulator\\n  npm run android:tunnel    Launch on Android device with tunnel enabled\\n  npm run ios               Launch on iOS simulator\\n  npm run web               Launch in web browser mode\\n  npm run app-version       Show the app version (1.0.<commit count>)\\n  npm run build:apk         Build the Android APK on EAS Cloud\\n  npm run build:apk:local   Build the Android APK locally (inside WSL)\\n  npm run test:agent        Run automated Android emulator + local AI agent test suite\\n  npm run test:agent:ui     Launch interactive Web Test Studio dashboard\\n  npm run test:agent:watch  Run mobile agent tests in live watch mode\\n')\"",
     "help": "npm run instructions",
     "start": "npx expo start",
     "tunnel": "npx expo start --tunnel",
@@ -42,6 +42,7 @@
     "web": "npx expo start --web",
     "app-version": "node ../../scripts/version.mjs",
     "build:apk": "node scripts/build-apk.mjs",
+    "build:apk:local": "node scripts/build-apk.mjs --local",
     "test": "node --test tests/agent-*.test.mjs",
     "test:agent": "node --test tests/agent-*.test.mjs",
     "test:agent:ui": "node tests/helpers/mobileUiServer.mjs",
