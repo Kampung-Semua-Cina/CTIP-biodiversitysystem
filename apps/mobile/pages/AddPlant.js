@@ -497,6 +497,7 @@ export function AddPlant({ nav, params = {} }) {
           <Txt v="body" color={c.ink2} style={{ fontSize: 15 }}>Tag</Txt>
           <Mono size={15}>{qr}</Mono>
           <View style={{ flexDirection: 'row', gap: 12, marginLeft: 'auto' }}>
+            <TextLink label="Show QR" onPress={() => nav.go('tagQr', { qr })} />
             <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
             <TextLink label="Generate" onPress={generateNewTag} />
             <TextLink label="Gallery" onPress={pickQrFromGallery} />

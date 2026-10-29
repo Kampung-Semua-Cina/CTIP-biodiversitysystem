@@ -150,6 +150,7 @@ export function TaggedPlant({ nav, params }) {
           <Icon name="qr" size={16} color={c.ink} />
           <Mono size={13}>{p.qr_id}</Mono>
         </View>
+        {staff ? <View style={{ alignSelf: 'flex-start' }}><TextLink label="Show QR code" onPress={() => nav.go('tagQr', { qr: p.qr_id })} /></View> : null}
         <Text accessibilityRole="header" style={{ fontFamily: font('display', 700), fontSize: 28, lineHeight: 34, color: c.ink }}>{p.name}</Text>
         {p.scientific ? <Sci size={16}>{p.scientific}{p.species?.family ? ` · ${p.species.family}` : ''}</Sci> : null}
         {staff ? <View style={{ flexDirection: 'row', gap: 8, paddingTop: 6 }}><Chip status={p.status} />{p.endangered ? <Chip status="endangered" /> : null}</View> : null}
