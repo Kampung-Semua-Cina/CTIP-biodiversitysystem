@@ -2,9 +2,9 @@
 
 Context for Claude Code working in this repository.
 
-*Last checked against `main` (`34f0c50`) on 30 Oct 2026. Jira and the live
+*Last checked against `main` (`28ec4a4`) on 30 Oct 2026. Jira and the live
 Supabase project were last fully checked on 29 Oct; the CTIP-26, 27, 33, 63,
-107, 111, 116 and 117 statuses, the live `qr_tags` policy and the migration
+107, 111, 116 to 119 statuses, the live `qr_tags` policy and the migration
 history were rechecked on 30 Oct.*
 
 ## Project
@@ -258,12 +258,10 @@ database (Docker is not installed), so every push goes straight to it.
   it in the SQL Editor), do not push it again: mark it as applied with
   `npx supabase migration repair --status applied <timestamp>`, then dry-run
   again.
-- As of 30 Oct 2026 the history is **not** in step: 14 migration files.
-  The first 13, up to `20261029120000_approve_requires_species`, are applied and
-  recorded. `20261030000000_public_plant_by_tag` (CTIP-33) was run by hand in the
-  SQL Editor: its function is live but the CLI does not know it. Before the next
-  push, run `npx supabase migration repair --status applied 20261030000000`,
-  then `npx supabase db push --dry-run` should list nothing.
+- As of 30 Oct 2026 the history is in step: all 14 migration files, up to
+  `20261030000000_public_plant_by_tag` (CTIP-33), are applied and recorded. (That
+  one was first run by hand in the SQL Editor, then recorded on 30 Oct; the live
+  function matches the file.)
 - **One exception, CTIP-111:** the live `qr: staff write` policy on `qr_tags` was
   edited by hand to allow botanists for **all** commands (so a botanist can make
   one tag, CTIP-27). The migration still says officer and admin only. A fresh
@@ -313,11 +311,11 @@ Progress, no mark = To Do.
 | Stream | Owner | Stories |
 |---|---|---|
 | **A. Mobile app UI** | Patrick | CTIP-42 app shell & login R, CTIP-15 QR scan, CTIP-55 photos P, CTIP-56 GPS P, CTIP-57 crash-safe draft P, CTIP-58 submit with retry, CTIP-45 submission status P, CTIP-31 map ✓, CTIP-70 clustering & filters P, CTIP-71 hide endangered coordinates ✓, CTIP-51 innovation (optional) |
-| **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R, CTIP-117 mobile UI polish R (all merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
+| **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R, CTIP-117 mobile UI polish R, CTIP-118 prototype leftovers removed R (all merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
 | **C. Backend API & database** | Nicole (API), Amberlyn | Nicole: CTIP-46, 54, 85, 86, 87, 88, 89 ✓. Amberlyn: CTIP-32 report export P. Capture flow CTIP-103 to 106 ✓ (unassigned). **Unassigned:** CTIP-108 remaining specimen and observation routes |
 | **D. Web knowledge system** | Ricardo | CTIP-43 login ✓, CTIP-28 species ✓, CTIP-64 photos ✓, CTIP-65 soft delete ✓, CTIP-29 review queue ✓, CTIP-69 approve/reject ✓, CTIP-30 search ✓, CTIP-33 visitor QR page R (merged 30 Oct, #36), CTIP-109 zone filter |
 | **E. IoT & anomaly detection** | Norman | CTIP-17, 48, 59, 60, 61 ✓ in Jira (no code on `main` yet). To do: CTIP-47 simulator, CTIP-62 webcam images, CTIP-38 threshold rules, CTIP-75 statistical model, CTIP-76 node silent, CTIP-77 notifications, CTIP-78 acknowledge/resolve |
-| **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption ✓, CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage |
+| **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption ✓, CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage, CTIP-119 mobile session in SecureStore |
 | **G. Security testing & QA** | Michelle | CTIP-18 threat model ✓, CTIP-36 test plan P (branch not merged), CTIP-37 run assessment P, CTIP-49 CI & tests, CTIP-74 reassessment. IoT dashboard: CTIP-39 P, CTIP-79, CTIP-81, CTIP-82 |
 
 Project management: Albian owns CTIP-91 (final report); its section subtasks
@@ -391,23 +389,25 @@ Two sprints, Scrum.
 
 Sprint 2 is in progress (ends 12 Nov). In Jira on 29 Oct: 25 Sprint 2 stories
 Done, 6 In Review, 13 In Progress, the rest To Do (see Workstreams). Since then
-CTIP-107 is Done, CTIP-26, 27, 33 and 63 are In Review, and CTIP-117 (mobile UI
-polish) was added and is In Review.
+CTIP-107 is Done; CTIP-26, 27, 33 and 63 are In Review; CTIP-117 (mobile UI
+polish) and CTIP-118 (prototype leftovers) were added and are In Review;
+CTIP-119 (mobile session in SecureStore) was added as To Do.
 
-**On `main`** (`34f0c50`, 30 Oct). `rick3` (PR #26) was merged on 29 Oct after
+**On `main`** (`28ec4a4`, 30 Oct). `rick3` (PR #26) was merged on 29 Oct after
 its blockers were fixed (no secret key, no direct Supabase access, CI green,
 endangered coordinates protected); then CTIP-113, CTIP-28 and the switch to the
 Render API (#27, #28, #30), CTIP-107 SQLite encryption (#31), and on 30 Oct
 CTIP-26 species search (#33), CTIP-27 QR generation (#34, follow-up #37),
-CTIP-63 pre-fill (#35), CTIP-33 visitor QR page (#36) and CTIP-117 mobile UI
-polish (#38).
+CTIP-63 pre-fill (#35), CTIP-33 visitor QR page (#36), CTIP-117 mobile UI
+polish (#38), the CLAUDE.md update (#39), CTIP-118 prototype leftovers (#41)
+and Patrick's mobile fixes (#40, no story).
 
 - **Both apps run on live data through the API.** Staff sign in through
   `POST /v1/auth/sign-in`; the store loads with `GET /v1/workspace` (staff) or
   `GET /v1/public/workspace` (visitors). The sample data in
   `apps/shared/data.js` is now an empty seed, except the leftovers listed below.
 - **API** (`services/api`): 71 routes, all with token and role checks; **56
-  built**, about 124 tests in CI. The 15 that still answer 501:
+  built**, about 124 API tests and 39 shared tests in CI. The 15 that still answer 501:
   - `GET /species/:id/media`, `GET /specimens`, `GET /specimens/:id`,
     `PATCH /observations/:id`, `DELETE /observations/:id`,
     `POST /observations/:id/photos/:photoId/confirm` (CTIP-108)
@@ -418,8 +418,8 @@ polish (#38).
   - Reports: `GET /reports/observations`, `GET /reports/species` (CTIP-32)
 - **OpenAPI contract:** 51 paths, 71 operations, kept in step with
   `permissions.js` by `contract.test.js`.
-- **Supabase:** 14 migrations; the newest is live but not recorded (see
-  Database changes). Visitors read one plant by tag through
+- **Supabase:** 14 migrations, all applied and recorded (see Database
+  changes). Visitors read one plant by tag through
   `public_plant_by_tag()` (`20261030000000`), never the `specimens` table. Officers and
   admins get notifications from database triggers (`20261029000000`); approval
   needs a species, and decisions can only be written through
@@ -438,13 +438,21 @@ polish (#38).
   "Generate new QR tag" and "Show QR" (CTIP-27, #37).
 - **Mobile Plants tab (CTIP-117, #38):** Tagged plants and Species switch in
   place (`nav.replace` with `{ view }`), in one fixed order per role.
+- **Mobile fixes from #40 (Patrick):** the app stays signed in after a restart
+  (`setStorageAdapter(AsyncStorage)` in `App.js`, `restoreSession()` in
+  `apps/shared/api.js`; see the security note below), photo uploads send bytes
+  that Expo's fetch accepts, a revisit sends its location and retries, plant and
+  species pages show a real Leaflet map (`shownCoords()`, so endangered spots
+  stay reduced), and API calls wait 30 s (60 s for writes) for Render's cold
+  start.
 
 **Not merged:** `CTIP-36-Test-Plan` (Michelle),
 `docs/CTIP-26-27-63-implementation-plan` (Albian; plan only).
 Merged and safe to delete: `feature/CTIP-63-prefill-from-species`,
 `rick-CTIP-33`, `fix/CTIP-27-generate-without-tag`,
-`fix/CTIP-117-mobile-ui-polish`, and `fix/mobile-ui-polish` (an earlier name
-of the CTIP-117 branch, never used).
+`fix/CTIP-117-mobile-ui-polish`, `chore/CTIP-118-cleanup-main`,
+`Patrick1-mobile`, and `fix/mobile-ui-polish` (an earlier name of the CTIP-117
+branch, never used).
 
 **Not started or not committed:** ESP32 firmware (`apps/firmware/` is empty),
 MQTT bridge, sensor simulator and anomaly detection (`services/anomaly-detection/`
@@ -461,7 +469,10 @@ wording) were removed with CTIP-118 on 30 Oct.
 `docs/updates/rick3-bugs.md` §3. Still open: new sign-ups default to active
 botanists (H1, also CTIP-72), deactivated accounts can still write through RLS
 (M1), sessions kept in `localStorage` on the web (L1), 24-hour private photo
-links (L2), the hand-edited `qr_tags` policy (CTIP-111, see Database changes).
+links (L2), the hand-edited `qr_tags` policy (CTIP-111, see Database changes),
+and since #40 the mobile session, refresh token included, kept unencrypted in
+AsyncStorage (the mobile counterpart of L1; CTIP-119 moves it to
+`expo-secure-store`).
 Supabase advisor (29 Oct): leaked password protection is off, and
 the `SECURITY DEFINER` functions `my_role` and `review_observation` can be
 called by any signed-in user through `/rest/v1/rpc/` (`review_observation`
@@ -539,6 +550,10 @@ checks the role itself).
   clever code, and explain non-obvious choices in comments or PR descriptions.
 - Everyone is on Windows. Use PowerShell-compatible commands. `python`, not
   `python3`. Venv activation is `.venv\Scripts\Activate.ps1`.
+- The mobile API address is set twice: `index.js` calls `configureApiAddress()`
+  (`apiAddress.js`) and `App.js` calls `setApiBaseUrl()`. Both read
+  `EXPO_PUBLIC_API_URL`, and `getApiBaseUrl()` adds `/v1` if it is missing, so
+  change both together or remove one.
 - **Both apps talk to the live Render API by default**, even in local dev: the
   web dev server proxies `/v1` to Render, and the mobile app falls back to
   `https://ctip-biodiversitysystem.onrender.com/v1`. To test API changes locally,
@@ -573,7 +588,10 @@ checks the role itself).
   its dashboard (Render), start the API with `node src/server.js` instead.
 - EAS builds (APKs) do not upload `.env`, because it is gitignored. Put the
   app's `EXPO_PUBLIC_*` values in the build profile in `apps/mobile/eas.json`.
-  Build with `npm run mobile:build:apk` so the version is stamped. A release APK
+  Build with `npm run mobile:build:apk` so the version is stamped
+  (`npm run build:apk:local` in `apps/mobile` builds inside WSL with the
+  `preview-local` / `production-local` profiles). `apps/shared/version.json` is
+  written and deleted around each build: never commit it. A release APK
   cannot reach `localhost` and blocks plain `http://`, so it needs the API on a
   public `https://` address. Older APKs that signed in to Supabase directly stop
   working properly; everyone should install a current one.
