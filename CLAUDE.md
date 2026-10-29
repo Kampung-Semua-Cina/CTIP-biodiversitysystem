@@ -2,9 +2,10 @@
 
 Context for Claude Code working in this repository.
 
-*Last checked against `main` (`7cc8efa`) on 30 Oct 2026. Jira and the live
-Supabase project were last fully checked on 29 Oct; the CTIP-26, 27, 63, 107,
-111 and 116 statuses and the live `qr_tags` policy were rechecked on 30 Oct.*
+*Last checked against `main` (`34f0c50`) on 30 Oct 2026. Jira and the live
+Supabase project were last fully checked on 29 Oct; the CTIP-26, 27, 33, 63,
+107, 111, 116 and 117 statuses, the live `qr_tags` policy and the migration
+history were rechecked on 30 Oct.*
 
 ## Project
 
@@ -133,10 +134,14 @@ rather than silently building something different.
   and tag IDs are always looked up locally. The list returns one cover photo
   (`primary_image_url`), genus and description; paging is opt-in (`page`/`limit`),
   so the web catalogue still gets every species in one call.
-- **QR tags link to `https://ctip-biodiversitysystem.pages.dev/#/dashboard/<tag>`**
+- **QR tags link to `https://ctip-biodiversitysystem.pages.dev/#/tag/<tag>`**
   (`tagUrl()` in `apps/shared/selectors.js`; on the web it uses the current
-  address). That route has no permission check and shows the public plant page
-  to visitors, so tags printed on the web and made on the phone (CTIP-27) match.
+  address), the visitor plant page (CTIP-33, #36). Tags printed earlier hold
+  `#/dashboard/<tag>`, which still opens the same page, so never remove that
+  route. The app's scanner reads only the `NIAH-####` part, so both work there.
+  Visitors get the plant from `GET /public/tags/:qrId`: approved plants on
+  published species only, endangered spots reduced, 30 lookups a minute per
+  caller address.
 - **One app version for web and mobile:** `1.0.<commit count>` from
   `scripts/version.mjs` (MAJOR.MINOR from the root `package.json`). Shown in
   the web footer and stamped into APK builds.
@@ -197,6 +202,7 @@ services/
     src/permissions.js  allowed roles for every route
     src/handlers.js     joins the endpoint groups; any route without a handler answers 501
     src/session.js      sign-in, refresh, sign-out, passwords (CTIP-114)
+    src/rateLimit.js    per-address limits: sign-in, password reset, visitor tag lookup
     src/species.js, speciesMedia.js, observations.js, distribution.js,
     src/field.js        QR tags, specimens, observations and photos (capture flow)
     src/staff.js        workspace load, profiles, alerts, notifications, sensor nodes
@@ -252,8 +258,12 @@ database (Docker is not installed), so every push goes straight to it.
   it in the SQL Editor), do not push it again: mark it as applied with
   `npx supabase migration repair --status applied <timestamp>`, then dry-run
   again.
-- As of 29 Oct 2026 the history is in step: all 13 migration files, up to
-  `20261029120000_approve_requires_species`, are applied and recorded.
+- As of 30 Oct 2026 the history is **not** in step: 14 migration files.
+  The first 13, up to `20261029120000_approve_requires_species`, are applied and
+  recorded. `20261030000000_public_plant_by_tag` (CTIP-33) was run by hand in the
+  SQL Editor: its function is live but the CLI does not know it. Before the next
+  push, run `npx supabase migration repair --status applied 20261030000000`,
+  then `npx supabase db push --dry-run` should list nothing.
 - **One exception, CTIP-111:** the live `qr: staff write` policy on `qr_tags` was
   edited by hand to allow botanists for **all** commands (so a botanist can make
   one tag, CTIP-27). The migration still says officer and admin only. A fresh
@@ -303,9 +313,9 @@ Progress, no mark = To Do.
 | Stream | Owner | Stories |
 |---|---|---|
 | **A. Mobile app UI** | Patrick | CTIP-42 app shell & login R, CTIP-15 QR scan, CTIP-55 photos P, CTIP-56 GPS P, CTIP-57 crash-safe draft P, CTIP-58 submit with retry, CTIP-45 submission status P, CTIP-31 map ✓, CTIP-70 clustering & filters P, CTIP-71 hide endangered coordinates ✓, CTIP-51 innovation (optional) |
-| **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R (all three merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
+| **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R, CTIP-117 mobile UI polish R (all merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
 | **C. Backend API & database** | Nicole (API), Amberlyn | Nicole: CTIP-46, 54, 85, 86, 87, 88, 89 ✓. Amberlyn: CTIP-32 report export P. Capture flow CTIP-103 to 106 ✓ (unassigned). **Unassigned:** CTIP-108 remaining specimen and observation routes |
-| **D. Web knowledge system** | Ricardo | CTIP-43 login ✓, CTIP-28 species ✓, CTIP-64 photos ✓, CTIP-65 soft delete ✓, CTIP-29 review queue ✓, CTIP-69 approve/reject ✓, CTIP-30 search ✓, CTIP-33 visitor QR page, CTIP-109 zone filter |
+| **D. Web knowledge system** | Ricardo | CTIP-43 login ✓, CTIP-28 species ✓, CTIP-64 photos ✓, CTIP-65 soft delete ✓, CTIP-29 review queue ✓, CTIP-69 approve/reject ✓, CTIP-30 search ✓, CTIP-33 visitor QR page R (merged 30 Oct, #36), CTIP-109 zone filter |
 | **E. IoT & anomaly detection** | Norman | CTIP-17, 48, 59, 60, 61 ✓ in Jira (no code on `main` yet). To do: CTIP-47 simulator, CTIP-62 webcam images, CTIP-38 threshold rules, CTIP-75 statistical model, CTIP-76 node silent, CTIP-77 notifications, CTIP-78 acknowledge/resolve |
 | **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption ✓, CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage |
 | **G. Security testing & QA** | Michelle | CTIP-18 threat model ✓, CTIP-36 test plan P (branch not merged), CTIP-37 run assessment P, CTIP-49 CI & tests, CTIP-74 reassessment. IoT dashboard: CTIP-39 P, CTIP-79, CTIP-81, CTIP-82 |
@@ -320,9 +330,10 @@ Notes:
   people**, so nobody tests their own code. G finds, F fixes (CTIP-37 → CTIP-50).
 - Several stories are In Review although their code is already on `main`
   (CTIP-42, 102, 113, 114): move them on once their acceptance criteria are checked.
-  CTIP-26, 27 and 63 are the same: merged on 30 Oct (#33, #34, #35) without a
-  second approval, and their phone checks (plan tasks 3–4, 6 and 7) are not
-  recorded yet. CTIP-63 also waits on the species ID decision (Open decisions).
+  CTIP-26, 27, 63 and 117 are the same: merged on 30 Oct (#33 to #35, #37,
+  #38) without a second approval, and their phone checks are not recorded yet
+  (listed in each PR). CTIP-63 also waits on the species ID decision (Open
+  decisions). CTIP-33 (#36) is merged and In Review too.
 
 Team: Albian (Product Owner), Nicole (Scrum Master), Amberlyn, Michelle, Norman,
 Patrick, Ricardo. All seven also act as developers.
@@ -380,21 +391,23 @@ Two sprints, Scrum.
 
 Sprint 2 is in progress (ends 12 Nov). In Jira on 29 Oct: 25 Sprint 2 stories
 Done, 6 In Review, 13 In Progress, the rest To Do (see Workstreams). Since then
-CTIP-107 is Done and CTIP-26, 27 and 63 are In Review.
+CTIP-107 is Done, CTIP-26, 27, 33 and 63 are In Review, and CTIP-117 (mobile UI
+polish) was added and is In Review.
 
-**On `main`** (`7cc8efa`, 30 Oct). `rick3` (PR #26) was merged on 29 Oct after
+**On `main`** (`34f0c50`, 30 Oct). `rick3` (PR #26) was merged on 29 Oct after
 its blockers were fixed (no secret key, no direct Supabase access, CI green,
 endangered coordinates protected); then CTIP-113, CTIP-28 and the switch to the
 Render API (#27, #28, #30), CTIP-107 SQLite encryption (#31), and on 30 Oct
-CTIP-26 species search (#33), CTIP-27 QR generation (#34) and CTIP-63 pre-fill
-(#35).
+CTIP-26 species search (#33), CTIP-27 QR generation (#34, follow-up #37),
+CTIP-63 pre-fill (#35), CTIP-33 visitor QR page (#36) and CTIP-117 mobile UI
+polish (#38).
 
 - **Both apps run on live data through the API.** Staff sign in through
   `POST /v1/auth/sign-in`; the store loads with `GET /v1/workspace` (staff) or
   `GET /v1/public/workspace` (visitors). The sample data in
   `apps/shared/data.js` is now an empty seed, except the leftovers listed below.
-- **API** (`services/api`): 70 routes, all with token and role checks; **55
-  built**, about 117 tests in CI. The 15 that still answer 501:
+- **API** (`services/api`): 71 routes, all with token and role checks; **56
+  built**, about 124 tests in CI. The 15 that still answer 501:
   - `GET /species/:id/media`, `GET /specimens`, `GET /specimens/:id`,
     `PATCH /observations/:id`, `DELETE /observations/:id`,
     `POST /observations/:id/photos/:photoId/confirm` (CTIP-108)
@@ -403,9 +416,11 @@ CTIP-26 species search (#33), CTIP-27 QR generation (#34) and CTIP-63 pre-fill
     `GET /sensor-nodes/:id/telemetry`, `POST /telemetry`, both
     `/sensor-nodes/:id/images` routes
   - Reports: `GET /reports/observations`, `GET /reports/species` (CTIP-32)
-- **OpenAPI contract:** 50 paths, 70 operations, kept in step with
+- **OpenAPI contract:** 51 paths, 71 operations, kept in step with
   `permissions.js` by `contract.test.js`.
-- **Supabase:** 13 migrations, all applied (see Database changes). Officers and
+- **Supabase:** 14 migrations; the newest is live but not recorded (see
+  Database changes). Visitors read one plant by tag through
+  `public_plant_by_tag()` (`20261030000000`), never the `specimens` table. Officers and
   admins get notifications from database triggers (`20261029000000`); approval
   needs a species, and decisions can only be written through
   `review_observation()` (`20261029120000`). There is no seed script.
@@ -416,19 +431,20 @@ CTIP-26 species search (#33), CTIP-27 QR generation (#34) and CTIP-63 pre-fill
   `cd apps/mobile && npx expo export --platform android --output-dir <tmp folder>`
   (catches broken imports), and delete the folder afterwards.
 - **Mobile capture extras (30 Oct):** species search and pick in Add plant
-  (`SpeciesPicker`), API search in the Plants tab, and a `tagQr` screen that
-  draws a tag's QR and shares or saves it as a PNG (`react-native-qrcode-svg`,
-  `react-native-view-shot`, `expo-sharing`).
-- **Known gap (CTIP-27):** a botanist cannot reach Add plant's "Generate new QR
-  tag" screen without a tag. The Add plant tab opens Scan, and Scan only goes
-  on to Add plant with a known unused tag. Botanists can still generate from
-  inside a started record (tag row "Generate", which swaps the record to the
-  new tag) and show any plant's QR from its page ("Show QR code").
+  (`SpeciesPicker`), API search in the Plants tab, and a tag's QR drawn on the
+  phone and shared or saved as a PNG (`TagQrView` in `pages/TagQr.js`;
+  `react-native-qrcode-svg`, `react-native-view-shot`, `expo-sharing`). A
+  botanist with no tag uses "No tag? Make a new one" on Scan, then
+  "Generate new QR tag" and "Show QR" (CTIP-27, #37).
+- **Mobile Plants tab (CTIP-117, #38):** Tagged plants and Species switch in
+  place (`nav.replace` with `{ view }`), in one fixed order per role.
 
-**Not merged:** `CTIP-36-Test-Plan` (Michelle), `rick-CTIP-33` (visitor QR page),
-`docs/CTIP-26-27-63-implementation-plan` (Albian; its tasks 5–6 still say
-`#/tag/`, the code uses `#/dashboard/`). `feature/CTIP-63-prefill-from-species`
-is merged and can be deleted.
+**Not merged:** `CTIP-36-Test-Plan` (Michelle),
+`docs/CTIP-26-27-63-implementation-plan` (Albian; plan only).
+Merged and safe to delete: `feature/CTIP-63-prefill-from-species`,
+`rick-CTIP-33`, `fix/CTIP-27-generate-without-tag`,
+`fix/CTIP-117-mobile-ui-polish`, and `fix/mobile-ui-polish` (an earlier name
+of the CTIP-117 branch, never used).
 
 **Not started or not committed:** ESP32 firmware (`apps/firmware/` is empty),
 MQTT bridge, sensor simulator and anomaly detection (`services/anomaly-detection/`
@@ -440,8 +456,8 @@ plan (`docs/testing/` is empty on `main`).
 `apps/shared/data.js` (`initialProfiles`, S3); the web "Scan or upload QR"
 button picks the next unused tag instead of reading the image (S6); unused
 `apps/mobile/components/PhotoEditor.js` adds Unsplash stock photos (S7);
-prototype wording ("Local Prototype" chip in `Account.jsx`, "Sample data only…"
-in mobile `Chrome.js`, S8).
+prototype wording ("Local Prototype" chip in web `Account.jsx`, S8; the mobile
+"Sample data only…" line went with the role switch in #36).
 
 **Open security findings, for the assessment (CTIP-37):** see
 `docs/updates/rick3-bugs.md` §3. Still open: new sign-ups default to active
@@ -482,9 +498,10 @@ checks the role itself).
   protection always apply. Never add an "admin client" or a direct-Supabase
   fallback when something is refused: fix the policy in a migration or add the
   action to the API.
-- Sign-in is limited to 10 tries per caller address every 5 minutes
-  (`429 TOO_MANY_ATTEMPTS`). On a host behind a proxy, set `TRUST_PROXY=1` or
-  every caller shares one limit.
+- Sign-in is limited to 10 tries per caller address every 5 minutes, and the
+  visitor tag lookup to 30 a minute (`429 TOO_MANY_ATTEMPTS`,
+  `services/api/src/rateLimit.js`). On a host behind a proxy, set
+  `TRUST_PROXY=1` or every caller shares one limit.
 - **The API reads the role from the `user_role` claim** in the Supabase access
   token, added by the `custom_access_token_hook` migration. Never read the role
   from the request body. Local `supabase start` turns the hook on from
@@ -502,9 +519,11 @@ checks the role itself).
   `location_reduced: true`, null stays null, unknown species fails closed). Any
   new endpoint that returns specimens must use it; this is a test case in the
   security assessment.
-- The demo role switcher exists only in local dev builds (`ROLE_SWITCH_ENABLED`
-  in `StoreProvider.js`: `import.meta.env.DEV` / `__DEV__`), and its password
-  comes only from a gitignored `.env` (`VITE_DEMO_PASSWORD` /
+- The demo role switcher's buttons were removed from both apps on 30 Oct
+  (#36): they no longer signed in, so they showed pages the API refused. The
+  store's `setRole` still works only in local dev builds (`ROLE_SWITCH_ENABLED`
+  in `StoreProvider.js`: `import.meta.env.DEV` / `__DEV__`), with its password
+  only from a gitignored `.env` (`VITE_DEMO_PASSWORD` /
   `EXPO_PUBLIC_DEMO_PASSWORD`). Never put a password in the code (CTIP-113).
 - Never commit `.env`, Supabase keys, or MQTT certs. Check `.gitignore` covers them
   before any first commit in a new folder.
@@ -542,6 +561,11 @@ checks the role itself).
   **and** to `resolve.dedupe` in `apps/web/vite.config.js` (as React already is).
   The mobile app is covered by `nodeModulesPaths` in `metro.config.js`, but the
   package still has to be in `apps/mobile/package.json`.
+- The mobile navigator renders only the top screen of its stack
+  (`navigation/AppNavigator.js`): a screen covered by `nav.go()` unmounts and
+  loses its state, and coming back rebuilds it from its route params. Keep
+  in-progress form state on the screen (show a view in place, as Add plant does
+  for the QR) or in its params via `nav.replace()`.
 - A store function used in an effect's dependency list must be wrapped in
   `useCallback`, or the page re-fetches in a loop (CTIP-28: one open species page
   sent 1,500 requests in 4.5 minutes).
