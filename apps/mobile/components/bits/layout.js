@@ -8,8 +8,9 @@ import { Txt } from './text.js';
 import { IconButton } from './buttons.js';
 
 // A full screen: optional header, scrolling content, optional footer pinned above the tab bar.
+// The default bottom space clears the raised Add plant / Scan button in the tab bar.
 // Uses synchronous insets from useSafeAreaInsets() to prevent layout shifting on transitions.
-export function Screen({ header, children, footer, scroll = true, bg, pad = 20, gap = 24, top = 16, bottom = 24, safeTop = true }) {
+export function Screen({ header, children, footer, scroll = true, bg, pad = 20, gap = 24, top = 16, bottom = 40, safeTop = true }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const content = { paddingHorizontal: pad, paddingTop: top, paddingBottom: bottom, gap };
