@@ -9,7 +9,7 @@ export function requireAuth(verify) {
   return async (req, res, next) => {
     const [scheme, token] = (req.get('authorization') ?? '').split(' ');
     if (scheme !== 'Bearer' || !token) {
-      return res.status(401).json({ code: 'UNAUTHENTICATED', message: 'Send Authorization: Bearer <access token>' });
+      return res.status(401).json({ code: 'UNAUTHENTICATED', message: 'Authentication required. Provide a valid access token using the Authorization: Bearer <token> header.' });
     }
     try {
       const claims = await verify(token);
@@ -19,7 +19,7 @@ export function requireAuth(verify) {
       if (err instanceof errors.JWTExpired) {
         return res.status(401).json({ code: 'TOKEN_EXPIRED', message: 'Access token expired. Refresh the session and retry.' });
       }
-      return res.status(401).json({ code: 'INVALID_TOKEN', message: 'Access token is not valid' });
+      return res.status(401).json({ code: 'INVALID_TOKEN', message: 'Access token is not valid.' });
     }
   };
 }
@@ -31,7 +31,7 @@ export function allow(...roles) {
       return res.status(403).json({ code: 'ACCOUNT_NOT_ACTIVE', message: 'Your account has no active role yet. Ask an Admin to approve it.' });
     }
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ code: 'FORBIDDEN', message: 'Your role is not allowed to do this' });
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Your role is not allowed to do this!' });
     }
     next();
   };
