@@ -1,7 +1,7 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
+import { seed, DEMO_USER, DEMO_EMAILS, initialProfiles } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
@@ -51,11 +51,20 @@ import {
   markAllReadApi,
 } from "./api.js";
 
-const ACTIVE_DEMO_PASSWORD =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
-  (typeof process !== "undefined" && (process.env?.VITE_DEMO_PASSWORD || process.env?.DEMO_PASSWORD)) ||
-  DEMO_PASSWORD ||
-  "Niah@1234";
+// The prototype role switch (CTIP-113) signs in to the real demo accounts, so it
+// only exists in local development builds: `npm run dev` on the web
+// (import.meta.env.DEV) and Expo Go / dev clients on mobile (__DEV__). A
+// production website or APK has no switch and no password. The password comes
+// from a gitignored .env: VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD
+// (mobile). Never set either on a hosting service or in eas.json.
+export const ROLE_SWITCH_ENABLED =
+  (typeof __DEV__ !== "undefined" && __DEV__ === true) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.DEV === true);
+const DEMO_SIGN_IN_PASSWORD = !ROLE_SWITCH_ENABLED
+  ? null
+  : (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
+    (typeof process !== "undefined" && process.env.EXPO_PUBLIC_DEMO_PASSWORD) ||
+    null;
 
 // Shown wherever a page needs the Express API and cannot reach it.
 export const API_DOWN = "Cannot reach the API server. Start it with npm run api (needs services/api/.env).";
@@ -414,6 +423,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   /* ---------- session & authentication ---------- */
   const setRole = async (key) => {
+    // Public builds: no role switching at all (CTIP-113).
+    if (!ROLE_SWITCH_ENABLED) {
+      notify("Switching roles is only available in local development. Please sign in.");
+      return;
+    }
     const sb = getSupabase();
     if (key === "visitor") {
       setPrototypeRole("visitor");
@@ -431,7 +445,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
 
     const targetEmail = DEMO_EMAILS[key];
-    const password = ACTIVE_DEMO_PASSWORD;
+    const password = DEMO_SIGN_IN_PASSWORD;
+    if (!password) notify("Set VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD (mobile) in your local .env to sign in as a demo role");
 
     // Optimistically set prototype role so screen transitions are immediate
     setPrototypeRole(key);

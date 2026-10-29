@@ -25,7 +25,8 @@ export default function Site() {
 
   return (
     <div className="site" data-theme={theme} style={themeVars(theme)}>
-      <RoleSwitch role={role} setRole={setRole} />
+      {/* Local development only (CTIP-113): it signs in to the real demo accounts. */}
+      {import.meta.env.DEV && <RoleSwitch role={role} setRole={setRole} />}
       <Navbar
         seg={seg}
         role={role}

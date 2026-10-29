@@ -5,12 +5,15 @@
 //   2. officer123@gmail.com    (Conservation Officer)
 //   3. botanist123@gmail.com   (Field Botanist)
 //   4. test123@gmail.com       (Inactive Officer / Null Name test)
-// Password for all: Niah@1234
+// Password: from the DEMO_PASSWORD environment variable, never in the code (CTIP-113).
 // Powered by Playwright + Local Ollama (Zero Gemini/Cloud Tokens Consumed)
+import process from "node:process";
 import { test, expect } from "@playwright/test";
 import { auditWithOllama } from "./helpers/ollama.js";
 
-const DEFAULT_PASSWORD = "Niah@1234";
+// Set DEMO_PASSWORD in your shell before running this suite; it is skipped otherwise.
+const DEFAULT_PASSWORD = process.env.DEMO_PASSWORD;
+test.skip(!DEFAULT_PASSWORD, "Set DEMO_PASSWORD to run the live sign-in tests");
 
 function attachBugWatchdog(page) {
   const crashes = [];

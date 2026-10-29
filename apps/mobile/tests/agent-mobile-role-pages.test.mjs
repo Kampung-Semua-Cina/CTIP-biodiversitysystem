@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { ROUTE_NAMES, canAccess, isFullScreen } from "../navigation/routeMeta.js";
 import { TABS, getRoleTabs, getRoleDefaultTab, badgeCounts } from "../navigation/tabs.js";
 import { ROLES, can } from "../../shared/permissions.js";
-import { initialProfiles, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, seed } from "../../shared/data.js";
+import { initialProfiles, DEMO_USER, DEMO_EMAILS, seed } from "../../shared/data.js";
+import * as sharedData from "../../shared/data.js";
 import { visiblePlants, speciesCatalogue, extractTag, lookupTag } from "../../shared/selectors.js";
 
 describe("Mobile Port: Automated Role & Page Verification", () => {
@@ -155,11 +156,11 @@ describe("Mobile Port: Automated Role & Page Verification", () => {
   // =========================================================================
   // 4. PROTOTYPE ROLE SWITCH AUTHENTICATION CREDENTIALS
   // =========================================================================
-  test("Prototype Role Switch: Uses actual emails and shared password", () => {
+  test("Prototype Role Switch: uses the demo emails, and no password ships in the code (CTIP-113)", () => {
     assert.equal(DEMO_EMAILS.botanist, "botanist123@gmail.com", "Botanist demo email must be botanist123@gmail.com");
     assert.equal(DEMO_EMAILS.officer, "officer123@gmail.com", "Officer demo email must be officer123@gmail.com");
     assert.equal(DEMO_EMAILS.admin, "admin123456@gmail.com", "Admin demo email must be admin123456@gmail.com");
-    assert.equal(DEMO_PASSWORD, "Niah@1234", "Demo password must be Niah@1234");
+    assert.equal("DEMO_PASSWORD" in sharedData, false, "No demo password may be exported: it would ship in every build");
   });
 
   // =========================================================================

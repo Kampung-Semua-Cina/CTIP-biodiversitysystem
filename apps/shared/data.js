@@ -14,7 +14,8 @@ export const DEMO_EMAILS = {
   admin: "admin123456@gmail.com",
 };
 
-export const DEMO_PASSWORD = "Niah@1234";
+// No demo password here (CTIP-113): it shipped in every public build. The
+// prototype role switch reads it from a gitignored .env in local development only.
 
 // IUCN Red List categories, the only values the API accepts (CTIP-46).
 export const CONSERVATION = [
