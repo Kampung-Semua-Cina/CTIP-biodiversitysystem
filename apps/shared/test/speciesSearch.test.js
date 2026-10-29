@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   cleanTerm, buildSpeciesQuery, initialSearchState, nextSearchState, failSearchState,
-  hasMore, summarize, searchErrorMessage, isTagSearch,
+  hasMore, summarize, searchErrorMessage, isTagSearch, prefillFromSpecies, isStillPicked,
 } from "../speciesSearch.js";
 
 // Species search on the phone (CTIP-26): what is sent to GET /public/species,
@@ -85,4 +85,30 @@ test("searchErrorMessage explains a missing connection and passes other messages
   assert.equal(searchErrorMessage({ code: "FORBIDDEN", userMessage: "Your role is not allowed to do this." }),
     "Your role is not allowed to do this.");
   assert.equal(searchErrorMessage(new Error("boom")), "Species search failed. Please try again.");
+});
+
+// Pre-filling a new record from a picked species (CTIP-63).
+const rajah = { id: "s1", scientific_name: "Nepenthes rajah", common_name: "Giant pitcher plant",
+  family: "Nepenthaceae", genus: "Nepenthes", description: "Largest pitcher plant.", primary_image_url: null };
+
+test("picking a species fills the name and an empty appearance", () => {
+  assert.deepEqual(prefillFromSpecies(rajah, { proposed_species: "nep", morphology: "" }), {
+    proposed_species: "Nepenthes rajah",
+    morphology: "Largest pitcher plant.",
+    picked: { id: "s1", scientific_name: "Nepenthes rajah", common_name: "Giant pitcher plant", family: "Nepenthaceae", genus: "Nepenthes" },
+  });
+});
+
+test("picking a species never overwrites what the botanist wrote", () => {
+  assert.equal(prefillFromSpecies(rajah, { morphology: "Red pitchers, 30 cm" }).morphology, "Red pitchers, 30 cm");
+});
+
+test("a species with no description leaves the appearance empty", () => {
+  assert.equal(prefillFromSpecies({ ...rajah, description: null }, { morphology: "" }).morphology, "");
+});
+
+test("isStillPicked follows the name, ignoring case and spaces", () => {
+  assert.equal(isStillPicked({ scientific_name: "Nepenthes rajah" }, " nepenthes RAJAH "), true);
+  assert.equal(isStillPicked({ scientific_name: "Nepenthes rajah" }, "Nepenthes raja"), false);
+  assert.equal(isStillPicked(null, "Nepenthes rajah"), false);
 });
