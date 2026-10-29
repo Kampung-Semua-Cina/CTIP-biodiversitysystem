@@ -1,6 +1,6 @@
 // apps/mobile/components/Chrome.js
 // Pieces shared by several screens: the logo mark, the theme switch and the
-// prototype role switch (until real sign-in arrives with CTIP-42).
+// app version line.
 import React from 'react';
 import { View } from 'react-native';
 import Constants from 'expo-constants';
@@ -9,8 +9,6 @@ import Icon from './Icon.js';
 import Logo from './Logo.js';
 import { useTheme } from './Theme.js';
 import { Section, Segmented, Txt } from './Bits.js';
-import { useStore } from '../../shared/store.js';
-import { ROLES } from '../../shared/permissions.js';
 
 export function LogoMark({ size = 30 }) {
   return <Logo size={size} />;
@@ -29,19 +27,6 @@ export function AppearanceSection() {
   );
 }
 
-// Local development only (CTIP-113): switching role signs in to the real demo
-// accounts, so release builds (APKs) show nothing here.
-export function PrototypeRoleSection() {
-  const { c } = useTheme();
-  const { role, setRole } = useStore();
-  if (!__DEV__) return null;
-  return (
-    <Section title="Prototype · view the app as" gap={12}>
-      <Segmented value={role} onChange={setRole} items={ROLES.map((r) => ({ key: r.key, label: r.label }))} />
-      <Txt v="caption" color={c.ink3} style={{ fontWeight: undefined }}>Sample data only. This switch goes away when real sign-in is added.</Txt>
-    </Section>
-  );
-}
 
 // App version, e.g. "v1.0.103 · a1b2c3d": 1.0.<commit count> and the commit
 // it was built from (scripts/version.mjs, put in by app.config.js).
