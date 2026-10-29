@@ -1,9 +1,9 @@
 // apps/mobile/pages/Dashboard.js
-// The two long lists: the species catalogue (everyone) and the tagged plants (staff).
+// The Plants tab: the species catalogue (everyone) and the tagged plants (staff).
 // Both load in pages as you scroll (infinite scroll) and show a small loading line
 // while the next page arrives.
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, Pressable } from 'react-native';
+import { View, Text, FlatList, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
@@ -22,6 +22,9 @@ import { can } from '../../shared/permissions.js';
 const PAGE_SIZE = 20; // same as the API's default `limit`
 const ROW_HEIGHT = 77; // fixed row height lets the list jump straight to a letter
 const LETTER_HEIGHT = 42;
+const RAIL_MIN = 15; // shorter lists scroll quickly enough without the A–Z rail
+const RAIL_SPACE = 16; // room kept right of the rows for the rail
+const LIST_BOTTOM = 40; // clears the raised Add plant / Scan button in the tab bar
 
 // Pages through `items` already in the store: page 1, 2, 3… of PAGE_SIZE.
 // A botanist or visitor typing a species name searches the API instead
@@ -48,6 +51,44 @@ function ListHeader({ children }) {
   return <View style={{ gap: 14, paddingTop: 12, paddingBottom: 8 }}>{children}</View>;
 }
 
+// The Plants tab holds two lists, opened as `plants` (species first) or `tagged`
+// (tagged plants first). Switching between them only changes this screen's
+// params (nav.replace), not the screen, so the title and the switch stay exactly
+// where they are, nothing slides in, and going back from a plant returns to the
+// same list. Each role always sees the two options in the same order.
+export function SpeciesList({ nav, params = {} }) {
+  return <PlantsTab nav={nav} params={params} route="plants" start="species" />;
+}
+
+export function TaggedPlants({ nav, params = {} }) {
+  return <PlantsTab nav={nav} params={params} route="tagged" start="tagged" />;
+}
+
+function PlantsTab({ nav, params, route, start }) {
+  const view = params.view || start;
+  const onView = (v) => nav.replace(route, { ...params, view: v });
+  return view === 'species'
+    ? <SpeciesCatalogue nav={nav} params={params} onView={onView} />
+    : <TaggedList nav={nav} onView={onView} />;
+}
+
+// Title, count and the Species / Tagged plants switch, the same in both lists.
+function PlantsHeader({ nav, view, onView, count, children }) {
+  const { role } = useStore();
+  const { c } = useTheme();
+  const items = role === 'visitor'
+    ? [{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]
+    : [{ key: 'tagged', label: 'Tagged plants' }, { key: 'species', label: 'Species' }];
+  return (
+    <ListHeader>
+      {nav.canGoBack ? <View style={{ marginLeft: -16, marginTop: -8 }}><IconButton name="chevL" label="Back" onPress={nav.back} /></View> : null}
+      <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{count}</Txt>} />
+      <Segmented value={view} onChange={(k) => k !== view && onView(k)} items={items} />
+      {children}
+    </ListHeader>
+  );
+}
+
 /* ---------- species catalogue ---------- */
 
 const SORT_SPECIES = [
@@ -58,7 +99,7 @@ const SORT_SPECIES = [
   { key: 'plants', label: 'Most tagged' },
 ];
 
-export function SpeciesList({ nav, params = {} }) {
+function SpeciesCatalogue({ nav, params, onView }) {
   const { db, role } = useStore();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -66,6 +107,8 @@ export function SpeciesList({ nav, params = {} }) {
   const [family, setFamily] = useState('all');
   const [sort, setSort] = useState('common');
   const list = useRef(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headerH, setHeaderH] = useState(0);
   const staff = role !== 'visitor';
 
   // Published species only for visitors; staff also see unpublished ones.
@@ -135,18 +178,15 @@ export function SpeciesList({ nav, params = {} }) {
     return y + (r.type === 'letter' ? LETTER_HEIGHT : ROW_HEIGHT);
   }, 0);
   const letters = rows.filter((r) => r.type === 'letter').map((r) => r.letter);
-  const headerHeight = useRef(0);
+  const showRail = isAlphaSort && letters.length > 1 && total >= RAIL_MIN && headerH > 0;
   const jump = (letter) => {
     const i = rows.findIndex((r) => r.type === 'letter' && r.letter === letter);
-    if (i >= 0) list.current?.scrollToOffset({ offset: offsets[i] + headerHeight.current, animated: true });
+    if (i >= 0) list.current?.scrollToOffset({ offset: offsets[i] + headerH, animated: true });
   };
 
   const header = (
-    <View onLayout={(e) => (headerHeight.current = e.nativeEvent.layout.height)}>
-      <ListHeader>
-        {nav.canGoBack ? <View style={{ marginLeft: -16, marginTop: -8 }}><IconButton name="chevL" label="Back" onPress={nav.back} /></View> : null}
-        <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{total} species</Txt>} />
-        <Segmented value="species" onChange={(k) => k === 'tagged' && nav.go('tagged')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
+    <View onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h !== headerH) setHeaderH(h); }}>
+      <PlantsHeader nav={nav} view="species" onView={onView} count={`${total} species`}>
         <SearchField value={q} onChangeText={setQ} placeholder="Search name or tag ID" />
         <Pills value={family} onChange={setFamily} items={[{ key: 'all', label: 'All families' }, ...families.map((f) => ({ key: f, label: f }))]} />
         {apiMode ? null : <SortBar items={SORT_SPECIES} value={sort} onChange={setSort} />}
@@ -156,29 +196,34 @@ export function SpeciesList({ nav, params = {} }) {
             <Button label="Try again" kind="secondary" height={44} size={15} onPress={search.retry} />
           </View>
         ) : null}
-      </ListHeader>
+      </PlantsHeader>
     </View>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: c.surface, paddingTop: insets.top }}>
-      <FlatList
+      <Animated.FlatList
         ref={list}
         data={rows}
         keyExtractor={(r) => r.key}
         ListHeaderComponent={header}
-        contentContainerStyle={{ paddingLeft: 20, paddingRight: isAlphaSort ? 36 : 20, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: LIST_BOTTOM }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
-        renderItem={({ item }) =>
-          item.type === 'letter' ? (
-            <View style={{ height: LETTER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
-              <Text accessibilityRole="header" style={{ fontFamily: font('display', 700), fontSize: 18, color: c.accent }}>{item.letter}</Text>
-            </View>
-          ) : (
-            <SpeciesRow s={item.s} plants={plants} staff={staff} onPress={() => nav.go('species', { id: item.s.id })} />
-          )
-        }
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
+          // Only the rows make room for the rail; the header keeps the full width.
+          <View style={{ paddingRight: showRail ? RAIL_SPACE : 0 }}>
+            {item.type === 'letter' ? (
+              <View style={{ height: LETTER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
+                <Text accessibilityRole="header" style={{ fontFamily: font('display', 700), fontSize: 18, color: c.accent }}>{item.letter}</Text>
+              </View>
+            ) : (
+              <SpeciesRow s={item.s} plants={plants} staff={staff} onPress={() => nav.go('species', { id: item.s.id })} />
+            )}
+          </View>
+        )}
         ListEmptyComponent={loading || (apiMode && search.error) ? null : <Empty icon="search">No species match. Try another name or family.</Empty>}
         ListFooterComponent={
           loading ? (
@@ -189,7 +234,15 @@ export function SpeciesList({ nav, params = {} }) {
           ) : done && shown.length > PAGE_SIZE ? <Txt v="caption" color={c.ink3} style={{ textAlign: 'center', paddingVertical: 16 }}>That's every species.</Txt> : null
         }
       />
-      {isAlphaSort && letters.length > 1 ? <LetterIndex letters={letters} onJump={jump} /> : null}
+      {showRail ? (
+        <LetterIndex
+          letters={letters}
+          onJump={jump}
+          top={insets.top + 8}
+          // Starts just below the header, then stays at the top once the header scrolls away.
+          translateY={scrollY.interpolate({ inputRange: [0, headerH], outputRange: [headerH, 0], extrapolate: 'clamp' })}
+        />
+      ) : null}
     </View>
   );
 }
@@ -215,21 +268,19 @@ function SpeciesRow({ s, plants, staff, onPress }) {
   );
 }
 
-// A–Z strip down the right edge. Letters that have species are green and tappable.
-function LetterIndex({ letters, onJump }) {
+// Letter strip down the right edge, beside the rows (never over the header). Only
+// letters that have species are listed.
+function LetterIndex({ letters, onJump, top, translateY }) {
   const { c } = useTheme();
-  const all = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   return (
-    <View accessibilityLabel="Jump to letter" style={{ position: 'absolute', right: 4, top: 200, bottom: 16, width: 24, justifyContent: 'space-between', alignItems: 'center' }}>
-      {all.map((l) => {
-        const has = letters.includes(l);
-        return (
-          <Pressable key={l} disabled={!has} onPress={() => onJump(l)} accessibilityRole="button" accessibilityLabel={`Jump to ${l}`} hitSlop={{ left: 12, right: 4 }}>
-            <Text style={{ fontFamily: font('text', 800), fontSize: 11, color: has ? c.accent : c.ink3 }}>{l}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Animated.View accessibilityLabel="Jump to letter" style={{ position: 'absolute', right: 2, top, width: 28, alignItems: 'center', transform: [{ translateY }] }}>
+      {letters.map((l) => (
+        <Pressable key={l} onPress={() => onJump(l)} accessibilityRole="button" accessibilityLabel={`Jump to ${l}`} hitSlop={{ left: 12, right: 4 }}
+          style={{ height: 20, justifyContent: 'center' }}>
+          <Text style={{ fontFamily: font('text', 800), fontSize: 11, color: c.accent }}>{l}</Text>
+        </Pressable>
+      ))}
+    </Animated.View>
   );
 }
 
@@ -250,7 +301,7 @@ const SORT_TAGGED = [
   { key: 'status', label: 'Status' },
 ];
 
-export function TaggedPlants({ nav }) {
+function TaggedList({ nav, onView }) {
   const { db, role, me } = useStore();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -286,17 +337,15 @@ export function TaggedPlants({ nav }) {
       <FlatList
         data={shown}
         keyExtractor={(p) => p.id}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: LIST_BOTTOM }}
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
         ListHeaderComponent={
-          <ListHeader>
-            <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{all.length} tagged</Txt>} />
-            <Segmented value="tagged" onChange={(k) => k === 'species' && nav.go('plants')} items={[{ key: 'tagged', label: 'Tagged plants' }, { key: 'species', label: 'Species' }]} />
-            <SearchField value={q} onChangeText={setQ} placeholder="Tag ID, species or botanist" />
+          <PlantsHeader nav={nav} view="tagged" onView={onView} count={`${all.length} tagged`}>
+            <SearchField value={q} onChangeText={setQ} placeholder={role === 'visitor' ? 'Tag ID or species' : 'Tag ID, species or botanist'} />
             <Pills value={filter} onChange={setFilter} items={filters} />
             <SortBar items={SORT_TAGGED} value={sort} onChange={setSort} />
-          </ListHeader>
+          </PlantsHeader>
         }
         renderItem={({ item: p, index }) => (
           <Row
@@ -305,7 +354,8 @@ export function TaggedPlants({ nav }) {
             sub={
               <>
                 <Mono size={13}>{p.qr_id}</Mono>
-                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>· {role !== 'visitor' ? `${p.by} · ` : ''}{shortDate(p.seen)}</Txt>
+                {/* One piece of text, so a wrapped line never starts with a dot. */}
+                <Txt v="small" color={c.ink2} style={{ fontSize: 13 }}>{[role !== 'visitor' ? p.by : null, shortDate(p.seen)].filter(Boolean).join(' · ')}</Txt>
               </>
             }
             right={<DotLabel status={p.status} />}

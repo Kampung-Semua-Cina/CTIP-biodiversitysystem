@@ -9,7 +9,7 @@ import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty,
+  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
