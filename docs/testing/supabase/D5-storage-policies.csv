@@ -1,0 +1,13 @@
+policyname,cmd,roles,qual
+obs photos: read if can see observation,SELECT,{authenticated},"((bucket_id = 'observation-photos'::text) AND (EXISTS ( SELECT 1
+   FROM observations o
+  WHERE ((o.id)::text = (storage.foldername(objects.name))[1]))))"
+obs photos: staff delete,DELETE,{authenticated},"((bucket_id = 'observation-photos'::text) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+obs photos: update own or staff,UPDATE,{authenticated},"((bucket_id = 'observation-photos'::text) AND (EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (((o.id)::text = (storage.foldername(objects.name))[1]) AND ((o.recorded_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))))))"
+obs photos: upload to own observation or staff,INSERT,{authenticated},null
+sensor images: staff read,SELECT,{authenticated},"((bucket_id = 'sensor-images'::text) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+species media: staff delete,DELETE,{authenticated},"((bucket_id = 'species-media'::text) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+species media: staff update,UPDATE,{authenticated},"((bucket_id = 'species-media'::text) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+species media: staff upload,INSERT,{authenticated},null

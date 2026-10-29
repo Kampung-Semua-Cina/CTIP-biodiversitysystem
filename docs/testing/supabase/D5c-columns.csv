@@ -1,0 +1,56 @@
+table_name,column_name,data_type,is_nullable,column_default
+observations,id,uuid,NO,gen_random_uuid()
+observations,specimen_id,uuid,NO,null
+observations,recorded_by,uuid,YES,null
+observations,observed_at,timestamp with time zone,NO,now()
+observations,height_cm,numeric,YES,null
+observations,morphology,text,YES,null
+observations,notes,text,YES,null
+observations,lat,double precision,YES,null
+observations,lng,double precision,YES,null
+observations,gps_accuracy_m,double precision,YES,null
+observations,status,text,NO,'draft'::text
+observations,version,integer,NO,1
+observations,device_id,text,YES,null
+observations,last_synced_at,timestamp with time zone,YES,null
+observations,is_deleted,boolean,NO,false
+observations,created_at,timestamp with time zone,NO,now()
+observations,updated_at,timestamp with time zone,NO,now()
+profiles,id,uuid,NO,null
+profiles,full_name,text,YES,null
+profiles,email,text,YES,null
+profiles,role,text,NO,'botanist'::text
+profiles,is_active,boolean,NO,true
+profiles,created_at,timestamp with time zone,NO,now()
+profiles,updated_at,timestamp with time zone,NO,now()
+qr_tags,qr_id,text,NO,null
+qr_tags,status,text,NO,'unassigned'::text
+qr_tags,batch_label,text,YES,null
+qr_tags,created_by,uuid,YES,null
+qr_tags,created_at,timestamp with time zone,NO,now()
+species,id,uuid,NO,gen_random_uuid()
+species,scientific_name,text,NO,null
+species,common_name,text,YES,null
+species,family,text,YES,null
+species,genus,text,YES,null
+species,description,text,YES,null
+species,conservation_status,text,YES,null
+species,cultural_significance,text,YES,null
+species,is_published,boolean,NO,false
+species,is_deleted,boolean,NO,false
+species,created_by,uuid,YES,null
+species,updated_by,uuid,YES,null
+species,created_at,timestamp with time zone,NO,now()
+species,updated_at,timestamp with time zone,NO,now()
+specimens,id,uuid,NO,gen_random_uuid()
+specimens,qr_id,text,YES,null
+specimens,species_id,uuid,YES,null
+specimens,proposed_species_name,text,YES,null
+specimens,registered_by,uuid,YES,null
+specimens,lat,double precision,YES,null
+specimens,lng,double precision,YES,null
+specimens,gps_accuracy_m,double precision,YES,null
+specimens,endangered_override,boolean,NO,false
+specimens,is_deleted,boolean,NO,false
+specimens,created_at,timestamp with time zone,NO,now()
+specimens,updated_at,timestamp with time zone,NO,now()

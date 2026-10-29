@@ -1,0 +1,17 @@
+tablename,rowsecurity
+alert_notes,true
+alerts,true
+audit_logs,true
+notifications,true
+observation_comments,true
+observation_photos,true
+observation_reviews,true
+observations,true
+profiles,true
+qr_tags,true
+sensor_images,true
+sensor_nodes,true
+species,true
+species_media,true
+specimens,true
+telemetry,true

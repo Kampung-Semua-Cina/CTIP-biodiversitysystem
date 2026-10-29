@@ -1,0 +1,5 @@
+policyname,cmd,with_check
+species media: staff upload,INSERT,"((bucket_id = 'species-media'::text) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+obs photos: upload to own observation or staff,INSERT,"((bucket_id = 'observation-photos'::text) AND (EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (((o.id)::text = (storage.foldername(objects.name))[1]) AND ((o.recorded_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))))))"

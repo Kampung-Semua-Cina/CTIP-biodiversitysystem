@@ -1,0 +1,3 @@
+column_name,column_default
+is_active,true
+role,'botanist'::text

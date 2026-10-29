@@ -1,0 +1,8 @@
+tablename,policyname,cmd,qual,with_check
+observations,obs: create own,INSERT,null,"((recorded_by = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['draft'::text, 'queued'::text, 'synced'::text])))"
+observations,obs: edit own unreviewed,UPDATE,"((recorded_by = auth.uid()) AND (status = ANY (ARRAY['draft'::text, 'queued'::text, 'synced'::text, 'returned'::text])))",null
+observations,obs: read own or staff,SELECT,"((recorded_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))",null
+observations,obs: staff edit,UPDATE,"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null
+specimens,specimens: read,SELECT,true,null
+specimens,specimens: register,INSERT,null,(registered_by = auth.uid())
+specimens,specimens: update,UPDATE,"((registered_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))",null

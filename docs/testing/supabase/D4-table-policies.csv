@@ -1,0 +1,51 @@
+tablename,cmd,roles,qual,with_check
+alert_notes,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+alerts,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+audit_logs,SELECT,{authenticated},(my_role() = 'admin'::text),null
+notifications,SELECT,{authenticated},(user_id = auth.uid()),null
+notifications,UPDATE,{authenticated},(user_id = auth.uid()),null
+observation_comments,INSERT,{authenticated},null,"((author_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (o.id = observation_comments.observation_id))))"
+observation_comments,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (o.id = observation_comments.observation_id)))",null
+observation_photos,DELETE,{authenticated},"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE ((o.id = observation_photos.observation_id) AND ((o.recorded_by = ( SELECT auth.uid() AS uid)) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))))))",null
+observation_photos,INSERT,{authenticated},null,"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE ((o.id = observation_photos.observation_id) AND ((o.recorded_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))))))"
+observation_photos,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (o.id = observation_photos.observation_id)))",null
+observation_photos,UPDATE,{authenticated},"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE ((o.id = observation_photos.observation_id) AND ((o.recorded_by = ( SELECT auth.uid() AS uid)) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))))))",null
+observation_reviews,INSERT,{authenticated},null,"((reviewer_id = auth.uid()) AND (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))"
+observation_reviews,SELECT,{authenticated},"(EXISTS ( SELECT 1
+   FROM observations o
+  WHERE (o.id = observation_reviews.observation_id)))",null
+observations,INSERT,{authenticated},null,"((recorded_by = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['draft'::text, 'queued'::text, 'synced'::text])))"
+observations,SELECT,{authenticated},"((recorded_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))",null
+observations,UPDATE,{authenticated},"((recorded_by = auth.uid()) AND (status = ANY (ARRAY['draft'::text, 'queued'::text, 'synced'::text, 'returned'::text])))",null
+observations,UPDATE,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null
+profiles,SELECT,{supabase_auth_admin},true,null
+profiles,SELECT,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null
+profiles,SELECT,{authenticated},(id = auth.uid()),null
+profiles,UPDATE,{authenticated},(my_role() = 'admin'::text),null
+qr_tags,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+qr_tags,SELECT,{authenticated},true,null
+sensor_images,SELECT,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null
+sensor_nodes,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+species,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+species,SELECT,"{anon,authenticated}",(is_published AND (NOT is_deleted)),null
+species,SELECT,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null
+species_media,ALL,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))","(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))"
+species_media,SELECT,"{anon,authenticated}","(EXISTS ( SELECT 1
+   FROM species s
+  WHERE ((s.id = species_media.species_id) AND s.is_published AND (NOT s.is_deleted))))",null
+specimens,INSERT,{authenticated},null,(registered_by = auth.uid())
+specimens,SELECT,{authenticated},true,null
+specimens,UPDATE,{authenticated},"((registered_by = auth.uid()) OR (my_role() = ANY (ARRAY['officer'::text, 'admin'::text])))",null
+telemetry,SELECT,{authenticated},"(my_role() = ANY (ARRAY['officer'::text, 'admin'::text]))",null

@@ -1,0 +1,136 @@
+SIGNUP botanist-a -> HTTP 200
+SIGNUP botanist-b -> HTTP 200
+SIGNUP officer -> HTTP 200
+SIGNUP admin -> HTTP 200
+SIGNUP deactivated -> HTTP 200
+=== VA-30 anon 10/29/2026 19:36:35 ===
+anon        READ   alert_notes            HTTP 200  rows visible: 0  columns: 
+anon        READ   alerts                 HTTP 200  rows visible: 0  columns: 
+anon        READ   audit_logs             HTTP 200  rows visible: 0  columns: 
+anon        READ   notifications          HTTP 200  rows visible: 0  columns: 
+anon        READ   observation_comments   HTTP 200  rows visible: 0  columns: 
+anon        READ   observation_photos     HTTP 200  rows visible: 0  columns: 
+anon        READ   observation_reviews    HTTP 200  rows visible: 0  columns: 
+anon        READ   observations           HTTP 200  rows visible: 0  columns: 
+anon        READ   profiles               HTTP 200  rows visible: 0  columns: 
+anon        READ   qr_tags                HTTP 200  rows visible: 0  columns: 
+anon        READ   sensor_images          HTTP 200  rows visible: 0  columns: 
+anon        READ   sensor_nodes           HTTP 200  rows visible: 0  columns: 
+anon        READ   species                HTTP 206  rows visible: 2  columns: 
+anon        READ   species_media          HTTP 200  rows visible: 0  columns: 
+anon        READ   specimens              HTTP 200  rows visible: 0  columns: 
+anon        READ   telemetry              HTTP 200  rows visible: 0  columns: 
+anon        INSERT alert_notes            HTTP 401
+anon        DELETE alert_notes            HTTP 200  rows deleted: 0
+anon        INSERT alerts                 HTTP 401
+anon        DELETE alerts                 HTTP 200  rows deleted: 0
+anon        INSERT audit_logs             HTTP 401
+anon        DELETE audit_logs             HTTP 200  rows deleted: 0
+anon        INSERT notifications          HTTP 401
+anon        DELETE notifications          HTTP 200  rows deleted: 0
+anon        INSERT observation_comments   HTTP 401
+anon        DELETE observation_comments   HTTP 200  rows deleted: 0
+anon        INSERT observation_photos     HTTP 401
+anon        DELETE observation_photos     HTTP 200  rows deleted: 0
+anon        INSERT observation_reviews    HTTP 401
+anon        DELETE observation_reviews    HTTP 200  rows deleted: 0
+anon        INSERT observations           HTTP 401
+anon        DELETE observations           HTTP 200  rows deleted: 0
+anon        INSERT profiles               HTTP 401
+anon        DELETE profiles               HTTP 200  rows deleted: 0
+anon        INSERT qr_tags                HTTP 401
+anon        DELETE qr_tags                HTTP 400  rows deleted: 
+anon        INSERT sensor_images          HTTP 401
+anon        DELETE sensor_images          HTTP 200  rows deleted: 0
+anon        INSERT sensor_nodes           HTTP 401
+anon        DELETE sensor_nodes           HTTP 200  rows deleted: 0
+anon        INSERT species                HTTP 401
+anon        DELETE species                HTTP 200  rows deleted: 0
+anon        INSERT species_media          HTTP 401
+anon        DELETE species_media          HTTP 200  rows deleted: 0
+anon        INSERT specimens              HTTP 401
+anon        DELETE specimens              HTTP 200  rows deleted: 0
+anon        INSERT telemetry              HTTP 401
+anon        DELETE telemetry              HTTP 200  rows deleted: 0
+anon        DELETE qr_tags (by qr_id)   HTTP 200  rows deleted: 0
+=== VA-31 unapproved 10/29/2026 19:49:22 ===
+SIGNUP unapproved -> HTTP 200
+LOGIN unapproved@test.local -> HTTP 200 (ok)
+CLAIMS role=authenticated user_role=botanist app_metadata={"provider":"email","providers":["email"]} exp=1793278163
+unapproved  READ   alert_notes            HTTP 200  rows visible: 0  columns: 
+unapproved  READ   alerts                 HTTP 200  rows visible: 0  columns: 
+unapproved  READ   audit_logs             HTTP 200  rows visible: 0  columns: 
+unapproved  READ   notifications          HTTP 200  rows visible: 0  columns: 
+unapproved  READ   observation_comments   HTTP 200  rows visible: 0  columns: 
+unapproved  READ   observation_photos     HTTP 200  rows visible: 0  columns: 
+unapproved  READ   observation_reviews    HTTP 200  rows visible: 0  columns: 
+unapproved  READ   observations           HTTP 200  rows visible: 0  columns: 
+unapproved  READ   profiles               HTTP 200  rows visible: 1  columns: id,full_name,email,role,is_active,created_at,updated_at
+unapproved  READ   qr_tags                HTTP 206  rows visible: 2  columns: 
+unapproved  READ   sensor_images          HTTP 200  rows visible: 0  columns: 
+unapproved  READ   sensor_nodes           HTTP 200  rows visible: 0  columns: 
+unapproved  READ   species                HTTP 206  rows visible: 2  columns: 
+unapproved  READ   species_media          HTTP 200  rows visible: 0  columns: 
+unapproved  READ   specimens              HTTP 206  rows visible: 2  columns: 
+unapproved  READ   telemetry              HTTP 200  rows visible: 0  columns: 
+unapproved specimens lat/lng -> HTTP 200 rows 2 : [{"qr_id":"TEST-0001","lat":1.111111,"lng":111.111111}, 
+ {"qr_id":"TEST-0002","lat":2.222222,"lng":112.222222}]
+unapproved INSERT specimen -> HTTP 201
+unapproved INSERT observation -> HTTP 201
+LOGIN botanist-a@test.local -> HTTP 200 (ok)
+CLAIMS role=authenticated user_role=botanist app_metadata={"provider":"email","providers":["email"]} exp=1793278482
+botanistA   READ   alert_notes            HTTP 200  rows visible: 0  columns: 
+botanistA   READ   alerts                 HTTP 200  rows visible: 0  columns: 
+botanistA   READ   audit_logs             HTTP 200  rows visible: 0  columns: 
+botanistA   READ   notifications          HTTP 200  rows visible: 0  columns: 
+botanistA   READ   observation_comments   HTTP 200  rows visible: 0  columns: 
+botanistA   READ   observation_photos     HTTP 200  rows visible: 0  columns: 
+botanistA   READ   observation_reviews    HTTP 200  rows visible: 0  columns: 
+botanistA   READ   observations           HTTP 200  rows visible: 1  columns: id,specimen_id,recorded_by,observed_at,height_cm,morphology,notes,lat,lng,gps_accuracy_m,status,version,device_id,last_synced_at,is_deleted,created_at,updated_at
+botanistA   READ   profiles               HTTP 200  rows visible: 1  columns: id,full_name,email,role,is_active,created_at,updated_at
+botanistA   READ   qr_tags                HTTP 206  rows visible: 2  columns: 
+botanistA   READ   sensor_images          HTTP 200  rows visible: 0  columns: 
+botanistA   READ   sensor_nodes           HTTP 200  rows visible: 0  columns: 
+botanistA   READ   species                HTTP 206  rows visible: 2  columns: 
+botanistA   READ   species_media          HTTP 200  rows visible: 0  columns: 
+botanistA   READ   specimens              HTTP 206  rows visible: 3  columns: 
+botanistA   READ   telemetry              HTTP 200  rows visible: 0  columns: 
+=== VA-32 storage 10/29/2026 19:58:38 ===
+UPLOAD botanistA own record -> HTTP 0
+LOGIN botanist-b@test.local -> HTTP 200 (ok)
+LOGIN officer@test.local -> HTTP 200 (ok)
+anon        LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+unapproved  LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+botanistB   LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+botanistA   LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+officer     LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+=== VA-32 storage retry 10/29/2026 20:03:05 ===
+UPLOAD botanistA own record -> HTTP 200
+anon        LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+unapproved  LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+botanistB   LIST HTTP 200 files 0 | DOWNLOAD HTTP 400 | PUBLIC LINK HTTP 400
+botanistA   LIST HTTP 200 files 1 | DOWNLOAD HTTP 200 | PUBLIC LINK HTTP 400
+officer     LIST HTTP 200 files 1 | DOWNLOAD HTTP 200 | PUBLIC LINK HTTP 400
+UPLOAD botanistB into A's record -> HTTP 400
+=== VA-33 auth 10/29/2026 20:09:49 ===
+SIGNUP weak password length 1 -> HTTP 422
+SIGNUP weak password length 6 -> HTTP 200
+SIGNUP weak password length 8 -> HTTP 200
+=== VA-34 10/29/2026 20:17:32 ===
+LOGIN botanist-b@test.local -> HTTP 200 (ok)
+before logout obs rows 1
+LOGOUT -> HTTP 204
+old token after logout -> HTTP 200 obs rows 1
+LOGIN deactivated@test.local -> HTTP 200 (ok)
+deactivated READ   observations           HTTP 200  rows visible: 0  columns: 
+deactivated READ   specimens              HTTP 206  rows visible: 3  columns: 
+deactivated READ   profiles               HTTP 200  rows visible: 1  columns: id,full_name,email,role,is_active,created_at,updated_at
+deactivated READ   qr_tags                HTTP 206  rows visible: 2  columns: 
+deactivated INSERT specimen -> HTTP 201
+officer before demote obs rows 3
+officer AFTER demote (old token) obs rows 0
+SIGNUP sneaky with role admin -> HTTP 200
+LOGIN sneaky@test.local -> HTTP 200 (ok)
+CLAIMS role=authenticated user_role=botanist app_metadata={"provider":"email","providers":["email"]} exp=1793280569
+RESET real email -> HTTP 200 body {}
+RESET fake email -> HTTP 200 body {}

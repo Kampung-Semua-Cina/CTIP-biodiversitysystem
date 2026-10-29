@@ -1,0 +1,10 @@
+def
+"CREATE OR REPLACE FUNCTION public.my_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select role from public.profiles where id = auth.uid() and is_active
+$function$
+"
