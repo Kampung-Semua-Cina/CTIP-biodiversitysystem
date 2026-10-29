@@ -25,6 +25,29 @@ export const GRID_DEGREES = 0.01;
 export const REDUCED_PRECISION_M = 1100;
 const snap = (v) => Number(((Math.floor(v / GRID_DEGREES) + 0.5) * GRID_DEGREES).toFixed(3));
 
+// The same rule for a specimen row sent anywhere else (the start-up load, a
+// tag lookup). Any botanist can list every tag, so these would otherwise give
+// away every endangered plant's spot. Two differences from the map: the
+// botanist who registered the plant keeps its exact spot (they stood next to
+// it), and a plant with no GPS keeps null coordinates. `status` is the
+// species' conservation status, which a specimen row does not carry; pass
+// undefined when the caller cannot see the species (RLS shows botanists only
+// published ones), and the plant is treated as endangered, so it fails closed.
+export function protectSpecimen(specimen, { role, userId, status }) {
+  const statusUnknown = specimen.species_id != null && status === undefined;
+  const reduce = (statusUnknown || isEndangered({ ...specimen, species: { conservation_status: status } }))
+    && !EXACT_LOCATION_ROLES.includes(role)
+    && specimen.registered_by !== userId;
+  if (!reduce) return { ...specimen, location_reduced: false };
+  return {
+    ...specimen,
+    lat: specimen.lat == null ? null : snap(specimen.lat),
+    lng: specimen.lng == null ? null : snap(specimen.lng),
+    gps_accuracy_m: REDUCED_PRECISION_M,
+    location_reduced: true,
+  };
+}
+
 export function toMapPoint(obs, role) {
   const specimen = obs.specimens;
   const species = specimen.species;

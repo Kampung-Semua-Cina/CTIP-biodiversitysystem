@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
 import { detectImageType, EXTENSIONS } from './images.js';
+import { protectSpecimen } from './distribution.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
 // observations of it, adds photos and comments, and sends records for review.
@@ -87,15 +88,25 @@ const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MA
 export const fieldHandlers = {
   // The plant already on a tag, if any, with its observation ids: the app uses
   // it to tell "tag in use" from "my own plant whose first send failed".
+  // Any botanist can list every tag, so an endangered plant's exact spot is
+  // reduced here as in /distribution (CTIP-71), unless the caller registered it.
   'get /specimens/by-qr/:qrId': async (req, res) => {
-    const { data, error } = await supabaseAs(req.user)
+    const db = supabaseAs(req.user);
+    const { data, error } = await db
       .from('specimens')
       .select(`${SPECIMEN_COLUMNS}, observations (id)`)
       .eq('qr_id', req.params.qrId)
       .maybeSingle();
     if (error) return dbError(res, error);
     if (!data) return fail(res, 404, 'NOT_FOUND', 'No plant on this tag');
-    res.json(data);
+    let status = null;
+    if (data.species_id) {
+      // undefined when RLS hides the species from this user: protectSpecimen fails closed.
+      const species = await db.from('species').select('conservation_status').eq('id', data.species_id).maybeSingle();
+      if (species.error) return dbError(res, species.error);
+      status = species.data ? species.data.conservation_status ?? null : undefined;
+    }
+    res.json(protectSpecimen(data, { role: req.user.role, userId: req.user.id, status }));
   },
 
   // Register a plant on an unused tag. The database marks the tag assigned
