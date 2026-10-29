@@ -2,14 +2,11 @@
 // Public and staff QR code scanner and tag locator.
 import { useState, useEffect, useRef } from "react";
 import Icon from "../components/Icon.jsx";
-import { Chip, Mono } from "../components/Bits.jsx";
+import { Mono } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
-
-export function extractTag(raw) {
-  const match = String(raw || "").toUpperCase().match(/NIAH-\d{4}/);
-  return match ? match[0] : String(raw || "").trim().toUpperCase();
-}
+import { extractTag } from "../../../shared/selectors.js";
+import { go } from "../useRoute.js";
 
 export default function Scan() {
   const { db, role, notify } = useStore();
@@ -34,13 +31,13 @@ export default function Scan() {
     }
     const found = publishedPlants.find((p) => p.qr_id.toUpperCase() === clean);
     if (found) {
-      window.location.hash = `#/tag/${clean}`;
+      go(`/tag/${clean}`);
     } else {
       const unusedTag = (db.tags || []).find((t) => t.qr_id.toUpperCase() === clean);
       if (unusedTag && unusedTag.status === "unused" && canAdd) {
-        window.location.hash = `#/add/${clean}`;
+        go(`/add/${clean}`);
       } else {
-        window.location.hash = `#/tag/${clean}`;
+        go(`/tag/${clean}`);
       }
     }
   };
@@ -107,7 +104,7 @@ export default function Scan() {
           return;
         }
       }
-    } catch (err) {
+    } catch {
       // frame decode error or busy, ignore
     }
     animFrameRef.current = requestAnimationFrame(scanFrames);
