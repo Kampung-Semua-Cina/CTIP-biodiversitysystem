@@ -38,7 +38,7 @@ optionally `PASSWORD_RESET_REDIRECT_URL=https://ctip-biodiversitysystem.pages.de
 `https://ctip-biodiversitysystem.pages.dev`, and add the same address under
 Redirect URLs (otherwise reset emails link to localhost).
 
-**Mobile (`apps/mobile/eas.json`):** replace the `EXPO_PUBLIC_API_URL`
-placeholder with the Render address, then build a new APK. Older APKs keep
+**Mobile (`apps/mobile/eas.json`):** `EXPO_PUBLIC_API_URL` is set to
+`https://ctip-biodiversitysystem.onrender.com`; build a new APK. Older APKs keep
 signing in to Supabase directly until they are replaced, so ask everyone to
 install the new one.

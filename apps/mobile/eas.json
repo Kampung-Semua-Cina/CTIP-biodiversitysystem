@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-THE-RENDER-API-ADDRESS.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://ctip-biodiversitysystem.onrender.com"
       }
     },
     "production": {
@@ -19,7 +19,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-THE-RENDER-API-ADDRESS.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://ctip-biodiversitysystem.onrender.com"
       }
     }
   }
