@@ -12,7 +12,12 @@ info:
     - **Officers**: review observations, manage species, QR tags, sensors and alerts.
     - **Admins**: everything, plus user management.
 
-    **Auth:** send the Supabase access token as `Authorization: Bearer <token>`.
+    **Auth:** sign in with `POST /auth/sign-in`, then send the access token it
+    returns as `Authorization: Bearer <token>`. Before it expires (`expires_at`),
+    swap the refresh token for a new session with `POST /auth/refresh`. The web
+    and mobile apps only talk to this API; the API calls Supabase Auth for them.
+    The one exception is photos: the API hands out short-lived Supabase Storage
+    links, which the apps load directly.
     Sensor devices and the MQTT bridge use the `X-Sensor-Key` header instead.
 
     **Sensor data flow**
@@ -50,6 +55,8 @@ security:
   - bearerAuth: []
 
 tags:
+  - name: Auth
+    description: Signing in and out, sessions and passwords (the API calls Supabase Auth)
   - name: Public
     description: Visitor-facing, no login required
   - name: Profiles
@@ -70,6 +77,120 @@ tags:
     description: Distribution map data, with endangered locations reduced by role
 
 paths:
+
+  # ------------------------------------------------------------------ Auth
+  /auth/sign-in:
+    post:
+      tags: [Auth]
+      operationId: signIn
+      summary: Sign in with email and password
+      description: |
+        At most 10 sign-in attempts per caller address every 5 minutes; more get 429.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              additionalProperties: false
+              properties:
+                email: { type: string, format: email, description: Trimmed and lower-cased }
+                password: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401':
+          description: INVALID_CREDENTIALS (wrong email or password)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: EMAIL_NOT_CONFIRMED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyAttempts' }
+        '502': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Swap a refresh token for a new session
+      description: Each refresh token works once; store the new one from the response.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              additionalProperties: false
+              properties:
+                refresh_token: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: New session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401':
+          description: SESSION_ENDED (signed out, used already, or expired; sign in again)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/sign-out:
+    post:
+      tags: [Auth]
+      operationId: signOut
+      summary: End this session
+      description: |
+        Send the access token if you have one; its refresh token stops working.
+        The access token itself stays valid until it expires, so the app deletes it.
+        Always 204.
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '204': { description: Signed out }
+
+  /auth/password-reset:
+    post:
+      tags: [Auth]
+      operationId: requestPasswordReset
+      summary: Email a password-reset link
+      description: |
+        Always 202, whether or not the address has an account. The link opens the
+        website signed in, which then calls `POST /me/password` without a current password.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              additionalProperties: false
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent: { type: boolean, const: true }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyAttempts' }
 
   # ------------------------------------------------------------------ Public
   /public/species:
@@ -232,6 +353,41 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/password:
+    post:
+      tags: [Profiles]
+      operationId: changeMyPassword
+      summary: Change your own password
+      description: |
+        From the account page, send `current_password` too; a wrong one changes
+        nothing (403 WRONG_PASSWORD). After a password-reset link, leave it out.
+        Other sessions stay signed in until their tokens expire.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              additionalProperties: false
+              properties:
+                current_password: { type: string, minLength: 1, maxLength: 200 }
+                new_password: { type: string, minLength: 8, maxLength: 200 }
+      responses:
+        '204': { description: Password changed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: WRONG_PASSWORD, SIGN_IN_AGAIN, or your role is not allowed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Validation failed, SAME_PASSWORD or WEAK_PASSWORD
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/AuthUnavailable' }
 
   /profiles:
     get:
@@ -1607,6 +1763,16 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    TooManyAttempts:
+      description: TOO_MANY_ATTEMPTS (wait a few minutes)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    AuthUnavailable:
+      description: AUTH_ERROR (Supabase Auth did not answer as expected; try again)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
 
@@ -1620,6 +1786,21 @@ components:
         details:
           type: object
           additionalProperties: true
+
+    Session:
+      type: object
+      required: [access_token, refresh_token, expires_at, user]
+      properties:
+        access_token: { type: string, description: Send as the Bearer token }
+        refresh_token: { type: string, description: 'Single use, for POST /auth/refresh' }
+        expires_at: { type: integer, description: 'When the access token expires, in seconds since 1970' }
+        expires_in: { type: integer, description: Seconds until it expires }
+        token_type: { type: string, const: bearer }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            email: { type: string, format: email }
 
     PageMeta:
       type: object

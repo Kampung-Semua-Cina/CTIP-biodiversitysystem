@@ -52,7 +52,7 @@ export function Users() {
         <div className="row wrap">
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label>Temporary Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Supabase auth password" /></label>
+          <label>Temporary Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" /></label>
           <label>Role
             <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
               {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
@@ -60,7 +60,7 @@ export function Users() {
           </label>
           <button className="btn" type="submit"><Icon name="plus" size={18} /> Add account</button>
         </div>
-        <p className="mute small">Accounts authenticate directly via Supabase Auth. Staff can also reset their password using the login page.</p>
+        <p className="mute small">Staff sign in with this email and password, and can reset their password from the sign-in page.</p>
       </form>
 
       <div className="toolbar" style={{ display: "flex", gap: 12, alignItems: "center", margin: "20px 0 14px", flexWrap: "wrap" }}>

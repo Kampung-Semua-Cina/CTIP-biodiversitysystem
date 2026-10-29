@@ -9,6 +9,13 @@ const OFFICER_ADMIN = ['officer', 'admin'];
 const ADMIN = ['admin'];
 
 export const routes = [
+  // Sign-in and passwords through the API, so the apps never call Supabase (CTIP-114)
+  ['post', '/auth/sign-in', PUBLIC],
+  ['post', '/auth/refresh', PUBLIC],
+  ['post', '/auth/sign-out', PUBLIC], // token optional: ends that session if sent
+  ['post', '/auth/password-reset', PUBLIC],
+  ['post', '/me/password', ANY_STAFF],
+
   // Public (Visitor)
   ['get', '/public/species', PUBLIC],
   ['get', '/public/species/:id', PUBLIC],

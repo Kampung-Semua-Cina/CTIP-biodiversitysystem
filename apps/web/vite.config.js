@@ -13,10 +13,7 @@ export default defineConfig({
   },
   resolve: {
     // The repo has more than one React (web + mobile). Always use the web app's own copy.
-    // supabase-js is imported from apps/shared/supabase.js, outside this folder. Without
-    // dedupe Vite looks for it above apps/shared, which only works on a laptop that also
-    // ran `npm install` at the repo root; CI installs inside apps/web only.
-    dedupe: ['react', 'react-dom', '@supabase/supabase-js'],
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     host: true, // Listen on all network addresses (0.0.0.0 and ::)

@@ -22,13 +22,11 @@
 //     if (err instanceof ApiError) showError(err.userMessage);  // one message for the user
 //   }
 //
-// Signing in (CTIP-42 mobile, CTIP-43 web) connects Supabase once, after it
-// creates the Supabase client:
+// Signing in goes through the API too (POST /v1/auth/sign-in, CTIP-114); the
+// apps never call Supabase. Connect the stored session once:
 //
-//   api.setAuth({
-//     getAccessToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
-//     refreshSession: async () => (await supabase.auth.refreshSession()).data.session?.access_token,
-//   });
+//   import { freshAuthToken } from "./api.js";
+//   api.setAuth({ getAccessToken: freshAuthToken, refreshSession: freshAuthToken });
 //
 // Until then (and for visitors) requests go without a token, which is what the
 // public routes (/public/...) expect.
