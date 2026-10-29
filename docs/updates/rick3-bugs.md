@@ -1,4 +1,4 @@
-ene# Bugs and security notes for vulnerability testing
+# Bugs and security notes for vulnerability testing
 
 **For:** the cybersecurity team · **Branch:** `rick3` · **Date:** 2026-10-28 · **Prepared by:** Ricardo (with Claude Code)
 
