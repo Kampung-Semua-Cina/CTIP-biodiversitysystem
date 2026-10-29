@@ -523,7 +523,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   };
 
-  const getBackendSpeciesById = async (id) => {
+  // useCallback: SpeciesPage lists this in an effect's dependencies. As a plain
+  // function it was new on every render, so each fetch re-rendered the page and
+  // fetched again, about 5 requests a second while a species page was open.
+  const getBackendSpeciesById = useCallback(async (id) => {
     if (!id) return null;
     try {
       const res = await fetchPublicSpeciesById(id);
@@ -544,7 +547,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     } catch {
       return null;
     }
-  };
+  }, []);
 
   // Staff login using Supabase Auth
   const login = async (email, password) => {
