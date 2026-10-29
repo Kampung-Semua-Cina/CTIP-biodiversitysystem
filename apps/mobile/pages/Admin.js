@@ -7,7 +7,7 @@ import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
 import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
-import { AppearanceSection, PrototypeRoleSection, VersionLine } from '../components/Chrome.js';
+import { AppearanceSection, VersionLine } from '../components/Chrome.js';
 import {
   Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, SortBar, Row, DotLabel,
   Field, Segmented, Empty,
@@ -42,7 +42,6 @@ export function StaffMore({ nav }) {
         {tools.map((t, i) => <MenuRow key={t.label} icon={t.icon} label={t.label} onPress={() => nav.go(t.go)} last={i === tools.length - 1} />)}
       </Section>
       <AppearanceSection />
-      <PrototypeRoleSection />
       <VersionLine />
       <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={logout} />
     </Screen>

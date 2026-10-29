@@ -389,7 +389,13 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // One API call with the fresh token. A call that could not reach the API
   // marks it down; `message` is always something to show the user.
   const callApi = async (fn, ...args) => {
-    const res = noteOffline(await fn(...args, { token: await sessionToken() }));
+    let res = noteOffline(await fn(...args, { token: await sessionToken() }));
+    // The token expired anyway (an earlier refresh could not reach the API, or the
+    // laptop slept): renew it now and try once more.
+    if (res.code === "TOKEN_EXPIRED") {
+      const token = await freshAuthToken({ force: true });
+      if (token) res = noteOffline(await fn(...args, { token }));
+    }
     if (res.ok) return res;
     const fields = res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
     return { ...res, message: res.offline ? API_DOWN : `${res.message || res.code}${fields ? ` (${fields})` : ""}` };

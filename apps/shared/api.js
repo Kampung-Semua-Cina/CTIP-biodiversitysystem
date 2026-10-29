@@ -107,12 +107,13 @@ let refreshing = null; // one refresh at a time: each refresh token works once
  * The access token to send, renewed through POST /v1/auth/refresh when it
  * expires within a minute. Returns null when the session has ended (the stored
  * session is then cleared). If the API cannot be reached, returns the old token.
+ * `force` renews even when the token looks fresh: the API has just said it expired.
  */
-export async function freshAuthToken() {
+export async function freshAuthToken({ force = false } = {}) {
   const session = getSession();
   if (!session?.access_token) return null;
   const exp = expiresAt(session);
-  if (!exp || exp - Date.now() / 1000 > REFRESH_MARGIN_S) return session.access_token;
+  if (!force && (!exp || exp - Date.now() / 1000 > REFRESH_MARGIN_S)) return session.access_token;
   if (!session.refresh_token) return session.access_token; // a pasted token: nothing to renew with
   refreshing ??= (async () => {
     const res = await apiFetch("/auth/refresh", { method: "POST", token: null, body: { refresh_token: session.refresh_token } });
@@ -265,6 +266,14 @@ export async function fetchPublicSpecies() {
  */
 export async function fetchPublicSpeciesById(id) {
   return apiFetch(`/public/species/${encodeURIComponent(id)}`);
+}
+
+/**
+ * The plant on a scanned QR tag, for visitors: GET /v1/public/tags/:qrId (CTIP-33).
+ * { qr_id, lat, lng, location_reduced, species }. 404 when the tag has no published plant.
+ */
+export async function fetchPublicPlantByTag(qrId) {
+  return apiFetch(`/public/tags/${encodeURIComponent(qrId)}`, { token: null });
 }
 
 // -----------------------------------------------------------------------------

@@ -135,7 +135,7 @@ export function SortBar({ items = [], value, onChange, label = 'Sort' }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        <Icon name="arrowRight" size={13} color={c.ink2} style={{ transform: [{ rotate: '90deg' }] }} />
+        <Icon name="sort" size={13} color={c.ink2} />
         <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink2, textTransform: 'uppercase', letterSpacing: 0.5 }}>
           {label}
         </Text>

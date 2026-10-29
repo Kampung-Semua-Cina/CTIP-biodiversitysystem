@@ -5,6 +5,7 @@ import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
+import PublicPlant from "./PublicPlant.jsx";
 import { Chip, Empty, Mono, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
@@ -24,6 +25,8 @@ export default function Specimen({ qr }) {
   const [showReviewPanel, setShowReviewPanel] = useState(false);
 
   const plant = visiblePlants(db, role).find((p) => p.qr_id === qr);
+  // Visitors are sent no plants at start-up: ask the API for this one (CTIP-33).
+  if (!plant && !staff) return <PublicPlant qr={qr} />;
   if (!plant) {
     const exists = db.plants.some((p) => p.qr_id === qr && !p.is_deleted);
     return (

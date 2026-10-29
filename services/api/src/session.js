@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { supabaseFresh } from './supabase.js';
 import { parseBody } from './validate.js';
+import { tooMany as overLimit, resetRateLimits } from './rateLimit.js';
 
 // Sign-in, session refresh and passwords (CTIP-114). The web and mobile apps
 // never talk to Supabase directly: they send these requests to the API, and
@@ -33,20 +34,11 @@ const toSession = (s) => ({
 
 // Every sign-in now reaches Supabase from the API's address, so Supabase's own
 // per-address limit no longer tells callers apart. This limit does, per caller
-// address (needs TRUST_PROXY on the host so req.ip is the caller, not the proxy).
-// In memory: it resets when the API restarts, which is fine for one instance.
+// address (see rateLimit.js).
 export const ATTEMPT_LIMIT = 10;
 export const ATTEMPT_WINDOW_MS = 5 * 60 * 1000;
-const attempts = new Map(); // key -> timestamps of recent attempts
-export function resetAttemptLimits() { attempts.clear(); }
-function tooMany(req, bucket) {
-  const key = `${bucket}:${req.ip}`;
-  const now = Date.now();
-  const recent = (attempts.get(key) ?? []).filter((t) => now - t < ATTEMPT_WINDOW_MS);
-  recent.push(now);
-  attempts.set(key, recent);
-  return recent.length > ATTEMPT_LIMIT;
-}
+export const resetAttemptLimits = resetRateLimits;
+const tooMany = (req, bucket) => overLimit(req, bucket, { limit: ATTEMPT_LIMIT, windowMs: ATTEMPT_WINDOW_MS });
 
 // Calls Supabase Auth's REST API with the caller's own access token, for the
 // two actions supabase-js only does on a client holding a session.

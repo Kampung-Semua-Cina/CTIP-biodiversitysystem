@@ -10,7 +10,7 @@ import RouteView from "./RouteView.jsx";
 
 export default function Site() {
   const { seg, arg } = useRoute();
-  const { role, me, db, toast, setRole, logout } = useStore();
+  const { role, me, db, toast, logout } = useStore();
   const { mode, theme, setMode } = useThemeMode(); // Light, Dark, or follow the device (remembered)
   const [menuAt, setMenuAt] = useState(null); // the page the menu was opened on, so it closes when you move on
 
@@ -25,8 +25,8 @@ export default function Site() {
 
   return (
     <div className="site" data-theme={theme} style={themeVars(theme)}>
-      {/* Local development only (CTIP-113): it signs in to the real demo accounts. */}
-      {import.meta.env.DEV && <RoleSwitch role={role} setRole={setRole} />}
+      {/* Local development only: API status. */}
+      {import.meta.env.DEV && <RoleSwitch />}
       <Navbar
         seg={seg}
         role={role}

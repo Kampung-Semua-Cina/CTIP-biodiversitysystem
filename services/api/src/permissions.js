@@ -19,6 +19,7 @@ export const routes = [
   // Public (Visitor)
   ['get', '/public/species', PUBLIC],
   ['get', '/public/species/:id', PUBLIC],
+  ['get', '/public/tags/:qrId', PUBLIC], // visitor QR page: one published plant, rate-limited (CTIP-33)
   ['get', '/public/workspace', PUBLIC], // published species and photos for the visitor pages
 
   // Start-up load: everything the apps show, as the signed-in user's RLS allows

@@ -1,10 +1,11 @@
 // apps/mobile/pages/Scan.js
 // Scan a pre-printed QR tag (CTIP-15). Tags are printed in batches beforehand and fixed
-// to the plant in the field, so the app never makes or prints a code. What happens next
-// depends on the tag and who is scanning:
+// to the plant in the field. What happens next depends on the tag and who is scanning:
 //   unused tag + botanist   -> "Start a new plant record?"  -> Add plant
 //   tag already on a plant  -> botanist: "Record a revisit" / everyone else: plant page
 //   retired or unknown      -> explain, scan again
+// A botanist with no tag to hand can make one instead (CTIP-27): "No tag? Make a new
+// one" opens Add plant with no tag, which offers "Generate new QR tag".
 import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -145,6 +146,13 @@ export default function Scan({ nav, params = {} }) {
                   <Text style={{ fontFamily: font('text', 700), fontSize: 14, color: CAMERA_TEXT }}>Type ID</Text>
                 </Pressable>
               </View>
+              {role === 'botanist' ? (
+                <Pressable accessibilityRole="button" onPress={() => nav.replace('add', { make: true })} hitSlop={8}
+                  style={{ height: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 }}>
+                  <Icon name="qr" size={18} color={CAMERA_TEXT} />
+                  <Text style={{ fontFamily: font('text', 700), fontSize: 14, color: CAMERA_TEXT, textDecorationLine: 'underline' }}>No tag? Make a new one</Text>
+                </Pressable>
+              ) : null}
             </View>
           </>
         )}
@@ -301,7 +309,10 @@ function Result({ result, role, nav, onAgain }) {
             : 'It is not a Daun Sense tag for Niah National Park. Check the code and try again.'}
         </Txt>
       </View>
-      <Button label="Scan again" onPress={onAgain} />
+      <View style={{ gap: 4 }}>
+        <Button label="Scan again" onPress={onAgain} />
+        {role === 'botanist' ? <Button label="Make a new tag instead" kind="text" height={48} size={15} onPress={() => nav.replace('add', { make: true })} /> : null}
+      </View>
     </Sheet>
   );
 }

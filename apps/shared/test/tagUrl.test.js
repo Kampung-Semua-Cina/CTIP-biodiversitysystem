@@ -8,7 +8,7 @@ import { PUBLIC_SITE_URL } from "../site.js";
 
 test("tagUrl without a browser points at the plant page on the live site", () => {
   assert.equal(PUBLIC_SITE_URL, "https://ctip-biodiversitysystem.pages.dev");
-  assert.equal(tagUrl("NIAH-0042"), "https://ctip-biodiversitysystem.pages.dev/#/dashboard/NIAH-0042");
+  assert.equal(tagUrl("NIAH-0042"), "https://ctip-biodiversitysystem.pages.dev/#/tag/NIAH-0042");
 });
 
 test("the tag ID can be read back from the link the way the scanner does", () => {
