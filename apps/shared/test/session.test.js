@@ -2,7 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   getSession, setSession, getAuthToken, freshAuthToken, onSessionEnded,
-  signInApi, signOutApi, takeSessionFromUrl, tokenClaims,
+  signInApi, signOutApi, takeSessionFromUrl, tokenClaims, setStorageAdapter, restoreSession,
 } from "../api.js";
 
 // The apps' session (CTIP-114): signed in, renewed and ended through the API,
@@ -111,4 +111,35 @@ test("a password-reset link's session is read from the address", () => {
 test("tokenClaims reads base64url without padding", () => {
   assert.equal(tokenClaims(jwt({ sub: "ünï", exp: 1 })).exp, 1);
   assert.equal(tokenClaims("not a token"), null);
+});
+
+test("custom storage adapter persists and restores session across app restarts", async () => {
+  const store = new Map();
+  const mockStorage = {
+    getItem: async (k) => store.get(k) || null,
+    setItem: async (k, v) => store.set(k, String(v)),
+    removeItem: async (k) => store.delete(k),
+  };
+
+  setStorageAdapter(mockStorage);
+  const session = { access_token: "tok1", refresh_token: "ref1", expires_at: now() + 3600, user: { id: "u123", email: "botanist@sfc.my" } };
+  setSession(session);
+
+  // Stored in mock storage
+  assert.ok(store.has("daun_session"));
+  assert.equal(JSON.parse(store.get("daun_session")).access_token, "tok1");
+
+  // Simulate app restart: clear in-memory session
+  setSession(null);
+  store.set("daun_session", JSON.stringify(session)); // re-populate persistence to simulate app restart with saved data
+
+  // restoreSession should rehydrate the session
+  const restored = await restoreSession();
+  assert.deepEqual(restored, session);
+  assert.equal(getAuthToken(), "tok1");
+
+  // Sign out removes from persistence
+  await signOutApi();
+  assert.equal(store.has("daun_session"), false);
+  setStorageAdapter(null);
 });

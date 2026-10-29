@@ -29,18 +29,9 @@ export function AppearanceSection() {
   );
 }
 
-// Local development only (CTIP-113): switching role signs in to the real demo
-// accounts, so release builds (APKs) show nothing here.
+// Prototype role switch removed (real sign-in is active).
 export function PrototypeRoleSection() {
-  const { c } = useTheme();
-  const { role, setRole } = useStore();
-  if (!__DEV__) return null;
-  return (
-    <Section title="Prototype · view the app as" gap={12}>
-      <Segmented value={role} onChange={setRole} items={ROLES.map((r) => ({ key: r.key, label: r.label }))} />
-      <Txt v="caption" color={c.ink3} style={{ fontWeight: undefined }}>Sample data only. This switch goes away when real sign-in is added.</Txt>
-    </Section>
-  );
+  return null;
 }
 
 // App version, e.g. "v1.0.103 · a1b2c3d": 1.0.<commit count> and the commit

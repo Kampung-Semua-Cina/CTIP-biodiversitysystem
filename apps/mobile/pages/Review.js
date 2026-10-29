@@ -82,7 +82,7 @@ function Photos({ photos }) {
   return (
     <View style={{ marginHorizontal: -20, marginTop: -20 }}>
       <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
-        {photos.map((p, i) => <Image key={p.id} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height: 220, backgroundColor: c.accentSoft }} />)}
+        {photos.map((p, i) => <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height: 220, backgroundColor: c.accentSoft }} />)}
       </ScrollView>
       {photos.length > 1 ? (
         <View style={{ position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>

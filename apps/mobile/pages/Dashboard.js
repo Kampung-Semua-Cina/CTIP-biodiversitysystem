@@ -7,7 +7,7 @@ import { View, Text, FlatList, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
-import { visiblePlants, nameOf } from '../../shared/selectors.js';
+import { visiblePlants, nameOf, speciesCatalogue } from '../../shared/selectors.js';
 import { THREATENED } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
@@ -66,7 +66,7 @@ export function SpeciesList({ nav, params = {} }) {
   const staff = role !== 'visitor';
 
   // Published species only for visitors; staff also see unpublished ones.
-  const species = db.species.filter((s) => !s.is_deleted && (staff || s.is_published));
+  const species = speciesCatalogue(db, role);
   const families = [...new Set(species.map((s) => s.family).filter(Boolean))].sort();
   const plants = visiblePlants(db, role);
 
@@ -129,7 +129,7 @@ export function SpeciesList({ nav, params = {} }) {
       <ListHeader>
         {nav.canGoBack ? <View style={{ marginLeft: -16, marginTop: -8 }}><IconButton name="chevL" label="Back" onPress={nav.back} /></View> : null}
         <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{total} species</Txt>} />
-        <Segmented value="species" onChange={(k) => k === 'tagged' && nav.go('tagged')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
+        <Segmented value="species" onChange={(k) => k === 'tagged' && nav.replace('tagged')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
         <SearchField value={q} onChangeText={setQ} placeholder="Search name or tag ID" />
         <Pills value={family} onChange={setFamily} items={[{ key: 'all', label: 'All families' }, ...families.map((f) => ({ key: f, label: f }))]} />
         <SortBar items={SORT_SPECIES} value={sort} onChange={setSort} />
@@ -172,7 +172,7 @@ export function SpeciesList({ nav, params = {} }) {
 }
 
 function SpeciesRow({ s, plants, staff, onPress }) {
-  const photo = s.photo || plants.find((p) => p.species_id === s.id && p.photos.length)?.photos[0]?.url;
+  const photo = s.photo || s.media?.[0]?.url || plants.find((p) => p.species_id === s.id && p.photos?.length)?.photos[0]?.url;
   return (
     <View style={{ height: ROW_HEIGHT }}>
       <Row
@@ -269,7 +269,7 @@ export function TaggedPlants({ nav }) {
         ListHeaderComponent={
           <ListHeader>
             <TitleBlock title="Plants" right={<Txt v="small" color={c.ink2}>{all.length} tagged</Txt>} />
-            <Segmented value="tagged" onChange={(k) => k === 'species' && nav.go('plants')} items={[{ key: 'tagged', label: 'Tagged plants' }, { key: 'species', label: 'Species' }]} />
+            <Segmented value="tagged" onChange={(k) => k === 'species' && nav.replace('plants')} items={[{ key: 'species', label: 'Species' }, { key: 'tagged', label: 'Tagged plants' }]} />
             <SearchField value={q} onChangeText={setQ} placeholder="Tag ID, species or botanist" />
             <Pills value={filter} onChange={setFilter} items={filters} />
             <SortBar items={SORT_TAGGED} value={sort} onChange={setSort} />

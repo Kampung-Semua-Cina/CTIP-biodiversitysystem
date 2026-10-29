@@ -615,7 +615,16 @@ export function Revisit({ nav, params = {} }) {
   };
 
   const submit = async () => {
-    const obsId = await addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: hasFix(gps) ? gps.acc : null });
+    const obsId = await addRevisit({
+      specimen_id: plant.id,
+      height_cm: height || last?.height_cm,
+      morphology: changes.trim() || last?.morphology,
+      notes: '',
+      photos,
+      lat: hasFix(gps) ? gps.lat : (plant.lat ?? null),
+      lng: hasFix(gps) ? gps.lng : (plant.lng ?? null),
+      gps_accuracy_m: hasFix(gps) ? gps.acc : null,
+    });
     if (!obsId) return; // addRevisit already showed why; keep what was entered
     notify(`Revisit of ${plant.qr_id} sent for review`);
     nav.tab('records');

@@ -10,6 +10,8 @@ import {
   setAuthToken,
   getSession,
   freshAuthToken,
+  restoreSession,
+  tokenClaims,
   onSessionEnded,
   takeSessionFromUrl,
   signInApi,
@@ -94,9 +96,12 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const [prototypeRole, setPrototypeRole] = useState(null);
 
+  const claims = useMemo(() => tokenClaims(authToken || getAuthToken()), [authToken]);
+  const tokenRole = claims?.user_role || claims?.role || null;
+
   const effectiveRole = prototypeRole !== null
     ? prototypeRole
-    : (userId ? (db.profiles.find((p) => p.id === userId)?.role || "visitor") : "visitor");
+    : (userId ? (db.profiles.find((p) => p.id === userId)?.role || tokenRole || "visitor") : "visitor");
 
   const me = useMemo(() => {
     if (effectiveRole === "visitor") return null;
@@ -119,8 +124,21 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         is_active: true,
       };
     }
+
+    if (userId) {
+      const email = getSession()?.user?.email || claims?.email || "";
+      const roleName = tokenRole || "botanist";
+      return {
+        id: userId,
+        full_name: email ? email.split("@")[0] : "Signed in",
+        role: roleName,
+        email,
+        is_active: true,
+      };
+    }
+
     return null;
-  }, [effectiveRole, prototypeRole, db.profiles, userId]);
+  }, [effectiveRole, prototypeRole, db.profiles, userId, claims, tokenRole]);
 
   const role = effectiveRole;
 
@@ -346,6 +364,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     });
 
     (async () => {
+      await restoreSession();
       const token = await sessionToken();
       if (!mounted) return;
       if (token) {
@@ -392,7 +411,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const res = noteOffline(await fn(...args, { token: await sessionToken() }));
     if (res.ok) return res;
     const fields = res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
-    return { ...res, message: res.offline ? API_DOWN : `${res.message || res.code}${fields ? ` (${fields})` : ""}` };
+    const detail = res.message || res.code;
+    const offlineMsg = (detail && detail !== "Cannot reach the API server" && detail !== "Cannot reach API server")
+      ? `${API_DOWN} (${detail})`
+      : API_DOWN;
+    return { ...res, message: res.offline ? offlineMsg : `${detail}${fields ? ` (${fields})` : ""}` };
   };
 
   // An API error as something withExponentialRetry understands: only "API
@@ -405,8 +428,13 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // comes back: GET /v1/notifications, the signed-in person's own.
   const refreshNotifications = useCallback(async () => {
     if (!userId) return;
-    const res = await fetchNotificationsApi({ token: await sessionToken() });
-    if (!res.ok) return console.warn("refreshNotifications:", res.message);
+    const token = await sessionToken();
+    if (!token) return;
+    const res = await fetchNotificationsApi({ token });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403 || res.code === "UNAUTHENTICATED") return;
+      return console.warn("refreshNotifications:", res.message);
+    }
     setDb((prev) => ({ ...prev, notifications: [...res.data, ...prev.notifications.filter((n) => n.user_id !== userId)] }));
   }, [userId]);
   useEffect(() => {
@@ -706,18 +734,42 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     device_id: deviceId,
   });
 
-  const addRevisit = async ({ specimen_id, height_cm, morphology, notes, photos = [], gps_accuracy_m }) => {
+  const addRevisit = async ({ specimen_id, height_cm, morphology, notes, photos = [], lat, lng, gps_accuracy_m }) => {
     const obsId = uid();
+    const photoIds = photos.map((p) => p.id || uid());
+    let observationDone = false;
+    let photosDone = 0;
+    const must = (res) => { if (!res.ok) throw toError(res); return res.data; };
+
     try {
-      const res = await callApi(createObservationApi, observationBody({ id: obsId, specimen_id, height_cm, morphology, notes, gps_accuracy_m }));
-      if (!res.ok) throw toError(res);
-      for (const p of photos) {
-        const up = await callApi(uploadObservationPhotoApi, obsId, { ...p, id: p.id || uid() });
-        if (!up.ok) throw toError(up);
-      }
+      const result = await withExponentialRetry(async () => {
+        if (!observationDone) {
+          must(await callApi(createObservationApi, observationBody({
+            id: obsId,
+            specimen_id,
+            height_cm,
+            morphology,
+            notes,
+            lat,
+            lng,
+            gps_accuracy_m,
+          })));
+          observationDone = true;
+        }
+
+        for (; photosDone < photos.length; photosDone++) {
+          must(await callApi(uploadObservationPhotoApi, obsId, {
+            ...photos[photosDone],
+            id: photoIds[photosDone],
+          }));
+        }
+
+        return obsId;
+      }, { maxRetries: 3 });
+
       notify("Revisit recorded");
       await loadFromApi(true);
-      return obsId;
+      return result;
     } catch (err) {
       console.error("addRevisit error:", err);
       notify(`Failed to record revisit: ${err.message || err}`);

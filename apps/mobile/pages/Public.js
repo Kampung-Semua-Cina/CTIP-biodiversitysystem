@@ -9,7 +9,7 @@ import { getAboutContent, getContactContent, getHomeContent } from '../../shared
 import { SITE, PARK } from '../../shared/site.js';
 import { useTheme } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
-import { LogoMark, AppearanceSection, PrototypeRoleSection, VersionLine } from '../components/Chrome.js';
+import { LogoMark, AppearanceSection, VersionLine } from '../components/Chrome.js';
 import {
   Screen, Header, TitleBlock, SearchField, Section, Row, Thumb, Sci, DotLabel, TextLink, Txt,
   MenuRow, Button, KV, IconTile, IconButton, Empty,
@@ -110,7 +110,6 @@ export function More({ nav }) {
         </Txt>
         <Button label="Staff sign in" kind="secondary" icon="lock" onPress={() => nav.go('signin')} />
       </Section>
-      <PrototypeRoleSection />
       <VersionLine />
     </Screen>
   );

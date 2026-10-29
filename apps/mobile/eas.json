@@ -13,6 +13,10 @@
         "EXPO_PUBLIC_API_URL": "https://ctip-biodiversitysystem.onrender.com"
       }
     },
+    "preview-local": {
+      "extends": "preview",
+      "autoIncrement": false
+    },
     "production": {
       "autoIncrement": true,
       "android": {
@@ -21,6 +25,10 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://ctip-biodiversitysystem.onrender.com"
       }
+    },
+    "production-local": {
+      "extends": "production",
+      "autoIncrement": false
     }
   }
 }

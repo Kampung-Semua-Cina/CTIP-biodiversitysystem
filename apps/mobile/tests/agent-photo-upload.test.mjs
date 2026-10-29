@@ -58,3 +58,43 @@ test('decodeBase64ToArrayBuffer binary decoding', async (t) => {
     assert.equal(nullBuf.byteLength, 0);
   });
 });
+
+test('filePart and photo upload compatibility', async (t) => {
+  const { filePart } = await import('../../shared/api.js');
+
+  await t.test('converts photo with base64 to Blob with byte support', async () => {
+    const photo = {
+      id: 'photo-1',
+      name: 'pitcher.jpg',
+      type: 'image/jpeg',
+      base64: 'SGVsbG8gV29ybGQ=',
+      url: 'file:///data/user/0/cache/photo.jpg',
+    };
+    const part = await filePart(photo);
+    assert.ok(part);
+    assert.equal(part.name, 'pitcher.jpg');
+    assert.equal(part.type, 'image/jpeg');
+    assert.equal(typeof part.bytes, 'function');
+    const bytes = await part.bytes();
+    assert.ok(bytes instanceof Uint8Array);
+    assert.equal(bytes.byteLength, 11);
+    assert.ok(part instanceof Blob);
+  });
+
+  await t.test('converts data URL photo to Blob with byte support', async () => {
+    const photo = {
+      id: 'photo-2',
+      name: 'leaf.png',
+      type: 'image/png',
+      url: 'data:image/png;base64,SGVsbG8gV29ybGQ=',
+    };
+    const part = await filePart(photo);
+    assert.ok(part);
+    assert.equal(part.name, 'leaf.png');
+    assert.equal(part.type, 'image/png');
+    assert.equal(typeof part.bytes, 'function');
+    const bytes = await part.bytes();
+    assert.equal(bytes.byteLength, 11);
+    assert.ok(part instanceof Blob);
+  });
+});

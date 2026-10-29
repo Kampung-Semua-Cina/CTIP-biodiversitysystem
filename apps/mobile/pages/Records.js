@@ -163,7 +163,7 @@ export function RecordDetail({ nav, params = {} }) {
 
       <Section title="Photos" right={<Txt v="caption" color={c.ink3}>{photos.length} of 6</Txt>} gap={12}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {photos.map((p) => <Thumb key={p.id} uri={p.url} size={76} />)}
+          {photos.map((p, i) => <Thumb key={p.id ? `${p.id}-${i}` : i} uri={p.url} size={76} />)}
           {returned ? (
             <View accessibilityLabel="Add the missing photo when you edit this record" style={{ width: 76, height: 76, borderRadius: 10, borderWidth: 2, borderStyle: 'dashed', borderColor: c.warning, alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="camera" size={22} color={c.warning} />
