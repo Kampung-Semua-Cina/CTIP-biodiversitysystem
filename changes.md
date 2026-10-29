@@ -153,3 +153,60 @@ The QR-tag bug fixes from the same day (`specimens_qr_id_key`) are described in 
 | **Logged-in browser test (create/edit a species, review a record)** | ⏳ **Not done.** It needs an officer login and would write to the shared Supabase project. Please test this by hand. |
 
 `npm run web:lint` still reports 6 errors in `Scan.jsx`. They were there before this change and are unrelated.
+
+---
+
+# Update 3 (2026-10-29): review rules, species photos, search, missing GPS
+
+**Apply this migration in the Supabase SQL Editor** (after the two from earlier updates): `supabase/migrations/20261029120000_approve_requires_species.sql`. It is safe to run more than once and changes no data.
+
+## Approve, Reject or Request Changes (CTIP-29 split)
+
+- **The API enforces "confirm the species before approving".** It answers `422 SPECIES_REQUIRED` when the plant has no species, or its species was deleted. The check is inside `review_observation()`, so it also covers anyone calling the database directly. Return and reject still work without a species.
+- **Decisions only go through the API.** The website and app no longer write to the database when the API is down (that skipped the version check, bugs.md M2). The migration also removes the officer's direct insert into `observation_reviews` and the old `approve_observation()`.
+- Web Review disables the three buttons while the API is down and says why. Mobile Review waits for the result instead of always saying "approved".
+
+## Species photos with captions
+
+- New `PATCH` and `DELETE /v1/species/{id}/media/{mediaId}` (Officer/Admin), beside the existing upload. Added to `openapi.yaml`.
+- The photo editor now saves through the API only, sending just what changed: new uploads, then caption and order changes, then removals. The API checks each file's real type and size and strips GPS metadata.
+- Field photos added from observations are uploaded as real copies, so they don't break after 24 hours. Caption-only edits no longer corrupt the Storage path. A failed save no longer empties the gallery. Removed photos are deleted from Storage.
+
+## Search & filter
+
+- Filters are in the URL, so searches can be shared and bookmarked: `#/plants?q=pitcher&family=Nepenthaceae&genus=Nepenthes`, `#/reports?status=synced&from=2026-10-01`.
+- **Catalogue:** new genus filter. Search covers genus too, and there's a "Clear filters" button.
+- **Reports (plant records):**
+  - search by tag, name or the botanist's guess
+  - family, genus, conservation and approval-status filters
+  - a "last recorded" date range
+  - sort by tag, name, newest or tallest
+  - 25 per page
+  - CSV export of all matching records.
+- **Speed:** visits are grouped per plant once. On 5,000 plants with 10,000 visits, search went from about 1.4 s to 64 ms.
+- **Not done:** a location/zone filter, because the database has no zone field. Agree with the team what a zone is (a trail, a grid square, a sensor area) and it can be added.
+
+## GPS: "location not captured" instead of a made-up position
+
+- Web and mobile send no location when there's no real fix, instead of a default or random spot near the trail head. The botanist sees a warning, and the officer sees "Location not captured" on the review screen. These plants stay off every map.
+- Older records still have their fake positions. `bugs.md` T9 has a query to find them.
+
+## Testing done (update 3)
+
+| Check | Result |
+|---|---|
+| API tests | ✅ 73/73 (new: `SPECIES_REQUIRED`, photo edit/delete, roles, validation) |
+| New migration on local Postgres (PGlite) with all 13 migrations + Supabase default grants | ✅ species check, role check, direct insert refused (a control run without the fix accepted it), old function refused, safe to re-run |
+| Mobile tests | ✅ 30/30 |
+| Web lint / build | ✅ clean except the 6 existing `Scan.jsx` errors / builds |
+| URL filters (parse, update, clear, encoding) with a fake window | ✅ |
+| Search speed, 5,000 plants | ✅ 64 ms (was 1,422 ms) |
+| **Not done** | Clicking through in a logged-in browser, the mobile app on a phone, and the Playwright suite (it signs in to the shared Supabase project). Please test the photo editor and a review by hand after applying the migration. |
+
+## Should the website cache data while the API is down?
+
+**For reading: it already does.** The store keeps the last data it loaded from Supabase. The species list says "Showing the last saved list" when the API fails, and the review queue keeps what it showed.
+
+**For decisions and species edits: no, please don't queue them.** A queued approval could be sent hours later against a record the botanist has since edited, or that another officer already decided, which is exactly the problem the version check prevents. It would also mean the browser holds decisions that the API, the only place allowed to check them, hasn't seen yet. Telling the officer "the API is down, try again shortly" is safer and simple.
+
+The place an offline queue *does* make sense is the botanist in the field, and the mobile app already keeps drafts on the phone until they can be sent.

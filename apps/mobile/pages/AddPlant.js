@@ -58,11 +58,10 @@ async function pickFromGallery() {
   return [];
 }
 
-// Fallback GPS coordinates near the trail head when device hardware is unavailable.
-function fallbackGps() {
-  const jitter = () => (Math.random() - 0.5) * 0.0006;
-  return { lat: +(3.8031 + jitter()).toFixed(5), lng: +(113.7762 + jitter()).toFixed(5), acc: Math.round(4 + Math.random() * 5), simulated: true };
-}
+// No fix: the record is sent with "location not captured" and the officer is told.
+// Never a made-up position, which would look like a real reading.
+const NO_GPS = { lat: null, lng: null, acc: null };
+const hasFix = (gps) => gps.lat != null && gps.lng != null;
 
 // Real hardware GPS acquisition via expo-location (CTIP-56)
 async function requestHardwareLocation() {
@@ -70,8 +69,8 @@ async function requestHardwareLocation() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       return {
-        gps: fallbackGps(),
-        error: 'Location permission denied. Please allow location access in your device settings to record plant coordinates.',
+        gps: NO_GPS,
+        error: 'Location permission denied. Allow location access in your device settings, or the record is sent without a location.',
         denied: true,
       };
     }
@@ -86,7 +85,6 @@ async function requestHardwareLocation() {
           lat: +loc.coords.latitude.toFixed(5),
           lng: +loc.coords.longitude.toFixed(5),
           acc: Math.round(loc.coords.accuracy || 6),
-          simulated: false,
         },
         error: null,
         denied: false,
@@ -97,8 +95,8 @@ async function requestHardwareLocation() {
   }
 
   return {
-    gps: fallbackGps(),
-    error: 'Could not obtain hardware GPS fix. Using default trail coordinates.',
+    gps: NO_GPS,
+    error: 'Could not get a GPS fix. Tap refresh to try again, or the record is sent without a location.',
     denied: false,
   };
 }
@@ -163,11 +161,13 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Icon name="pin" size={22} color={error ? c.warning : gps.acc <= 10 ? c.success : c.warning} />
+        <Icon name="pin" size={22} color={error || !hasFix(gps) || gps.acc > 10 ? c.warning : c.success} />
         <View style={{ flex: 1, gap: 2 }}>
           {title ? <Txt v="label">{title}</Txt> : <Mono size={15}>{coords(gps.lat, gps.lng)}</Mono>}
           <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>
-            {loading ? 'Acquiring GPS fix…' : `GPS ±${gps.acc} m · ${gps.acc <= 10 ? 'good fix' : 'weak fix, try again in the open'}`}
+            {loading ? 'Acquiring GPS fix…'
+              : !hasFix(gps) ? 'Location not captured. The officer will be told.'
+              : `GPS ±${gps.acc} m · ${gps.acc <= 10 ? 'good fix' : 'weak fix, try again in the open'}`}
           </Txt>
         </View>
         <IconButton name="refresh" label="Refresh location" color={c.accent} size={20} onPress={onRefresh} />
@@ -217,7 +217,7 @@ export function AddPlant({ nav, params = {} }) {
   const [height, setHeight] = useState('');
   const [looks, setLooks] = useState('');
   const [notes, setNotes] = useState('');
-  const [gps, setGps] = useState(fallbackGps);
+  const [gps, setGps] = useState(NO_GPS);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
   const [restoredDraft, setRestoredDraft] = useState(false);
@@ -244,7 +244,7 @@ export function AddPlant({ nav, params = {} }) {
           if (d.morphology) setLooks(d.morphology);
           if (d.notes) setNotes(d.notes);
           if (d.photos && d.photos.length) setPhotos(d.photos);
-          if (d.gps) setGps(d.gps);
+          if (d.gps && !d.gps.simulated) setGps(d.gps); // older drafts may hold the old made-up position
           setRestoredDraft(true);
         }
       });
@@ -311,7 +311,7 @@ export function AddPlant({ nav, params = {} }) {
         photos,
         lat: gps.lat,
         lng: gps.lng,
-        gps_accuracy_m: gps.acc,
+        gps_accuracy_m: hasFix(gps) ? gps.acc : null,
       });
       // addPlant reports failure instead of throwing. Keep the draft so nothing is lost.
       if (!res?.ok) throw new Error(res?.message || 'Failed to submit observation.');
@@ -413,7 +413,7 @@ export function Submitted({ nav, params = {} }) {
         <Thumb uri={params.cover} size={56} />
         <View style={{ flex: 1, gap: 2 }}>
           <Txt v="label">{params.name || 'Plant record'}</Txt>
-          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{params.photos || 1} photo · GPS ±{params.acc || 5} m</Txt>
+          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{params.photos || 1} photo · {params.acc != null ? `GPS ±${params.acc} m` : 'location not captured'}</Txt>
         </View>
       </View>
       <View style={{ gap: 10, marginTop: 'auto' }}>
@@ -431,7 +431,7 @@ export function Revisit({ nav, params = {} }) {
   const [photos, setPhotos] = useState([]);
   const [height, setHeight] = useState('');
   const [changes, setChanges] = useState('');
-  const [gps, setGps] = useState(fallbackGps);
+  const [gps, setGps] = useState(NO_GPS);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
 
@@ -467,7 +467,7 @@ export function Revisit({ nav, params = {} }) {
   };
 
   const submit = async () => {
-    const obsId = await addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: gps.acc });
+    const obsId = await addRevisit({ specimen_id: plant.id, height_cm: height || last?.height_cm, morphology: changes.trim() || last?.morphology, notes: '', photos, gps_accuracy_m: hasFix(gps) ? gps.acc : null });
     if (!obsId) return; // addRevisit already showed why; keep what was entered
     notify(`Revisit of ${plant.qr_id} sent for review`);
     nav.tab('records');

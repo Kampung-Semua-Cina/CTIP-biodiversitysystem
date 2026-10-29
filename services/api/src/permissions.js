@@ -32,6 +32,8 @@ export const routes = [
   ['post', '/species/:id/publish', OFFICER_ADMIN],
   ['get', '/species/:id/media', OFFICER_ADMIN],
   ['post', '/species/:id/media', OFFICER_ADMIN],
+  ['patch', '/species/:id/media/:mediaId', OFFICER_ADMIN],
+  ['delete', '/species/:id/media/:mediaId', OFFICER_ADMIN],
 
   // Specimens (row-level "own record" checks stay in Supabase RLS)
   ['get', '/specimens', ANY_STAFF],

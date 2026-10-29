@@ -17,8 +17,9 @@ const app = createApp({ verify });
 const as = (who) => ({ Authorization: `Bearer ${who}` });
 
 let observations, reviews, rpcCalls;
-const obs = (status, recorded_by, observed_at, version = 1) =>
-  ({ id: crypto.randomUUID(), specimen_id: crypto.randomUUID(), recorded_by, observed_at, status, version, is_deleted: false });
+// has_species stands in for "the plant is linked to a species that is not deleted".
+const obs = (status, recorded_by, observed_at, version = 1, has_species = true) =>
+  ({ id: crypto.randomUUID(), specimen_id: crypto.randomUUID(), recorded_by, observed_at, status, version, is_deleted: false, has_species });
 
 const json = (status, body, headers = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -30,6 +31,7 @@ function reviewObservation({ p_obs_id, p_version, p_decision, p_comment }, revie
   if (!o) return json(400, { code: 'CTNF0', message: 'Observation not found' });
   if (o.status !== 'synced') return json(400, { code: 'CTST0', message: `Observation is ${o.status}, not waiting for review` });
   if (o.version !== p_version) return json(400, { code: 'CTVR0', message: `Observation changed since you opened it (now version ${o.version})` });
+  if (p_decision === 'approve' && !o.has_species) return json(400, { code: 'CTSP0', message: 'Confirm the species before approving' });
   const review = { id: crypto.randomUUID(), observation_id: o.id, reviewer_id: reviewer.id, observation_version: o.version,
     decision: p_decision, comment: p_comment, created_at: new Date().toISOString() };
   reviews.push(review);
@@ -144,4 +146,17 @@ test('botanists cannot review, not even their own observation', async () => {
   assert.equal(res.status, 403);
   assert.deepEqual(rpcCalls, []);
   assert.equal(observations[0].status, 'synced');
+});
+
+test('approving needs a confirmed species: 422 SPECIES_REQUIRED, while return and reject still work', async () => {
+  const unnamed = obs('synced', users.botanist, '2026-10-04T00:00:00Z', 1, false);
+  observations.push(unnamed);
+  const res = await review('officer', unnamed.id, { decision: 'approve', observation_version: 1 });
+  assert.equal(res.status, 422);
+  assert.equal(res.body.code, 'SPECIES_REQUIRED');
+  assert.equal(unnamed.status, 'synced');
+  assert.equal(reviews.length, 0);
+  const back = await review('officer', unnamed.id, { decision: 'return', observation_version: 1, comment: 'Which species is it?' });
+  assert.equal(back.status, 201);
+  assert.equal(unnamed.status, 'returned');
 });

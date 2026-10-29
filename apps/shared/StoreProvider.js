@@ -20,6 +20,9 @@ import {
   createSpeciesApi,
   updateSpeciesApi,
   fetchObservations,
+  uploadSpeciesMediaApi,
+  updateSpeciesMediaApi,
+  deleteSpeciesMediaApi,
 } from "./api.js";
 
 const ACTIVE_DEMO_PASSWORD =
@@ -963,77 +966,39 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   };
 
+  // Approve, return or reject: through the API only (CTIP-29: "only Officer and
+  // Admin can decide, enforced by the API"). There is no direct-to-database
+  // fallback any more: the old one skipped the version check (bugs.md M2).
+  // When the API is down the decision is not saved, and the officer is told.
   const reviewObservation = async (id, decision, comment) => {
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
     const obs = db.observations.find((o) => o.id === id);
-    const token = authToken || getAuthToken() || (await sb.auth.getSession())?.data?.session?.access_token;
-    const version = obs?.version || 1;
+    const token = await currentToken();
     const verb = { approve: "approved", return: "returned", reject: "rejected" }[decision] || decision;
-
-    try {
-      let routedViaApi = false;
-
-      // 1. Primary path: Express API endpoint POST /v1/observations/:id/reviews (CTIP-86)
-      if (token) {
-        const apiRes = await submitReviewApi({
-          observationId: id,
-          decision,
-          version,
-          comment: comment ? comment.trim() : undefined,
-          token,
-        });
-
-        if (apiRes.ok) {
-          routedViaApi = true;
-        } else if (!apiRes.offline) {
-          // If API returned a non-offline error (e.g. 403 Forbidden, 409 Version Conflict, 422 Validation error),
-          // DO NOT bypass the API; report the actual server validation / conflict error directly.
-          const msg = apiRes.message || apiRes.code || "Review failed";
-          notify(`Failed to submit review: ${msg}`);
-          return { ok: false, error: msg };
-        }
-      }
-
-      // 2. Fallback path if API server is offline or no API token:
-      if (!routedViaApi) {
-        // Attempt Supabase RPC review_observation (row-level locked)
-        const { error: rpcErr } = await sb.rpc("review_observation", {
-          p_obs_id: id,
-          p_version: version,
-          p_decision: decision,
-          p_comment: comment && comment.trim() ? comment.trim() : null,
-        });
-
-        if (rpcErr) {
-          // Fallback to table insert if RPC not installed
-          const { error: revErr } = await sb.from("observation_reviews").insert({
-            observation_id: id,
-            reviewer_id: authUid,
-            observation_version: version,
-            decision,
-            comment: comment || null,
-          });
-          if (revErr) throw revErr;
-        }
-
-        if (comment && comment.trim()) {
-          await sb.from("observation_comments").insert({
-            observation_id: id,
-            author_id: authUid,
-            body: comment.trim(),
-          });
-        }
-      }
-
-      notify(`Record ${verb}`);
-      await fetchFromSupabase(true);
-      return { ok: true };
-    } catch (err) {
-      console.error("reviewObservation error:", err);
-      notify(`Failed to submit review: ${err.message || err}`);
-      return { ok: false, error: err?.message || err };
+    if (!token) {
+      notify("Sign in again to review records");
+      return { ok: false, error: "NO_TOKEN" };
     }
+
+    const res = noteOffline(await submitReviewApi({
+      observationId: id,
+      decision,
+      version: obs?.version || 1,
+      comment: comment ? comment.trim() : undefined,
+      token,
+    }));
+    if (!res.ok) {
+      const msg = res.offline ? `${API_DOWN} The decision was not saved.`
+        : res.code === "VERSION_CONFLICT" ? "The botanist changed this record since you opened it. Look at it again, then decide."
+        : res.code === "WRONG_STATUS" ? "This record is no longer waiting for review. Someone may have decided already."
+        : `Failed to submit review: ${res.message || res.code}`;
+      notify(msg);
+      await fetchFromSupabase(true);
+      return { ok: false, error: res.code, message: msg };
+    }
+
+    notify(`Record ${verb}`);
+    await fetchFromSupabase(true);
+    return { ok: true };
   };
 
   const getDistributionPoints = useCallback(async ({ speciesId, family } = {}) => {
@@ -1216,6 +1181,11 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const deleteSpecies = (id) => setSpeciesDeleted(id, true);
   const restoreSpecies = (id) => setSpeciesDeleted(id, false);
 
+  // Species gallery (CTIP-85), through the API only: it checks each file's real
+  // type and size and removes location metadata before storing it. Only what
+  // changed is sent: new photos are uploaded first, then captions and order
+  // are updated, then removed photos are deleted. A failure part way leaves the
+  // photos already saved in place (no "delete all, insert again").
   const setSpeciesMedia = async (speciesId, list) => {
     if (!can(role, "species")) return { ok: false, message: "Only officers and admins can change species photos" };
     const bad = list.map((p) => p.file && photoProblem(p.file)).find(Boolean);
@@ -1224,39 +1194,59 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     if (k >= 0) return { ok: false, message: `Add a caption to photo ${k + 1}` };
     if (list.some((p) => p.caption.trim().length > CAPTION_MAX)) return { ok: false, message: `Keep captions under ${CAPTION_MAX} characters` };
 
-    const sb = getSupabase();
-    const authUid = userId || (await sb.auth.getUser())?.data?.user?.id;
+    const token = await currentToken();
+    const before = new Map(db.species_media.filter((m) => m.species_id === speciesId).map((m) => [m.id, m]));
+    const failed = (res, what) => {
+      noteOffline(res);
+      return { ok: false, message: res.offline ? API_DOWN : `${what}: ${res.message || res.code}` };
+    };
 
     try {
-      // Upload first: if a file fails, the photos already saved are left alone.
-      const payload = [];
+      // 1. New photos. A field photo picked from an observation has no file, only
+      //    its (24-hour) link: download it and upload a real copy, so the gallery
+      //    never depends on a link that expires.
       for (let i = 0; i < list.length; i++) {
         const p = list[i];
-        const uploaded = await uploadPhotoFile("species-media", speciesId, p);
-        payload.push({
-          id: uploaded.photoId,
-          species_id: speciesId,
-          s3_bucket: "species-media",
-          s3_key: uploaded.s3_key,
-          caption: p.caption.trim(),
-          credit: p.credit ?? null,
-          is_primary: i === 0,
-          sort_order: i,
-          uploaded_by: authUid,
-        });
+        if (before.has(p.id)) continue;
+        let file = p.file;
+        if (!file && p.url) {
+          try { file = await (await fetch(p.url)).blob(); } catch { file = null; }
+        }
+        if (!file) return { ok: false, message: `Photo ${i + 1} could not be read. Remove it and add it again.` };
+        const res = await uploadSpeciesMediaApi(speciesId, file,
+          { caption: p.caption.trim(), credit: p.credit || null, is_primary: i === 0, sort_order: i }, { token });
+        if (!res.ok) return failed(res, `Photo ${i + 1} not saved`);
       }
-      const { error: delErr } = await sb.from("species_media").delete().eq("species_id", speciesId);
-      if (delErr) throw delErr;
-      if (payload.length > 0) {
-        const { error } = await sb.from("species_media").insert(payload);
-        if (error) throw error;
+
+      // 2. Photos already saved: only send the fields that changed.
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        const old = before.get(p.id);
+        if (!old) continue;
+        const changes = {};
+        if (old.caption !== p.caption.trim()) changes.caption = p.caption.trim();
+        if ((old.credit || null) !== (p.credit || null)) changes.credit = p.credit || null;
+        if (!!old.is_primary !== (i === 0)) changes.is_primary = i === 0;
+        if (old.sort_order !== i) changes.sort_order = i;
+        if (!Object.keys(changes).length) continue;
+        const res = await updateSpeciesMediaApi(speciesId, p.id, changes, { token });
+        if (!res.ok) return failed(res, `Photo ${i + 1} not updated`);
       }
+
+      // 3. Photos taken out of the gallery: the API removes the record and the file.
+      for (const id of before.keys()) {
+        if (list.some((p) => p.id === id)) continue;
+        const res = await deleteSpeciesMediaApi(speciesId, id, { token });
+        if (!res.ok && res.status !== 404) return failed(res, "A photo was not removed");
+      }
+
       notify("Species photos updated");
-      await fetchFromSupabase(true);
       return { ok: true };
     } catch (err) {
       console.error("setSpeciesMedia error:", err);
       return { ok: false, message: `Photos not saved: ${err.message || err}` };
+    } finally {
+      await fetchFromSupabase(true); // show what was really saved, also after a failure part way
     }
   };
 

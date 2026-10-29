@@ -248,6 +248,27 @@ export async function updateSpeciesApi(id, sp, { token } = {}) {
 }
 
 /**
+ * Species photos (Officer/Admin, CTIP-85). The API checks the real file type
+ * and size, removes location metadata, and stores it in Supabase Storage.
+ * file is a File or Blob; fields are caption, credit, is_primary, sort_order.
+ */
+export async function uploadSpeciesMediaApi(speciesId, file, fields = {}, { token } = {}) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) if (v != null) form.append(k, String(v));
+  form.append("file", file, file.name || "photo");
+  // Up to 10 MB on a field connection: allow longer than the usual 8 s.
+  return apiFetch(`/species/${encodeURIComponent(speciesId)}/media`, { method: "POST", token, body: form, timeout: 60000 });
+}
+
+export async function updateSpeciesMediaApi(speciesId, mediaId, changes, { token } = {}) {
+  return apiFetch(`/species/${encodeURIComponent(speciesId)}/media/${encodeURIComponent(mediaId)}`, { method: "PATCH", token, body: changes });
+}
+
+export async function deleteSpeciesMediaApi(speciesId, mediaId, { token } = {}) {
+  return apiFetch(`/species/${encodeURIComponent(speciesId)}/media/${encodeURIComponent(mediaId)}`, { method: "DELETE", token });
+}
+
+/**
  * Observations (CTIP-86), every page: GET /v1/observations?status=...
  * status "pending" is the review queue (waiting for a decision), oldest first.
  * Botanists only ever get their own records back.

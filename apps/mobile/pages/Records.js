@@ -11,7 +11,7 @@ import Icon from '../components/Icon.js';
 import {
   Screen, Bar, TitleBlock, Pills, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Field, Avatar, Empty,
 } from '../components/Bits.js';
-import { shortDate, dateTime, coords } from '../components/format.js';
+import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
 const GROUPS = [
   { key: 'fix', title: 'Needs you', statuses: ['returned', 'draft'] },
@@ -172,7 +172,7 @@ export function RecordDetail({ nav, params = {} }) {
           ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
           ['Appearance', o.morphology || '-'],
           ['Notes', o.notes || '-'],
-          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>±{Math.round(o.gps_accuracy_m || plant.gps_accuracy_m)} m</Text></Text>],
+          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
           ['Version', `${o.version}`],
         ]} />
       </Section>

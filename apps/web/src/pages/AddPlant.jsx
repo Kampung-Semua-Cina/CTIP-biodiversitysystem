@@ -24,7 +24,9 @@ export default function AddPlant() {
   const [height, setHeight] = useState("");
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState([]);
-  const [spot, setSpot] = useState(saved?.lat != null ? { lat: saved.lat, lng: saved.lng, acc: saved.gps_accuracy_m ?? null } : { lat: 3.8031, lng: 113.7762, acc: null });
+  // No made-up default: without a real fix the record is sent with no location and the officer is told.
+  const [spot, setSpot] = useState(saved?.lat != null ? { lat: saved.lat, lng: saved.lng, acc: saved.gps_accuracy_m ?? null } : { lat: null, lng: null, acc: null });
+  const hasSpot = spot.lat != null && spot.lng != null;
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +57,7 @@ export default function AddPlant() {
     if (!navigator.geolocation) return notify("This device cannot share its location");
     navigator.geolocation.getCurrentPosition(
       (pos) => setSpot({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy) }),
-      () => notify("Location is turned off. Using the last saved spot."),
+      () => notify(hasSpot ? "Location is turned off. Keeping the spot captured earlier." : "Location is turned off. The record will be sent without a location."),
     );
   };
 
@@ -88,7 +90,7 @@ export default function AddPlant() {
     setSaving(true);
     const res = await addPlant({
       qr_id: qr, proposed_species: guess, morphology, height_cm: height, notes, photos,
-      lat: spot.lat, lng: spot.lng, gps_accuracy_m: spot.acc ?? 10,
+      lat: spot.lat, lng: spot.lng, gps_accuracy_m: hasSpot ? spot.acc : null,
     });
     sending.current = false;
     setSaving(false);
@@ -151,8 +153,15 @@ export default function AddPlant() {
         <label>Location</label>
         <div className="row wrap">
           <button type="button" className="btn ghost" onClick={locate}><Icon name="pin" size={18} /> Use my location</button>
-          <span className="mute"><Mono>{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}</Mono>{spot.acc ? ` ±${spot.acc} m` : ""}</span>
+          {hasSpot
+            ? <span className="mute"><Mono>{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}</Mono>{spot.acc ? ` ±${spot.acc} m` : ""}</span>
+            : <span className="mute">Not captured yet</span>}
         </div>
+        {!hasSpot && (
+          <div className="callout gap-top-s" role="status">
+            <p><b>No location.</b> Press "Use my location" next to the plant. If you send without it, the record is saved with "location not captured", it stays off the map, and the officer is told.</p>
+          </div>
+        )}
 
         <p className="gap-top">
           <button className="btn" type="submit" disabled={saving}>

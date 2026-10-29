@@ -1,4 +1,3 @@
-import { useState } from "react";
 import Icon from "../components/Icon.jsx";
 import PlantCard from "../components/PlantCard.jsx";
 import { Chip, Empty, Pills } from "../components/Bits.jsx";
@@ -7,6 +6,7 @@ import { can } from "../../../shared/permissions.js";
 import { speciesCatalogue } from "../../../shared/selectors.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
+import { setQuery, useRoute } from "../useRoute.js";
 
 const PAGE = 12;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -14,15 +14,22 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // Species catalogue: one card per species (not one per tagged plant), with filters and pages.
 // Everyone can open it. Visitors only get published species. Conservation status shows on every
 // card (Daun design language); only staff get the conservation filter.
+// Every filter, the sort, the page and the view are kept in the URL
+// (#/plants?q=…&family=…&genus=…&status=…&sort=…&page=…&view=…), so a search can be shared.
 export default function Catalogue() {
   const { db, role, apiStatus, isSyncing, refreshFromBackend, backendSpeciesCount } = useStore();
   const staff = can(role, "pending");
-  const [q, setQ] = useState("");
-  const [family, setFamily] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState("name");
-  const [view, setView] = useState("grid");
-  const [page, setPage] = useState(1);
+  const { query } = useRoute();
+  const q = query.q || "";
+  const family = query.family || "all";
+  const genus = query.genus || "all";
+  const status = staff && query.status ? query.status : "all"; // visitors never filter by status
+  const sort = query.sort === "tagged" ? "tagged" : "name";
+  const view = query.view === "list" ? "list" : "grid";
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  // A new filter starts again at page 1. "all" is the default, so it is left out of the URL.
+  const filter = (key) => (v) => setQuery({ [key]: v === "all" ? null : v, page: null });
+  const setPage = (n) => setQuery({ page: n > 1 ? n : null });
 
   const all = speciesCatalogue(db, role);
   const tagged = all.reduce((n, s) => n + s.plants.length, 0);
@@ -30,6 +37,7 @@ export default function Catalogue() {
   const searched = all.filter((s) => text(s).includes(q.trim().toLowerCase()));
   const shown = searched
     .filter((s) => family === "all" || s.family === family)
+    .filter((s) => genus === "all" || s.genus === genus)
     .filter((s) => status === "all" || s.conservation_status === status)
     .sort((a, b) => (sort === "tagged" ? b.plants.length - a.plants.length : 0) || a.name.localeCompare(b.name));
 
@@ -37,12 +45,14 @@ export default function Catalogue() {
   const familyCounts = Object.entries(
     searched.reduce((m, s) => ({ ...m, [s.family]: (m[s.family] || 0) + 1 }), {}),
   ).sort(([a], [b]) => a.localeCompare(b));
+  // Genera of the chosen family (or of every family), from the searched list.
+  const genera = [...new Set(searched.filter((s) => family === "all" || s.family === family).map((s) => s.genus).filter(Boolean))].sort();
   const statusCounts = CONSERVATION.map((c) => [c, searched.filter((s) => s.conservation_status === c).length]).filter(([, n]) => n);
 
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages); // filters can shrink the page count
   const slice = shown.slice((cur - 1) * PAGE, cur * PAGE);
-  const pick = (set) => (v) => { set(v); setPage(1); };
+  const filtered = q || family !== "all" || genus !== "all" || status !== "all";
 
   return (
     <>
@@ -69,30 +79,39 @@ export default function Catalogue() {
       <div className="toolbar">
         <label className="search grow">
           <Icon name="search" size={20} />
-          <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search by common name, scientific name or family" aria-label="Search species" />
+          <input type="search" value={q} onChange={(e) => setQuery({ q: e.target.value, page: null })} placeholder="Search by common name, scientific name, family or genus" aria-label="Search species" />
         </label>
         <label className="inline">Sort
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <select value={sort} onChange={(e) => setQuery({ sort: e.target.value === "name" ? null : e.target.value })}>
             <option value="name">Name A–Z</option>
             <option value="tagged">Most tagged</option>
           </select>
         </label>
         <div className="seg" role="group" aria-label="View">
-          <button className={view === "grid" ? "on" : ""} aria-pressed={view === "grid"} onClick={() => setView("grid")} aria-label="Grid view"><Icon name="dashboard" size={18} /></button>
-          <button className={view === "list" ? "on" : ""} aria-pressed={view === "list"} onClick={() => setView("list")} aria-label="List view"><Icon name="file" size={18} /></button>
+          <button className={view === "grid" ? "on" : ""} aria-pressed={view === "grid"} onClick={() => setQuery({ view: null })} aria-label="Grid view"><Icon name="dashboard" size={18} /></button>
+          <button className={view === "list" ? "on" : ""} aria-pressed={view === "list"} onClick={() => setQuery({ view: "list" })} aria-label="List view"><Icon name="file" size={18} /></button>
         </div>
       </div>
 
       <div className="filters">
         <div>
           <p className="overline">Family</p>
-          <Pills label="Family" value={family} onChange={pick(setFamily)}
+          <Pills label="Family" value={family} onChange={(v) => setQuery({ family: v === "all" ? null : v, genus: null, page: null })}
             items={[{ key: "all", label: "All families", count: searched.length }, ...familyCounts.map(([f, n]) => ({ key: f, label: f, count: n }))]} />
         </div>
+        {genera.length > 0 && (
+          <label className="inline">Genus
+            <select value={genus} onChange={(e) => filter("genus")(e.target.value)}>
+              <option value="all">All genera</option>
+              {genera.map((g) => <option key={g} value={g}>{g}</option>)}
+              {genus !== "all" && !genera.includes(genus) && <option value={genus}>{genus}</option>}
+            </select>
+          </label>
+        )}
         {staff && (
           <div>
             <p className="overline">Conservation status</p>
-            <Pills label="Conservation status" value={status} onChange={pick(setStatus)}
+            <Pills label="Conservation status" value={status} onChange={filter("status")}
               items={[{ key: "all", label: "Any status" }, ...statusCounts.map(([c, n]) => ({ key: c, label: label(c), count: n }))]} />
           </div>
         )}
@@ -102,6 +121,7 @@ export default function Catalogue() {
           <p className="mute small" aria-live="polite">
             {shown.length ? `Showing ${(cur - 1) * PAGE + 1}–${(cur - 1) * PAGE + slice.length} of ${plural(shown.length, "species", "species")}` : "No species match these filters."}
           </p>
+          {filtered && <button className="btn ghost small-btn" onClick={() => setQuery({ q: null, family: null, genus: null, status: null, page: null })}>Clear filters</button>}
           {!shown.length && <Empty icon="search">Try a different name, or pick another family.</Empty>}
           <ul className={"plain " + (view === "grid" ? "speciesgrid" : "specieslist")}>
             {slice.map((s) => (

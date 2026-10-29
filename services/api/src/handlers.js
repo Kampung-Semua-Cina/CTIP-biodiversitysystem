@@ -45,9 +45,10 @@ export const handlers = {
     if (!species) return notFound();
 
     const { species_media, ...fields } = species;
+    // Rows saved by older web builds may hold a full link instead of a Storage path.
     const media = species_media.map(({ s3_bucket, s3_key, ...m }) => ({
       ...m,
-      url: db.storage.from(s3_bucket).getPublicUrl(s3_key).data.publicUrl,
+      url: /^https?:/i.test(s3_key) ? s3_key : db.storage.from(s3_bucket).getPublicUrl(s3_key).data.publicUrl,
     }));
     const cover = media.find((m) => m.is_primary) ?? media[0];
     res.json({ ...fields, primary_image_url: cover?.url ?? null, media });

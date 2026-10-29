@@ -29,13 +29,15 @@ const ReviewCreate = z.strictObject({
   message: 'A reason is required to return or reject an observation',
 });
 
-// Errors raised by public.review_observation() (migration 20261026000000).
+// Errors raised by public.review_observation() (migrations 20261026000000 and
+// 20261029120000, which added the species check).
 const RPC_ERRORS = {
   42501: [403, 'FORBIDDEN'],
   CTNF0: [404, 'NOT_FOUND'],
   CTST0: [409, 'WRONG_STATUS'],
   CTVR0: [409, 'VERSION_CONFLICT'],
   CTRQ0: [422, 'VALIDATION_ERROR'],
+  CTSP0: [422, 'SPECIES_REQUIRED'],
 };
 
 const notFound = (res) => res.status(404).json({ code: 'NOT_FOUND', message: 'Observation not found' });

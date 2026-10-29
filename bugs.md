@@ -102,16 +102,17 @@ These were found while working on the bug above. They need a decision from the t
 - **Test:** deactivate a botanist in Admin, then insert a specimen or observation with that user's token.
 - **Suggested fix:** add `and public.my_role() is not null` to those policies, or ban the user in Supabase Auth when they are deactivated.
 
-### M2 · Medium · Review decisions can skip the API
+### M2 · Medium · Review decisions can skip the API · **FIXED 2026-10-29 (see T10)**
 
 - `reviewObservation` in `apps/shared/StoreProvider.js` falls back to Supabase directly (the `review_observation` RPC, then a plain `observation_reviews` insert) when the API cannot be reached.
 - The plain insert skips the RPC's row lock and **version check**. Two officers could both decide on the same record, or decide on a stale version.
 - **Test:** stop the API, then approve a record whose `version` no longer matches. Also try a concurrent approve and reject.
 - **Suggested fix:** remove the plain-insert fallback, and keep the RPC (it does its own locking and role checks).
+- **Fixed:** the apps no longer have any fallback; decisions go through the API only. Migration `20261029120000` also drops the `reviews: insert` policy and revokes `approve_observation()`, so even a hand-made Supabase call can't write a decision any more. **Retest:** with an officer token, `POST /rest/v1/observation_reviews` must be refused (RLS), and `POST /rest/v1/rpc/approve_observation` must get 42501.
 
 ### M3 · Medium · Some staff writes still go straight to Supabase (RLS is the only check)
 
-Publish/unpublish, delete and restore species, species photos, QR tag create/retire/delete, alerts, and the user admin all write to Supabase directly. They are protected by RLS only, not by the API's role table.
+Publish/unpublish, delete and restore species, QR tag create/retire/delete, alerts, and the user admin all write to Supabase directly. They are protected by RLS only, not by the API's role table. (Species photos moved to the API on 2026-10-29, see T11. The storage and `species_media` RLS still allow an officer to write directly, as a second layer.)
 
 **Test:** run each of these with a botanist token, and with a deactivated officer's token, against `/rest/v1/...` directly.
 
@@ -169,9 +170,10 @@ Signed URLs for `observation-photos` are created with a 24-hour lifetime (`creat
 
 ## 5. Setup before testing
 
-1. **Apply the migrations, in order**, for example in the Supabase SQL Editor. Both are safe to run more than once.
+1. **Apply the migrations, in order**, for example in the Supabase SQL Editor. All are safe to run more than once.
    - `supabase/migrations/20261028000000_tag_assignment.sql`: tags that already have a plant are set to `assigned`.
    - `supabase/migrations/20261029000000_staff_notifications.sql`: officers and admins get one notification per record already waiting for review.
+   - `supabase/migrations/20261029120000_approve_requires_species.sql`: approving needs a confirmed species; decisions can only be written through `review_observation()`. Does not change data.
 2. Install everything: `npm run install:all`.
 3. Create `services/api/.env` from `.env.example`, then run `npm run api` and `npm run web`.
 4. **Please test on a separate Supabase project, or agree a time window with the team.** The project in the repo is the shared development database, and C1 means its admin account is reachable by anyone.
@@ -336,14 +338,138 @@ Accounts: use a **botanist** and an **officer** test account, both active. Keep 
 
 ---
 
+**Follow-up (2026-10-29): still no staff notifications.** The cause is in the database, not the API. The website reads notifications straight from Supabase, and the API's `/notifications` endpoints are not built. Only a database trigger creates notifications for officers and admins, and it comes from migration `20261029000000_staff_notifications.sql`. Until that migration is applied, botanists get notifications (from the original schema's triggers) and staff get none.
+
+To check whether it is applied, run this in the SQL Editor; one row means yes:
+```sql
+select tgname from pg_trigger where tgname = 'trg_notify_on_submission';
+```
+
+The migration was hardened before it is applied:
+- It drops the old check on `notifications.type` **whatever it is called**. Before, a check left behind under another name would have refused every new notification, and with it every submission.
+- A failure while notifying can no longer stop the botanist's record being saved. The error goes to the database log as a warning.
+
+Retested on PGlite:
+- A botanist sends a record: the officer and the admin each get "New record to review · NIAH-0100 · Nepenthes rajah · by Ben Botanist", and the botanist gets nothing.
+- The same result when the old check had another name.
+- With notifications forced to fail, the record is still saved.
+
+### T9 · Made-up GPS positions were saved as real ones (S1, S2)
+
+**What happened.** When the phone could not get a fix (permission denied, GPS failed, or on the web the botanist never pressed **Use my location**), the record was still saved with a position: a fixed default point on the web (3.80310, 113.77620, ±10 m), and a random spot near the trail head on mobile (±4–9 m). Nothing marked it as fake, so it appeared on the map and in reports as if a botanist had measured it there.
+
+**Fix (chosen 2026-10-29: save it, but say so).**
+- Both apps now send `lat`, `lng` and `gps_accuracy_m` as **null** when there is no real fix. The database already allows this.
+- The Add plant form shows "No location" with a warning. Mobile shows "Location not captured. The officer will be told." Sending is still allowed, so work in the field is never blocked.
+- Mobile drafts saved before this change may hold the old made-up position (`simulated: true`). It is ignored when the draft is restored.
+- **Officer warning:** the review screen (web and mobile) shows "Location not captured", and suggests asking the botanist or returning the record for a location.
+- `shownCoords()` returns nothing for a plant with no location, so it never appears on a map: visitor map, staff map, distribution, plant pages. Pages that printed coordinates now say "Not captured" instead of crashing on `null.toFixed`: Specimen, Report summary, mobile Records, mobile Review, mobile Plant page.
+
+**How to check.**
+1. Web, as a botanist: open Add plant, do not press Use my location, and send. The record should have `lat`, `lng` and `gps_accuracy_m` all null, and the officer's Review screen should show the warning.
+2. Mobile: deny the location permission, add a plant, and send. Same result. The "Sent for review" screen says "location not captured".
+3. Open the plant's page, the Map, and Reports › Summary as an officer. Nothing should crash, and the plant should not be on the map.
+4. Press Use my location, or allow GPS, and send again. The real position is saved, as before.
+
+**Could something similar still happen?**
+- **Old records keep their fake positions.** Web ones can be found exactly. Mobile ones can only be guessed: within about 35 m of the trail head, with an accuracy of 4–9 m. Ask the team before changing them. To list the suspects (read only):
+  ```sql
+  select qr_id, lat, lng, gps_accuracy_m, created_at from public.specimens
+  where (lat = 3.8031 and lng = 113.7762 and gps_accuracy_m = 10)
+     or (abs(lat - 3.8031) <= 0.0003 and abs(lng - 113.7762) <= 0.0003 and gps_accuracy_m between 4 and 9);
+  ```
+- **Revisits don't record a position.** `addRevisit` saves only the accuracy, never `lat`/`lng` ("Same place as before"). So a revisit can't flag a plant that has moved, and it inherits the plant's original position, even a missing one.
+- **Low risk:** the API and database don't check that a location is real. A modified client can still send any coordinates. That is acceptable for a field app, but testers should know it.
+
+
+### T10 · A record could be approved with no species, and decisions could skip the API
+
+**What happened.** The web review page wouldn't approve until a species was picked, but nothing behind it checked. A direct API call approved a record whose plant had no species, or a deleted one. The approved record then belonged to no species, so it appeared under no species page or species search. Separately, when the API was down the apps wrote the decision straight into the database (M2). An officer could also do that by hand, because the `reviews: insert` policy allowed it.
+
+**Fix.**
+- `review_observation()` (migration `20261029120000`) refuses to approve unless the plant is linked to a species that isn't deleted. The API answers **422 `SPECIES_REQUIRED`**. Return and reject still work without a species, because "which species is it?" is a normal reason to return a record. The plant row is locked during the check, so the species can't be cleared in between.
+- The migration also drops the `reviews: insert` policy and revokes the old `approve_observation()`, so `review_observation()` is the only way to write a decision.
+- The apps have no fallback any more. When the API is down, the web Review page disables the three buttons and says why. "Changed since you opened it" and "already decided" get clear messages.
+- Mobile Review now waits for the species to be saved and the decision to be accepted before closing. It used to say "approved" even when the save failed.
+
+**How to check.**
+1. As an officer, call `POST /v1/observations/{id}/reviews` with `{"decision":"approve","observation_version":N}` on a record whose plant has no species. Expect 422 `SPECIES_REQUIRED`, and the record still waiting.
+2. The same with `"decision":"return"` and a comment: expect 201.
+3. Stop the API. On Review, the buttons are disabled and a notice explains why.
+4. With an officer's Supabase token, try `POST /rest/v1/observation_reviews` and `POST /rest/v1/rpc/approve_observation`. Both must be refused.
+
+Checked on a local Postgres (PGlite) with every migration and Supabase's default grants:
+- approve with no species, or with a deleted species: CTSP0
+- approve with a species: OK
+- return with no species: OK
+- botanist, or inactive officer: 42501
+- direct insert: refused by RLS. A control run without the policy change accepted it, which shows the hole was real.
+- old function: 42501.
+
+API tests: 73/73 pass, including a new `SPECIES_REQUIRED` test.
+
+**Could something similar still happen?**
+- **Deleting a species doesn't un-approve its records.** Records approved earlier stay approved but belong to no species until it's restored. They no longer show to visitors.
+- **Changing an approved plant's species re-links its approved records** without a new review. Staff can still do this through `specimens` (the `guard_specimen_update` trigger allows staff).
+
+### T11 · Species photos: not through the API, links that expire, and "save" that could wipe the gallery
+
+**What happened (in `setSpeciesMedia`).**
+1. Photos went straight to Supabase Storage from the browser, so the API's checks were skipped: real file type, 10 MB, and location metadata removal.
+2. A field photo picked from an observation was saved as its **24-hour signed link**, so it broke the next day. It could also come from an endangered plant's private photo, with its GPS metadata.
+3. Editing only a caption saved the photo's full web address where the Storage path belongs.
+4. Every save deleted **all** of the species' photos and inserted them again. If the insert failed, the gallery was empty.
+5. Removed photos stayed in Storage forever.
+
+**Fix.**
+- New API endpoints: `PATCH` and `DELETE /v1/species/{id}/media/{mediaId}`. They are Officer/Admin only, validated, and documented in `openapi.yaml`. They sit next to the existing `POST`.
+- `setSpeciesMedia` now sends only what changed, in a safe order:
+  1. upload new photos through the API (field photos are downloaded and uploaded as a real copy, so metadata is removed and there's no expiring link)
+  2. update the captions and order that changed
+  3. delete removed photos (record and file).
+- A failure part way leaves the gallery as it was, and the page reloads to show what was really saved.
+- `GET /v1/public/species/{id}` passes through rows that already hold a full link, instead of producing a broken address.
+
+**How to check.**
+1. As an officer, add two photos with captions and save. Both appear. In Storage they're named `{species_id}/{media_id}.jpg` and have no EXIF GPS.
+2. Edit one caption only and save. `species_media.s3_key` is unchanged.
+3. Add a field photo from an observation and save. Two days later it still loads, and its `s3_key` is a Storage path, not a link.
+4. Remove a photo and save. The row and the file are both gone.
+5. Upload a renamed SVG, or an 11 MB file, through the API: 415 or 413.
+6. Botanist token on the PATCH and DELETE endpoints: 403.
+
+**Could something similar still happen?**
+- **Rows already broken by the old code keep their link.** Find them (read only): `select id, species_id, s3_key from public.species_media where s3_key ~* '^https?:';`. A link that contains `/object/sign/` has already expired. Remove those photos and add them again from the editor.
+- **The editor still offers observation photos of endangered plants.** Officers now get a cleaned copy, but it goes in the **public** gallery. That should be the officer's deliberate choice; testers may want to flag it.
+- Storage and `species_media` RLS still let an officer write directly (see M3).
+
+### T12 · Search: filters lost on refresh or share, and slow on large data
+
+**What happened.** Filters lived only in the page's memory, so a search could not be bookmarked or shared. The hash router also couldn't handle `?`. Every plant scanned every visit twice: about **1.4 s** for 5,000 plants with 10,000 visits, which fails the "under ~1 second" target. Reports had no search, date range, sort or pages.
+
+**Fix.**
+- The router understands `#/page?key=value`, and `setQuery()` updates the URL without filling the Back button.
+- **Catalogue** (`#/plants`): search, family, the new genus filter, conservation status (staff only, ignored for visitors even if typed into the URL), sort, page and view are all in the URL.
+- **Reports** (`#/reports`, the officer's plant-records table):
+  - search by tag, name or the botanist's guess
+  - family, genus, conservation, record (approval) status
+  - a "last recorded" date range
+  - four sorts and 25 per page, all in the URL
+  - CSV export of every matching record.
+- Visits are grouped by plant once per data load: **64 ms** for Reports and **94 ms** for the Catalogue on the same 5,000-plant data.
+
+**How to check.** Filter both pages, copy the address into a private window or another account, and you get the same results. Back leaves the page; it doesn't step through letters typed. Changing a filter goes back to page 1.
+
+**Could something similar still happen?** Search still runs in the browser on data the store already loaded. Anyone who can open the page can see the whole list by clearing the filters, so a filter is never a security boundary. The database has no zone or area field, so there's no **location/zone** filter yet.
+
 ## 7. Sample / demo data still in the frontend (checked 2026-10-29)
 
-The store starts empty (`seed` in `apps/shared/data.js` has empty lists), and every page reads live Supabase or API data. These leftovers remain. The first two put **made-up values into real records**.
+The store starts empty (`seed` in `apps/shared/data.js` has empty lists), and every page reads live Supabase or API data. These leftovers remain. S1 and S2 put **made-up values into real records**; both are fixed now (see T9).
 
 | # | Severity | Where | What it does | Suggested fix |
 |---|---|---|---|---|
-| S1 | **High (data integrity)** | `apps/mobile/pages/AddPlant.js`, `fallbackGps()` | If location permission is denied, or the GPS read fails, the app makes up a position **near the trail head with random jitter and a random "±4–9 m" accuracy**, and lets you submit it. It is marked `simulated: true`, but nothing checks that flag, so it is saved as a real GPS fix. Map points, the distribution map and endangered-location protection would then be based on fake positions. | Block submission while the location is simulated, or save it with `gps_accuracy_m = null` and show a clear "no GPS" warning. Officers should see that it is not a real fix. |
-| S2 | **High (data integrity)** | `apps/web/src/pages/AddPlant.jsx`, the `spot` default | If the botanist never presses **Use my location**, the plant is saved at a fixed default point (3.80310, 113.77620) with a fake **±10 m** accuracy (`gps_accuracy_m: spot.acc ?? 10`). NIAH-0029 shows exactly these values. | Require a real location before sending, or send `null` accuracy and label it "location not captured". |
+| S1 | ~~High~~ **Fixed (T9)** | `apps/mobile/pages/AddPlant.js` (was `fallbackGps()`) | Was: when permission was denied or the GPS failed, the app made up a position near the trail head with random jitter and a random "±4–9 m" accuracy, and saved it as a real fix. | Now saved with no location (`lat`, `lng`, `gps_accuracy_m` all null) and the officer is warned. |
+| S2 | ~~High~~ **Fixed (T9)** | `apps/web/src/pages/AddPlant.jsx`, the `spot` default | Was: if **Use my location** was never pressed, the plant was saved at 3.80310, 113.77620 with a fake ±10 m. NIAH-0029 has these values. | Same as S1. Old records keep their fake values; T9 has a query to find them. |
 | S3 | Medium | `apps/shared/data.js` `initialProfiles` + `StoreProvider.js` (`mergedProfiles` starts from it) | Four hard-coded profiles ("Admin User", "Conservation Officer", "Field Botanist", and an inactive "Test User") are loaded before Supabase, and are **kept even if they no longer exist in the database**. Admin › Users may list a ghost "Test User". Botanists (who may only read their own profile) see these placeholder names for other staff. | Start `profiles` empty, and show "Staff member" for names the user may not read. |
 | S4 | Medium | `apps/shared/StoreProvider.js` (`me`, around lines 55–77) | In "view as" mode, a fake signed-in person can be made up: `full_name: "<Role> (Demo)"`, email `<role>@demo.local`. Pages then act for a user that does not exist. | Remove it together with the role switcher (C1). |
 | S5 | **Critical** (see C1) | `apps/shared/data.js` `DEMO_EMAILS` / `DEMO_PASSWORD`, `RoleSwitch.jsx` | The "Prototype · view the site as" bar signs in to real accounts with a shared password that is shipped in the bundle. | See C1 in §3. |

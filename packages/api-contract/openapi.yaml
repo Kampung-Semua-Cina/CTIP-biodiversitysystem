@@ -431,6 +431,51 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /species/{id}/media/{mediaId}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: mediaId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Species, Photos]
+      operationId: updateSpeciesMedia
+      summary: Change a species photo's caption, credit, order or cover flag (officer/admin)
+      description: >
+        The file itself never changes; a new picture is a new upload. Setting
+        is_primary makes this the only cover photo of the species.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                caption: { type: string, minLength: 1, maxLength: 300 }
+                credit: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+                is_primary: { type: boolean }
+                sort_order: { type: integer, minimum: 0, maximum: 1000 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpeciesMedia' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Species, Photos]
+      operationId: deleteSpeciesMedia
+      summary: Remove a species photo and its file (officer/admin)
+      responses:
+        '204': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # --------------------------------------------------------------- Specimens
   /specimens:
     get:
@@ -752,7 +797,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '422':
+          description: >
+            VALIDATION_ERROR for a bad body or a missing reason, or SPECIES_REQUIRED when
+            approving an observation whose plant is not linked to a species yet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /observations/{id}/comments:
     get:

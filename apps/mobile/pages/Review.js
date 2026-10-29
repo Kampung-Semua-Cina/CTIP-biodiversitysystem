@@ -7,9 +7,9 @@ import { useStore } from '../../shared/store.js';
 import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  Screen, Bar, TitleBlock, Pills, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field,
+  Screen, Bar, TitleBlock, Pills, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice,
 } from '../components/Bits.js';
-import { shortDate, dateTime, coords } from '../components/format.js';
+import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
 const FILTERS = [
   { key: 'synced', label: 'Needs review' },
@@ -84,6 +84,7 @@ export function ReviewRecord({ nav, params = {} }) {
   const [spText, setSpText] = useState(plant?.species?.scientific_name || plant?.proposed_species || '');
   const [note, setNote] = useState('');
   const [needNote, setNeedNote] = useState(false);
+  const [busy, setBusy] = useState(false);
   if (!o || !plant) return <Screen header={<Bar title="Review" onBack={nav.back} />}><Empty>This record no longer exists.</Empty></Screen>;
 
   const species = db.species.filter((s) => !s.is_deleted);
@@ -91,10 +92,16 @@ export function ReviewRecord({ nav, params = {} }) {
   const suggestions = !match && spText.trim().length > 1 ? species.filter((s) => `${s.common_name} ${s.scientific_name}`.toLowerCase().includes(spText.trim().toLowerCase())).slice(0, 3) : [];
   const open = o.status === 'synced';
 
-  const decide = (decision) => {
+  // Waits for the API: the species must be saved before approving (the API checks it),
+  // and the screen only closes when the decision was really saved.
+  const decide = async (decision) => {
     if (decision !== 'approve' && !note.trim()) return setNeedNote(true);
-    if (decision === 'approve' && match && match.id !== plant.species_id) setPlantSpecies(plant.id, match.id);
-    reviewObservation(o.id, decision, note.trim());
+    if (busy) return;
+    setBusy(true);
+    if (decision === 'approve' && match && match.id !== plant.species_id) await setPlantSpecies(plant.id, match.id);
+    const r = await reviewObservation(o.id, decision, note.trim()); // shows its own message when it fails
+    setBusy(false);
+    if (!r?.ok) return;
     notify({ approve: `${plant.qr_id} approved and published`, return: `${plant.qr_id} returned to ${nameOf(db, o.recorded_by)}`, reject: `${plant.qr_id} rejected` }[decision]);
     nav.back();
   };
@@ -106,21 +113,22 @@ export function ReviewRecord({ nav, params = {} }) {
       gap={18}
       footer={open ? (
         <>
-          <Button label="Reject" kind="dangerText" flex={1} size={15} onPress={() => decide('reject')} />
-          <Button label="Return" kind="secondary" flex={1.2} size={15} onPress={() => decide('return')} />
-          <Button label="Approve" icon="check" flex={1.6} size={15} disabled={!match} onPress={() => decide('approve')} />
+          <Button label="Reject" kind="dangerText" flex={1} size={15} disabled={busy} onPress={() => decide('reject')} />
+          <Button label="Return" kind="secondary" flex={1.2} size={15} disabled={busy} onPress={() => decide('return')} />
+          <Button label="Approve" icon="check" flex={1.6} size={15} disabled={!match || busy} onPress={() => decide('approve')} />
         </>
       ) : null}
     >
       <Photos photos={plant.photos.filter((p) => p.observation_id === o.id).length ? plant.photos.filter((p) => p.observation_id === o.id) : plant.photos} />
       {plant.scientific ? <Sci size={16}>{plant.scientific}{plant.species?.family ? ` · ${plant.species.family}` : ''}</Sci> : null}
       {!open ? <DotLabel status={o.status} /> : null}
+      {plant.lat == null ? <Notice tone="warning" icon="pin" title="Location not captured" body="The botanist's phone had no GPS fix, so this plant will not appear on the map. Ask where it is, or return the record for a location." /> : null}
       <KV rows={[
         ['Recorded by', `${nameOf(db, o.recorded_by)} · ${dateTime(o.observed_at)}`],
         ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
         ['Appearance', o.morphology || '-'],
         ['Notes', o.notes || '-'],
-        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>±{Math.round(o.gps_accuracy_m || plant.gps_accuracy_m)} m</Text></Text>],
+        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
       ]} />
       {open ? (
         <>

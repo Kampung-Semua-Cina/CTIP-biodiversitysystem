@@ -197,10 +197,10 @@ export default function Specimen({ qr }) {
               <>
                 <MiniMap points={[{ p: plant, c: coords }]} height={150} highlight={plant.qr_id} label={`Location of ${plant.qr_id}`} />
                 <p className="gap-top-s"><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono></p>
-                <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>
+                {plant.gps_accuracy_m != null && <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>}
               </>
             ) : (
-              <p className="mute">Hidden to protect this plant.</p>
+              <p className="mute">{plant.lat == null ? "Location not captured when this plant was recorded." : "Hidden to protect this plant."}</p>
             )}
           </section>
           {staff && (

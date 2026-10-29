@@ -90,7 +90,9 @@ export default function Review() {
 }
 
 function ReviewDetail({ obs, onDecided }) {
-  const { db, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
+  const { db, apiStatus, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
+  const [deciding, setDeciding] = useState(false);
+  const apiDown = apiStatus === "offline"; // decisions only go through the API
   const [comment, setComment] = useState("");
   const [note, setNote] = useState("");
   const rawPlant = db.plants.find((p) => p.id === obs.specimen_id);
@@ -108,8 +110,10 @@ function ReviewDetail({ obs, onDecided }) {
   const decide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
+    setDeciding(true);
     const r = await reviewObservation(obs.id, decision, comment.trim()); // shows its own message
-    if (r?.ok) onDecided();
+    setDeciding(false);
+    if (r?.ok || r?.error === "WRONG_STATUS") onDecided(); // reload: decided, or decided by someone else
   };
 
   return (
@@ -139,6 +143,11 @@ function ReviewDetail({ obs, onDecided }) {
         {rawPlant.proposed_species && <p className="mute small">Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>}
       </div>
 
+      {!hasCoords && (
+        <div className="callout" role="status">
+          <p><b>Location not captured.</b> The botanist's device had no GPS fix, so this plant will not appear on the map. Ask them where it is, or return the record for a location.</p>
+        </div>
+      )}
       {hasCoords && <MiniMap points={[{ p: plant, c: coords }]} height={180} highlight={plant.qr_id} label={`Where ${plant.qr_id} was recorded`} />}
 
       <dl>
@@ -146,7 +155,7 @@ function ReviewDetail({ obs, onDecided }) {
         <dt>Height</dt><dd>{obs.height_cm != null ? `${obs.height_cm} cm` : "-"}</dd>
         <dt>Appearance</dt><dd>{obs.morphology || "-"}</dd>
         <dt>Notes</dt><dd>{obs.notes || "-"}</dd>
-        <dt>Location</dt><dd>{hasCoords ? <Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono> : "-"} {obs.gps_accuracy_m != null && <span className="mute">±{obs.gps_accuracy_m} m</span>}</dd>
+        <dt>Location</dt><dd>{hasCoords ? <><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono> {obs.gps_accuracy_m != null && <span className="mute">±{obs.gps_accuracy_m} m</span>}</> : "Not captured"}</dd>
         <dt>Device</dt><dd><Mono>{obs.device_id}</Mono></dd>
       </dl>
 
@@ -181,10 +190,11 @@ function ReviewDetail({ obs, onDecided }) {
               <textarea rows="3" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What needs to change?" />
             </label>
           </div>
+          {apiDown && <p className="callout" role="status">The API is down, so decisions can't be saved right now. You can still read the record; the buttons come back when the API does.</p>}
           <div className="decide">
-            <button className="btn" onClick={() => decide("approve")}><Icon name="check" size={18} /> Approve &amp; publish</button>
-            <button className="btn ghost" onClick={() => decide("return")}><Icon name="undo" size={18} /> Return for changes</button>
-            <button className="btn danger" onClick={() => decide("reject")}><Icon name="x" size={18} /> Reject</button>
+            <button className="btn" disabled={apiDown || deciding} onClick={() => decide("approve")}><Icon name="check" size={18} /> Approve &amp; publish</button>
+            <button className="btn ghost" disabled={apiDown || deciding} onClick={() => decide("return")}><Icon name="undo" size={18} /> Return for changes</button>
+            <button className="btn danger" disabled={apiDown || deciding} onClick={() => decide("reject")}><Icon name="x" size={18} /> Reject</button>
           </div>
         </>
       ) : (

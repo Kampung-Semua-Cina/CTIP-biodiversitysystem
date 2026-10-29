@@ -160,7 +160,7 @@ export function TaggedPlant({ nav, params }) {
           ['Height', p.height_cm ? `${p.height_cm} cm` : '-'],
           ['Recorded', longDate(firstObs?.observed_at)],
           ...(staff ? [['Recorded by', nameOf(db, p.registered_by)], ['Last visit', longDate(lastObs?.observed_at)]] : []),
-          ['Location', where ? <Mono size={14}>{coords(where.lat, where.lng)}</Mono> : HIDDEN_NOTE],
+          ['Location', where ? <Mono size={14}>{coords(where.lat, where.lng)}</Mono> : p.lat == null ? 'Not captured when recorded.' : HIDDEN_NOTE],
         ]} />
       </Section>
       {where ? <Section title="Where it is"><MiniMap height={140} dots={[{ ...mapPoint(where), selected: true }]} /></Section> : null}

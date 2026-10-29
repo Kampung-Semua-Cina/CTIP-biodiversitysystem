@@ -23,8 +23,21 @@
 -- Safe to run more than once.
 -- =====================================================================
 
--- New notification types.
-alter table public.notifications drop constraint if exists notifications_type_check;
+-- New notification types. The old check on "type" is dropped whatever it is
+-- called: if it survived under another name, every new notification (and so
+-- every submission) would be refused.
+do $$
+declare c record;
+begin
+  for c in
+    select con.conname from pg_constraint con
+    where con.conrelid = 'public.notifications'::regclass and con.contype = 'c'
+      and pg_get_constraintdef(con.oid) ilike '%type%'
+  loop
+    execute format('alter table public.notifications drop constraint %I', c.conname);
+  end loop;
+end;
+$$;
 alter table public.notifications add constraint notifications_type_check check (type in (
   'review_returned', 'review_approved', 'review_rejected',
   'comment_reply', 'alert_assigned', 'alert_created',
@@ -54,14 +67,20 @@ begin
   left join public.profiles p on p.id = new.recorded_by
   where s.id = new.specimen_id;
 
-  insert into public.notifications (user_id, type, title, body, related_table, related_id)
-  select pr.id, v_type,
-         case v_type when 'observation_resubmitted' then 'Record sent again for review'
-                     else 'New record to review' end,
-         v_body, 'observations', new.id::text
-  from public.profiles pr
-  where pr.role in ('officer', 'admin') and pr.is_active
-    and pr.id is distinct from new.recorded_by;
+  -- A notification must never stop the botanist's record being saved: on any
+  -- error here the record is kept and a warning goes to the database log.
+  begin
+    insert into public.notifications (user_id, type, title, body, related_table, related_id)
+    select pr.id, v_type,
+           case v_type when 'observation_resubmitted' then 'Record sent again for review'
+                       else 'New record to review' end,
+           v_body, 'observations', new.id::text
+    from public.profiles pr
+    where pr.role in ('officer', 'admin') and pr.is_active
+      and pr.id is distinct from new.recorded_by;
+  exception when others then
+    raise warning 'notify_on_submission: % (%)', sqlerrm, sqlstate;
+  end;
   return new;
 end;
 $$;

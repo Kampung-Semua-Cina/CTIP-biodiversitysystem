@@ -14,10 +14,27 @@ export function orderedPhotos(photos = []) {
 
 export const nameOf = (db, id) => db.profiles.find((p) => p.id === id)?.full_name || "Unknown";
 
+// Visits grouped by plant, newest first, built once per observations list.
+// Without it every plant scanned every visit (twice), which took over a second
+// with 5,000 plants. The store always replaces the list, never edits it in
+// place, so a new list gets a new index.
+const visitIndex = new WeakMap();
+function visitsOf(db, specimenId) {
+  let index = visitIndex.get(db.observations);
+  if (!index) {
+    index = new Map();
+    for (const o of db.observations) {
+      if (!index.has(o.specimen_id)) index.set(o.specimen_id, []);
+      index.get(o.specimen_id).push(o);
+    }
+    for (const list of index.values()) list.sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    visitIndex.set(db.observations, index);
+  }
+  return index.get(specimenId) || [];
+}
+
 export function plantStatus(db, specimenId) {
-  const obs = db.observations
-    .filter((o) => o.specimen_id === specimenId)
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  const obs = visitsOf(db, specimenId);
   if (obs.some((o) => o.status === "approved")) return "approved";
   return obs[0]?.status || "draft";
 }
@@ -27,7 +44,7 @@ export function plantStatus(db, specimenId) {
 // same tag again finishes them.
 export function unfinishedPlants(db, userId) {
   if (!userId) return [];
-  return db.plants.filter((p) => p.registered_by === userId && !p.is_deleted && !db.observations.some((o) => o.specimen_id === p.id));
+  return db.plants.filter((p) => p.registered_by === userId && !p.is_deleted && !visitsOf(db, p.id).length);
 }
 
 // One plant = a specimen + its species + its photos + its record status.
@@ -35,9 +52,7 @@ export function plantView(db, p) {
   if (!p) return null;
   const species = db.species.find((s) => s.id === p.species_id && !s.is_deleted) || null;
   const status = plantStatus(db, p.id);
-  const obs = db.observations
-    .filter((o) => o.specimen_id === p.id && o.status === "approved")
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
+  const obs = visitsOf(db, p.id).find((o) => o.status === "approved");
   const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
   return {
     ...p,
@@ -63,7 +78,9 @@ export function visiblePlants(db, role) {
 }
 
 // Visitors never get any location for an endangered plant (returns null). Staff get the exact spot.
+// Also null when the botanist's phone could not capture a location, so it never lands on a map.
 export function shownCoords(p, role) {
+  if (p.lat == null || p.lng == null) return null;
   if (p.endangered && !can(role, "pending")) return null;
   return { lat: p.lat, lng: p.lng };
 }
@@ -105,9 +122,7 @@ export function staffCounts(db, me) {
 
 // Visits to one tagged plant (observations), newest first. Visitors only see approved visits.
 export function plantVisits(db, plantId, role) {
-  return db.observations
-    .filter((o) => o.specimen_id === plantId && (can(role, "pending") || o.status === "approved"))
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  return visitsOf(db, plantId).filter((o) => can(role, "pending") || o.status === "approved");
 }
 
 // Date of the newest visit, or null.
