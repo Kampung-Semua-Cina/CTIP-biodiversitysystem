@@ -2,10 +2,8 @@
 // Pieces shared by several screens: the logo mark, the theme switch and the
 // app version line.
 import React from 'react';
-import { View } from 'react-native';
 import Constants from 'expo-constants';
 
-import Icon from './Icon.js';
 import Logo from './Logo.js';
 import { useTheme } from './Theme.js';
 import { Section, Segmented, Txt } from './Bits.js';

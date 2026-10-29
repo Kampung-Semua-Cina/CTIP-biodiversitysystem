@@ -17,7 +17,6 @@ import Tags from '../pages/Tags.js';
 import TagQr from '../pages/TagQr.js';
 import Reports from '../pages/Reports.js';
 import { StaffMore, Users, Audit } from '../pages/Admin.js';
-import { can } from '../../shared/permissions.js';
 
 // Every screen, by route name. Each screen receives { nav, params }.
 export const SCREENS = {
