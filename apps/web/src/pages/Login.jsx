@@ -1,18 +1,21 @@
 // apps/web/src/pages/Login.jsx
 import { useState } from "react";
 import { useStore } from "../../../shared/store.js";
-import { go } from "../useRoute.js";
+import { go, useRoute } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
 import { PasswordInput } from "../components/Bits.jsx";
 
-// Staff login with email and password. There is no register button: an admin creates each account.
-// The same page lets staff change their password with just their email and a new password.
+// Staff login with email and password, through the API (CTIP-114).
+// "Forgot password" emails a reset link. The link opens #/login?reset=1 already
+// signed in (StoreProvider reads the session from the address), where the
+// person chooses a new password. #/login?expired=1: the link was used or too old.
 // After a first sign-in with the default password, staff are asked to choose a new one.
 export default function Login() {
   const { login, signIn, changePassword, notify, loginWithToken, apiStatus, addUser } = useStore();
+  const { query } = useRoute();
   const [tokenInput, setTokenInput] = useState("");
   const [isTokenBusy, setIsTokenBusy] = useState(false);
-  const [mode, setMode] = useState("signin"); // signin | change | first | token | register
+  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token | register
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -63,17 +66,22 @@ export default function Login() {
     switchTo("signin");
   };
 
-  // Used by both the "Change password" form and the first sign-in prompt.
+  // The reset-link form and the first sign-in prompt: set the new password.
   const change = async (e) => {
     e.preventDefault();
-    const res = await changePassword(email, newPw);
+    const res = await changePassword(null, newPw);
     if (!res.ok) return notify(res.message);
     notify("Password changed");
-    if (mode === "first") {
-      signIn(pending);
-      return go("/dashboard");
-    }
-    switchTo("signin");
+    if (mode === "first") signIn(pending);
+    go("/dashboard");
+  };
+
+  // "Forgot password": email a reset link.
+  const sendLink = async (e) => {
+    e.preventDefault();
+    const res = await changePassword(email, null);
+    notify(res.message);
+    if (res.ok) switchTo("signin");
   };
 
   const submitToken = async (e) => {
@@ -115,7 +123,7 @@ export default function Login() {
             <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("register")}><Icon name="plus" size={18} /> Create account</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("token")}><Icon name="shield" size={18} /> Sign in with API token</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Change password</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Forgot password</button>
           </div>
           <p className="mute small" style={{ marginTop: 12 }}>
             Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
@@ -127,7 +135,7 @@ export default function Login() {
         <form onSubmit={submitRegister}>
           <h1>Create staff account</h1>
           <p className="mute">
-            Add a botanist, conservation officer, or administrator account directly to Supabase Auth and the database.
+            Add a botanist, conservation officer, or administrator account.
           </p>
           <label>Full name<input value={regName} onChange={(e) => setRegName(e.target.value)} placeholder="Dr. Jane Doe" required /></label>
           <label>Email<input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="email" required /></label>
@@ -155,10 +163,10 @@ export default function Login() {
         <form onSubmit={submitToken}>
           <h1>API Token Sign In</h1>
           <p className="mute">
-            Authenticate directly with your Supabase Bearer token. Your identity and permissions will be verified via <code>GET /v1/me</code>.
+            Sign in with an access token you already have. Your identity and permissions will be verified via <code>GET /v1/me</code>.
           </p>
           <label>
-            Supabase Access Token (JWT)
+            Access token (JWT)
             <textarea
               rows={4}
               value={tokenInput}
@@ -183,14 +191,28 @@ export default function Login() {
       )}
 
       {mode === "change" && (
-        <form onSubmit={change}>
-          <h1>Change password</h1>
-          <p className="mute">Enter your email and choose a new password.</p>
+        <form onSubmit={sendLink}>
+          <h1>Reset your password</h1>
+          <p className="mute">
+            {query.expired
+              ? "That reset link has expired or was already used. Ask for a new one below."
+              : "Enter the email your account uses. We will send you a link to choose a new password."}
+          </p>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit"><Icon name="check" size={18} /> Email me a reset link</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}><Icon name="chevL" size={18} /> Back to sign in</button>
+          </div>
+        </form>
+      )}
+
+      {mode === "reset" && (
+        <form onSubmit={change}>
+          <h1>Choose a new password</h1>
+          <p className="mute">You opened a password reset link. Choose your new password.</p>
           {newFields}
           <div className="row wrap gap-top">
             <button className="btn" type="submit"><Icon name="check" size={18} /> Save new password</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}><Icon name="chevL" size={18} /> Back to sign in</button>
           </div>
         </form>
       )}

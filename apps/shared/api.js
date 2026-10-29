@@ -2,7 +2,7 @@
 // Client interface to the Daun Sense REST API (services/api).
 // Works in both browser (Vite) and React Native (Expo/Metro).
 
-let inMemoryToken = null;
+let inMemorySession = null;
 let customBaseUrl = null;
 
 // Storage accessor that safely works in browser and falls back in non-browser environments
@@ -37,25 +37,97 @@ const storage = {
   },
 };
 
-const TOKEN_KEY = "daun_access_token";
+// The signed-in session (CTIP-114): { access_token, refresh_token, expires_at, user }.
+// It comes from POST /v1/auth/sign-in and is renewed through POST /v1/auth/refresh;
+// the apps never call Supabase Auth themselves. Kept in localStorage on the web
+// (so a reload stays signed in) and in memory on the phone.
+const SESSION_KEY = "daun_session";
+const OLD_TOKEN_KEY = "daun_access_token"; // before CTIP-114: a bare access token
 
-export function getAuthToken() {
-  if (inMemoryToken) return inMemoryToken;
-  inMemoryToken = storage.get(TOKEN_KEY);
-  return inMemoryToken;
+export function getSession() {
+  if (inMemorySession) return inMemorySession;
+  try {
+    const saved = storage.get(SESSION_KEY);
+    inMemorySession = saved ? JSON.parse(saved) : null;
+  } catch {
+    inMemorySession = null;
+  }
+  if (!inMemorySession) {
+    const old = storage.get(OLD_TOKEN_KEY);
+    if (old) inMemorySession = { access_token: old };
+  }
+  return inMemorySession;
 }
 
+export function setSession(session) {
+  inMemorySession = session?.access_token ? session : null;
+  storage.remove(OLD_TOKEN_KEY);
+  if (inMemorySession) storage.set(SESSION_KEY, JSON.stringify(inMemorySession));
+  else storage.remove(SESSION_KEY);
+}
+
+export function getAuthToken() {
+  return getSession()?.access_token || null;
+}
+
+// A bare access token (the "Sign in with API token" form): no refresh token, so
+// it simply stops working when it expires.
 export function setAuthToken(token) {
-  inMemoryToken = token || null;
-  if (token) {
-    storage.set(TOKEN_KEY, token);
-  } else {
-    storage.remove(TOKEN_KEY);
-  }
+  setSession(token ? { access_token: token } : null);
 }
 
 export function clearAuthToken() {
-  setAuthToken(null);
+  setSession(null);
+}
+
+// What the access token says about itself (exp, sub, email). Not checked here:
+// the API checks every token it is sent.
+export function tokenClaims(token) {
+  try {
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return typeof atob === "function" ? JSON.parse(atob(part.padEnd(part.length + ((4 - (part.length % 4)) % 4), "="))) : null;
+  } catch {
+    return null;
+  }
+}
+
+const expiresAt = (session) => session?.expires_at || tokenClaims(session?.access_token)?.exp || null;
+
+// Called when a refresh is refused, so the app can show the signed-out state.
+const endedListeners = new Set();
+export function onSessionEnded(fn) {
+  endedListeners.add(fn);
+  return () => endedListeners.delete(fn);
+}
+
+const REFRESH_MARGIN_S = 60;
+let refreshing = null; // one refresh at a time: each refresh token works once
+
+/**
+ * The access token to send, renewed through POST /v1/auth/refresh when it
+ * expires within a minute. Returns null when the session has ended (the stored
+ * session is then cleared). If the API cannot be reached, returns the old token.
+ */
+export async function freshAuthToken() {
+  const session = getSession();
+  if (!session?.access_token) return null;
+  const exp = expiresAt(session);
+  if (!exp || exp - Date.now() / 1000 > REFRESH_MARGIN_S) return session.access_token;
+  if (!session.refresh_token) return session.access_token; // a pasted token: nothing to renew with
+  refreshing ??= (async () => {
+    const res = await apiFetch("/auth/refresh", { method: "POST", token: null, body: { refresh_token: session.refresh_token } });
+    if (res.ok && res.data?.access_token) {
+      setSession(res.data);
+      return res.data.access_token;
+    }
+    if (res.status === 401) {
+      setSession(null);
+      endedListeners.forEach((fn) => fn());
+      return null;
+    }
+    return session.access_token;
+  })().finally(() => { refreshing = null; });
+  return refreshing;
 }
 
 export function setApiBaseUrl(url) {
@@ -102,7 +174,8 @@ export async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const token = options.token || getAuthToken();
+  // token: null sends none (signing in); left out, the stored one is sent.
+  const token = options.token === null ? null : options.token || getAuthToken();
   if (token && !headers.Authorization) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -194,9 +267,57 @@ export async function fetchPublicSpeciesById(id) {
   return apiFetch(`/public/species/${encodeURIComponent(id)}`);
 }
 
+// -----------------------------------------------------------------------------
+// Signing in and passwords (CTIP-114). The API calls Supabase Auth for the apps.
+// -----------------------------------------------------------------------------
+
+/** POST /v1/auth/sign-in. On success the session is stored and returned. */
+export async function signInApi(email, password) {
+  const res = await apiFetch("/auth/sign-in", { method: "POST", token: null, body: { email, password } });
+  if (res.ok) setSession(res.data);
+  return res;
+}
+
+/** POST /v1/auth/sign-out with the current token, then forgets the session. Never fails. */
+export async function signOutApi() {
+  const token = getAuthToken();
+  setSession(null);
+  if (token) await apiFetch("/auth/sign-out", { method: "POST", token, timeout: 4000 });
+}
+
+/** POST /v1/auth/password-reset: emails a link that opens the website signed in. */
+export const passwordResetApi = (email) => apiFetch("/auth/password-reset", { method: "POST", token: null, body: { email } });
+
+/** POST /v1/me/password. Leave current_password out only after a reset link. */
+export const changePasswordApi = (body, { token } = {}) => apiFetch("/me/password", { method: "POST", token, body });
+
+/**
+ * A password-reset link opens the website at
+ * `#access_token=…&refresh_token=…&expires_at=…&type=recovery`. Reads that
+ * session from the address, stores it, and returns its type ("recovery"),
+ * "expired" for a link Supabase refused, or null when the address holds
+ * neither. The caller then replaces the address. Web only.
+ */
+export function takeSessionFromUrl() {
+  const hash = typeof window !== "undefined" ? window.location?.hash || "" : "";
+  if (!/[#&/](access_token|error_code)=/.test(hash)) return null;
+  const params = new URLSearchParams(hash.replace(/^#\/?/, ""));
+  if (params.get("error_code")) return "expired"; // e.g. otp_expired: the link was used or is too old
+  const access_token = params.get("access_token");
+  if (!access_token) return null;
+  const claims = tokenClaims(access_token) || {};
+  setSession({
+    access_token,
+    refresh_token: params.get("refresh_token") || undefined,
+    expires_at: Number(params.get("expires_at")) || claims.exp,
+    user: { id: claims.sub, email: claims.email },
+  });
+  return params.get("type") || "signin";
+}
+
 /**
  * Authenticated user profile: GET /v1/me
- * Requires valid Supabase Bearer token.
+ * Requires a valid access token.
  * Returns { id, full_name, email, role, is_active, created_at, updated_at }
  */
 export async function fetchMe(token) {
