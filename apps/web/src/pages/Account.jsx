@@ -113,10 +113,10 @@ function PasswordCard() {
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
     if (next !== again) return notify("The new passwords do not match");
-    const res = changeMyPassword(current, next);
+    const res = await changeMyPassword(current, next);
     if (!res.ok) return notify(res.message);
     setCurrent("");
     setNext("");

@@ -1,5 +1,5 @@
 // apps/mobile/pages/Login.js
-// Staff sign in with Supabase Auth.
+// Staff sign in through the API (POST /v1/auth/sign-in, CTIP-114).
 import React, { useState } from 'react';
 import { View } from 'react-native';
 

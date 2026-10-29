@@ -25,8 +25,5 @@
     "api:start": "npm --prefix services/api run start",
     "api:test": "npm --prefix services/api run test",
     "install:all": "npm install && npm --prefix apps/web install && npm --prefix apps/mobile install && npm --prefix services/api install"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.118.0"
   }
 }

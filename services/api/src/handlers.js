@@ -5,6 +5,7 @@ import { speciesMediaHandlers } from './speciesMedia.js';
 import { observationHandlers } from './observations.js';
 import { fieldHandlers } from './field.js';
 import { staffHandlers } from './staff.js';
+import { sessionHandlers } from './session.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -72,4 +73,5 @@ export const handlers = {
   ...observationHandlers,
   ...fieldHandlers,
   ...staffHandlers,
+  ...sessionHandlers,
 };

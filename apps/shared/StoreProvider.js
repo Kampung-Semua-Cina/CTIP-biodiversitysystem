@@ -1,15 +1,21 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, DEMO_USER, DEMO_EMAILS, DEMO_PASSWORD, initialProfiles } from "./data.js";
+import { seed, DEMO_USER, DEMO_EMAILS, initialProfiles } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
-import { getSupabase } from "./supabase.js";
 import {
   getAuthToken,
   setAuthToken,
-  clearAuthToken,
+  getSession,
+  freshAuthToken,
+  onSessionEnded,
+  takeSessionFromUrl,
+  signInApi,
+  signOutApi,
+  passwordResetApi,
+  changePasswordApi,
   fetchPublicSpecies,
   fetchPublicSpeciesById,
   fetchMe,
@@ -51,24 +57,34 @@ import {
   markAllReadApi,
 } from "./api.js";
 
-const ACTIVE_DEMO_PASSWORD =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
-  (typeof process !== "undefined" && (process.env?.VITE_DEMO_PASSWORD || process.env?.DEMO_PASSWORD)) ||
-  DEMO_PASSWORD ||
-  "Niah@1234";
+// The prototype role switch (CTIP-113) signs in to the real demo accounts, so it
+// only exists in local development builds: `npm run dev` on the web
+// (import.meta.env.DEV) and Expo Go / dev clients on mobile (__DEV__). A
+// production website or APK has no switch and no password. The password comes
+// from a gitignored .env: VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD
+// (mobile). Never set either on a hosting service or in eas.json.
+export const ROLE_SWITCH_ENABLED =
+  (typeof __DEV__ !== "undefined" && __DEV__ === true) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.DEV === true);
+const DEMO_SIGN_IN_PASSWORD = !ROLE_SWITCH_ENABLED
+  ? null
+  : (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
+    (typeof process !== "undefined" && process.env.EXPO_PUBLIC_DEMO_PASSWORD) ||
+    null;
 
 // Shown wherever a page needs the Express API and cannot reach it.
 export const API_DOWN = "Cannot reach the API server. Start it with npm run api (needs services/api/.env).";
 const API_CHECK_MS = 30000;
 
-// The freshest token: Supabase Auth refreshes the session, the stored one can be expired.
-const sessionToken = async () =>
-  (await getSupabase().auth.getSession())?.data?.session?.access_token || getAuthToken();
+// The token to send: renewed through the API when it is about to expire.
+const sessionToken = () => freshAuthToken();
 
 // App state, loaded from and saved through the Express API (services/api).
-// Supabase is used here only for Auth (sign in, sign out, passwords, the
-// session token the API checks); every table and file goes through the API,
-// which checks the role and runs each query as the user so RLS applies too.
+// The apps never talk to Supabase directly (CTIP-114): signing in, sessions and
+// passwords go through /v1/auth and /v1/me/password, and every table and file
+// through the other endpoints, which check the role and run each query as the
+// user so RLS applies too. The one exception is loading photos, from the
+// short-lived Storage links the API hands out.
 export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [db, setDb] = useState(seed);
   const [userId, setUserId] = useState(null);
@@ -311,48 +327,44 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   }, [loadFromApi]);
 
-  // Initial load: pick up the Supabase Auth session, then load through the API
+  // Initial load: the stored session (renewed if it is about to expire), or
+  // the one a password-reset link brings in the address, then load through the API.
   useEffect(() => {
     let mounted = true;
-    const sb = getSupabase();
 
-    sb.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        setUserId(session.user.id);
-        setAuthToken(session.access_token);
-        setAuthTokenState(session.access_token);
-      }
-      loadFromApi(true);
-    }).catch(() => {
-      if (mounted) loadFromApi(true);
-    });
+    const fromLink = takeSessionFromUrl();
+    if (fromLink && typeof window !== "undefined") {
+      // Out of the address and the history, then on to setting a new password.
+      const next = fromLink === "recovery" ? "#/login?reset=1" : fromLink === "expired" ? "#/login?expired=1" : "#/dashboard";
+      window.history.replaceState(null, "", window.location.pathname + window.location.search + next);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
 
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+    const off = onSessionEnded(() => {
       if (!mounted) return;
-      if (session?.user) {
-        setUserId(session.user.id);
-        setAuthToken(session.access_token);
-        setAuthTokenState(session.access_token);
-        setPrototypeRole(null);
-      } else {
-        setPrototypeRole((current) => {
-          if (!current || current === "visitor") {
-            setUserId(null);
-            clearAuthToken();
-            setAuthTokenState(null);
-          }
-          return current;
-        });
-      }
+      setUserId(null);
+      setAuthTokenState(null);
+      setPrototypeRole(null);
+      notify("Your session has ended. Please sign in again.");
       loadFromApi(true);
     });
+
+    (async () => {
+      const token = await sessionToken();
+      if (!mounted) return;
+      if (token) {
+        setAuthTokenState(token);
+        const id = getSession()?.user?.id;
+        if (id) setUserId(id);
+      }
+      await loadFromApi(true);
+    })();
 
     return () => {
       mounted = false;
-      subscription?.unsubscribe();
+      off();
     };
-  }, [loadFromApi]);
+  }, [loadFromApi, notify]);
 
   // Is the Express API up? Checked on load, every 30 s and when the tab comes
   // back into view, so the "API down" notice appears and clears by itself.
@@ -414,51 +426,39 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   /* ---------- session & authentication ---------- */
   const setRole = async (key) => {
-    const sb = getSupabase();
+    // Public builds: no role switching at all (CTIP-113).
+    if (!ROLE_SWITCH_ENABLED) {
+      notify("Switching roles is only available in local development. Please sign in.");
+      return;
+    }
     if (key === "visitor") {
       setPrototypeRole("visitor");
-      clearAuthToken();
       setAuthTokenState(null);
       setUserId(null);
-      try {
-        await sb.auth.signOut();
-      } catch (e) {
-        console.warn("signOut error:", e);
-      }
+      await signOutApi();
       await loadFromApi(true);
       notify("Viewing as Visitor");
       return;
     }
 
     const targetEmail = DEMO_EMAILS[key];
-    const password = ACTIVE_DEMO_PASSWORD;
+    const password = DEMO_SIGN_IN_PASSWORD;
+    if (!password) notify("Set VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD (mobile) in your local .env to sign in as a demo role");
 
     // Optimistically set prototype role so screen transitions are immediate
     setPrototypeRole(key);
 
     if (targetEmail && password) {
-      try {
-        const { data, error } = await sb.auth.signInWithPassword({
-          email: targetEmail,
-          password: password,
-        });
-
-        if (!error && data?.session) {
-          setAuthToken(data.session.access_token);
-          setAuthTokenState(data.session.access_token);
-          if (data.session.user) {
-            setUserId(data.session.user.id);
-          }
-          setPrototypeRole(null);
-          await loadFromApi(true);
-          notify(`Signed in as ${targetEmail} (${key})`);
-          return;
-        } else if (error) {
-          console.warn("setRole signIn notice:", error.message);
-        }
-      } catch (err) {
-        console.warn("setRole signIn exception:", err);
+      const res = await signInApi(targetEmail, password);
+      if (res.ok) {
+        setAuthTokenState(res.data.access_token);
+        if (res.data.user?.id) setUserId(res.data.user.id);
+        setPrototypeRole(null);
+        await loadFromApi(true);
+        notify(`Signed in as ${targetEmail} (${key})`);
+        return;
       }
+      console.warn("setRole sign-in:", res.message || res.code);
     }
 
     // Offline / fallback resolution
@@ -474,15 +474,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const logout = async () => {
     setPrototypeRole("visitor");
-    const sb = getSupabase();
-    clearAuthToken();
     setAuthTokenState(null);
     setUserId(null);
-    try {
-      await sb.auth.signOut();
-    } catch (e) {
-      console.warn("signOut error:", e);
-    }
+    await signOutApi();
     notify("Signed out");
   };
 
@@ -546,54 +540,39 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }
   };
 
-  // Staff login using Supabase Auth
+  // Staff login: POST /v1/auth/sign-in (the API signs in to Supabase Auth)
   const login = async (email, password) => {
-    const sb = getSupabase();
     let cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail.includes("@")) {
       const found = db.profiles.find((p) => p.username?.toLowerCase() === cleanEmail);
       if (found?.email) cleanEmail = found.email.toLowerCase();
     }
 
-    try {
-      const { data, error } = await sb.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
-      if (error) {
-        return { ok: false, message: error.message || "Invalid email or password" };
-      }
-      const sessionUser = data.user;
-      setAuthToken(data.session.access_token);
-      setAuthTokenState(data.session.access_token);
-      setUserId(sessionUser.id);
-      setPrototypeRole(null);
-      await loadFromApi(true);
-      return { ok: true, id: sessionUser.id, first: false };
-    } catch (err) {
-      return { ok: false, message: err?.message || "Sign in failed" };
-    }
+    if (!cleanEmail.includes("@")) return { ok: false, message: "Wrong email or password" };
+    const res = noteOffline(await signInApi(cleanEmail, password));
+    if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message || "Sign in failed" };
+    const id = res.data.user?.id;
+    setAuthTokenState(res.data.access_token);
+    setUserId(id);
+    setPrototypeRole(null);
+    await loadFromApi(true);
+    return { ok: true, id, first: false };
   };
 
   const signIn = (id) => setUserId(id);
 
+  // Signed in through a password-reset link, with a new password: sets it.
+  // Otherwise: emails a reset link to that address.
   const changePassword = async (email, next) => {
-    if (next && next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
-    const sb = getSupabase();
-    try {
-      const session = (await sb.auth.getSession())?.data?.session;
-      if (session) {
-        const { error } = await sb.auth.updateUser({ password: next });
-        if (error) return { ok: false, message: error.message };
-        return { ok: true };
-      } else {
-        const { error } = await sb.auth.resetPasswordForEmail(email.trim());
-        if (error) return { ok: false, message: error.message };
-        return { ok: true, message: "Password reset link sent to your email" };
-      }
-    } catch (err) {
-      return { ok: false, message: err?.message || "Failed to change password" };
+    if (next && getAuthToken()) {
+      if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
+      const res = await callApi(changePasswordApi, { new_password: next });
+      return res.ok ? { ok: true } : { ok: false, message: res.message };
     }
+    if (!email?.trim()) return { ok: false, message: "Enter your email" };
+    const res = noteOffline(await passwordResetApi(email.trim().toLowerCase()));
+    if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
+    return { ok: true, message: "If that address has an account, a reset link is on its way. Check your email." };
   };
 
   /* ---------- own account ---------- */
@@ -628,23 +607,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     if (!me) return { ok: false, message: "Sign in first" };
     if (next.length < 8) return { ok: false, message: "Use at least 8 characters for the new password" };
     if (next === current) return { ok: false, message: "Choose a password different from your current one" };
-    const sb = getSupabase();
-    try {
-      if (me.email && current) {
-        const { error: verifyErr } = await sb.auth.signInWithPassword({
-          email: me.email,
-          password: current,
-        });
-        if (verifyErr) {
-          return { ok: false, message: "Your current password is incorrect" };
-        }
-      }
-      const { error } = await sb.auth.updateUser({ password: next });
-      if (error) return { ok: false, message: error.message };
-      return { ok: true };
-    } catch (err) {
-      return { ok: false, message: err?.message || "Failed to change password" };
-    }
+    if (!current) return { ok: false, message: "Enter your current password" };
+    const res = await callApi(changePasswordApi, { current_password: current, new_password: next });
+    return res.ok ? { ok: true } : { ok: false, message: res.message };
   };
 
   /* ---------- plants and photos ---------- */
@@ -671,7 +636,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // after a dropped connection gets back the row it already saved instead of
   // adding a second one. Returns { ok, ... } and never throws.
   const addPlant = async ({ qr_id, proposed_species, morphology, height_cm, notes, photos = [], lat, lng, gps_accuracy_m }) => {
-    const authUid = userId || (await getSupabase().auth.getUser())?.data?.user?.id;
+    const authUid = userId || getSession()?.user?.id;
     const done = { specimenId: null, obsId: uid(), observation: false, photos: 0 };
     const photoIds = photos.map((p) => p.id || uid());
     const must = (res) => { if (!res.ok) throw toError(res); return res.data; };
