@@ -3,8 +3,10 @@
 // The code holds a link to the plant's page (tagUrl), never the plant's details, so
 // scanning it in the app opens the record and a phone camera opens the website.
 // "Share or save image" turns the card into a PNG for printing.
-import React, { useRef, useState } from 'react';
-import { View, Alert } from 'react-native';
+// Add plant shows TagQrView in place of its form (not as a new screen), because the
+// navigator unmounts covered screens and the form would lose a newly made tag.
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Alert, BackHandler } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -20,12 +22,24 @@ import { Screen, Header, IconButton, TitleBlock, Mono, Txt, Button, Notice, Empt
 const PRINT = { paper: palettes.light.surface, ink: palettes.light.ink };
 
 export default function TagQr({ nav, params = {} }) {
+  return <TagQrView qr={params.qr} onBack={nav.back} />;
+}
+
+export function TagQrView({ qr, onBack }) {
   const { c } = useTheme();
   const card = useRef(null);
   const [sharing, setSharing] = useState(false);
-  const qr = params.qr;
 
-  const back = <Header left={<IconButton name="chevL" label="Back" onPress={nav.back} />} />;
+  // Android's back button closes this view first, wherever it is shown.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack]);
+
+  const back = <Header left={<IconButton name="chevL" label="Back" onPress={onBack} />} />;
   if (!qr) {
     return <Screen header={back}><Empty icon="qr">No tag selected.</Empty></Screen>;
   }

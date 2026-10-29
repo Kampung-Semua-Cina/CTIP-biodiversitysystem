@@ -17,6 +17,7 @@ import {
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
+import { TagQrView } from './TagQr.js';
 import { prefillFromSpecies } from '../../shared/speciesSearch.js';
 import { uid } from '../../shared/utils.js';
 import { extractTag } from '../../shared/selectors.js';
@@ -219,6 +220,7 @@ export function AddPlant({ nav, params = {} }) {
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [showQr, setShowQr] = useState(false); // the tag's QR, shown over the form (CTIP-27)
   const [tried, setTried] = useState(false);
 
   useEffect(() => {
@@ -233,7 +235,11 @@ export function AddPlant({ nav, params = {} }) {
       const ids = await generateTags(1, 'field');
       if (ids && ids.length > 0) {
         setQr(ids[0]);
-        Alert.alert('Tag Generated', `Created new QR tag: ${ids[0]}`);
+        // Next step: print the code and fix it to the plant (CTIP-27).
+        Alert.alert('New tag ready', `${ids[0]} is now this plant's tag. Show its QR code to print or share it.`, [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Show QR', onPress: () => setShowQr(true) },
+        ]);
       }
     } catch (err) {
       Alert.alert('Tag Generation Failed', err?.message || 'Could not generate QR tag.');
@@ -338,6 +344,10 @@ export function AddPlant({ nav, params = {} }) {
       saveDraft(qr, { proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
     }
   }, [qr, sp, picked, looks, height, notes, photos, gps]);
+
+  if (showQr && qr) {
+    return <TagQrView qr={qr} onBack={() => setShowQr(false)} />;
+  }
 
   if (!qr) {
     return (
@@ -477,7 +487,7 @@ export function AddPlant({ nav, params = {} }) {
           <Txt v="body" color={c.ink2} style={{ fontSize: 15 }}>Tag</Txt>
           <Mono size={15}>{qr}</Mono>
           <View style={{ flexDirection: 'row', gap: 12, marginLeft: 'auto' }}>
-            <TextLink label="Show QR" onPress={() => nav.go('tagQr', { qr })} />
+            <TextLink label="Show QR" onPress={() => setShowQr(true)} />
             <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
             <TextLink label="Generate" onPress={generateNewTag} />
             <TextLink label="Gallery" onPress={pickQrFromGallery} />
