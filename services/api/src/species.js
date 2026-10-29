@@ -59,6 +59,13 @@ const ListQuery = SpeciesSearch.extend({
   is_published: z.enum(['true', 'false']).optional(),
 });
 
+// GET /public/species (CTIP-26). Paging is opt-in: the web catalogue asks for
+// everything, the phone asks a page at a time. Sending only `page` means 20 a page.
+export const PublicListQuery = SpeciesSearch.extend({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 // Shared by GET /species and GET /public/species. Names match partially and
 // ignore case; family and status match the whole value, ignoring case.
 // Dates are the day the record was added (UTC), both ends inclusive.
@@ -80,6 +87,13 @@ const badQuery = (res, error) => res.status(422).json({
 // For handlers outside this file: the parsed filters, or null after a 422.
 export function parseSearch(req, res) {
   const result = SpeciesSearch.safeParse(req.query);
+  if (!result.success) badQuery(res, result.error);
+  return result.success ? result.data : null;
+}
+
+// Same for GET /public/species: filters plus optional page and limit, or null after a 422.
+export function parsePublicList(req, res) {
+  const result = PublicListQuery.safeParse(req.query);
   if (!result.success) badQuery(res, result.error);
   return result.success ? result.data : null;
 }

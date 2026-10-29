@@ -16,6 +16,7 @@ import {
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
+import SpeciesPicker from '../components/SpeciesPicker.js';
 import { uid } from '../../shared/utils.js';
 import { extractTag } from '../../shared/selectors.js';
 
@@ -200,37 +201,10 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
   );
 }
 
-// Species picker: type a name, pick from the species list (CTIP-26) and pre-fill (CTIP-63).
-function SpeciesField({ value, onChange, onPick, species, error }) {
-  const { c } = useTheme();
-  const needle = value.trim().toLowerCase();
-  const exact = species.find((s) => s.scientific_name.toLowerCase() === needle);
-  const matches = needle.length > 1 && !exact
-    ? species.filter((s) => `${s.common_name} ${s.scientific_name}`.toLowerCase().includes(needle)).slice(0, 4)
-    : [];
-  return (
-    <View style={{ gap: 6 }}>
-      <Field label="Species (required)" value={value} onChangeText={onChange} placeholder="Start typing a name" italic error={error}
-        hint={exact ? `${exact.common_name} · ${exact.family}. Details pre-filled from the species list.` : 'Select or enter the species before submitting for review.'} />
-      {matches.map((s) => (
-        <Pressable key={s.id} accessibilityRole="button" onPress={() => onPick(s)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.bg }}>
-          <Icon name="leaf" size={18} color={c.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: c.ink }}>{s.common_name}</Text>
-            <Sci size={14}>{s.scientific_name}</Sci>
-          </View>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 export function AddPlant({ nav, params = {} }) {
   const { db, addPlant, generateTags } = useStore();
   const { c } = useTheme();
   const [qr, setQr] = useState(params.qr || '');
-  const species = db.species.filter((s) => !s.is_deleted);
   const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
   const [photos, setPhotos] = useState([]);
   const [sp, setSp] = useState('');
@@ -524,11 +498,10 @@ export function AddPlant({ nav, params = {} }) {
       </Section>
 
       <Section title="Details" gap={16}>
-        <SpeciesField
+        <SpeciesPicker
           value={sp}
           onChange={setSp}
           onPick={pick}
-          species={species}
           error={tried && problems.species ? 'Species is required before submitting for review' : undefined}
         />
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" width={140} />
