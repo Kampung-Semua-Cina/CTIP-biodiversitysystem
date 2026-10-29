@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   cleanTerm, buildSpeciesQuery, initialSearchState, nextSearchState, failSearchState,
-  hasMore, summarize, searchErrorMessage,
+  hasMore, summarize, searchErrorMessage, isTagSearch,
 } from "../speciesSearch.js";
 
 // Species search on the phone (CTIP-26): what is sent to GET /public/species,
@@ -34,6 +34,11 @@ test("buildSpeciesQuery leaves empty values out and defaults the page size", () 
   assert.deepEqual(buildSpeciesQuery({ q: " nep ", page: 2 }), { q: "nep", page: 2, limit: 20 });
   assert.deepEqual(buildSpeciesQuery({ q: "", family: "Nepenthaceae" }), { family: "Nepenthaceae", page: 1, limit: 20 });
   assert.deepEqual(buildSpeciesQuery({ q: "nep", family: "all" }), { q: "nep", page: 1, limit: 20 });
+});
+
+test("isTagSearch spots whole and partial tag IDs, not species names", () => {
+  for (const t of ["NIAH-0007", "niah-00", "niah", " 0007 ", "7"]) assert.equal(isTagSearch(t), true, t);
+  for (const t of ["", "nep", "Nepenthes rajah", "Nepenthaceae", "Keith's rafflesia"]) assert.equal(isTagSearch(t), false, t);
 });
 
 test("a response for an older search is ignored", () => {

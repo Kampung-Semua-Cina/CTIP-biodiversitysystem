@@ -30,6 +30,13 @@ export function buildSpeciesQuery({ q, family, page = 1, limit = PAGE_SIZE } = {
   return { ...query, page, limit };
 }
 
+// A tag ID, whole or in part ("NIAH-0007", "niah-00", "0007"). Species names have
+// no digits, so these are looked up among the plants already loaded, not the API.
+export function isTagSearch(raw) {
+  const term = String(raw ?? "").trim();
+  return /\d/.test(term) || /^niah/i.test(term);
+}
+
 // `key` names one search (the query without its page). Responses are matched
 // against it, so an answer to an older search that arrives late is dropped.
 export function initialSearchState(key) {

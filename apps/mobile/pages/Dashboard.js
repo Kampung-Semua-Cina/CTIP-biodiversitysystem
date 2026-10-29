@@ -16,14 +16,16 @@ import {
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
 import { useSpeciesSearch } from '../hooks/useSpeciesSearch.js';
-import { cleanTerm } from '../../shared/speciesSearch.js';
+import { cleanTerm, isTagSearch } from '../../shared/speciesSearch.js';
+import { can } from '../../shared/permissions.js';
 
 const PAGE_SIZE = 20; // same as the API's default `limit`
 const ROW_HEIGHT = 77; // fixed row height lets the list jump straight to a letter
 const LETTER_HEIGHT = 42;
 
 // Pages through `items` already in the store: page 1, 2, 3… of PAGE_SIZE.
-// Typing a species name searches the API instead (useSpeciesSearch, CTIP-26).
+// A botanist or visitor typing a species name searches the API instead
+// (useSpeciesSearch, CTIP-26; see SpeciesList).
 function usePaged(items, resetKey) {
   const [page, setPage] = useState({ key: resetKey, count: 0, loading: true });
   // A new search or filter starts again from page 1.
@@ -100,10 +102,13 @@ export function SpeciesList({ nav, params = {} }) {
 
   const local = usePaged(sorted, `${q}|${family}|${sort}`);
 
-  // Typing a name searches published species through the API, a page at a time
-  // (CTIP-26). A tag ID ("NIAH-0007") is looked up among the plants already loaded,
-  // and browsing without a search term keeps the full list with its sorts.
-  const apiMode = !/NIAH-\d{4}/i.test(q) && cleanTerm(q).length >= 2;
+  // For botanists and visitors, typing a name searches published species through
+  // the API, a page at a time (CTIP-26). They only ever see published species, so
+  // the API returns the same set the list holds. Officers and admins keep searching
+  // the loaded list, which also has unpublished species. A tag ID, whole or in part,
+  // is always looked up among the plants already loaded, and browsing without a
+  // search term keeps the full list with its sorts.
+  const apiMode = !can(role, 'species') && !isTagSearch(q) && cleanTerm(q).length >= 2;
   const search = useSpeciesSearch({ q: apiMode ? q : '', family: apiMode ? family : undefined });
   const shown = apiMode ? search.items : local.shown;
   const loading = apiMode ? search.loading : local.loading;
