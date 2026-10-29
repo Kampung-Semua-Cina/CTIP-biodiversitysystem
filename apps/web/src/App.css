@@ -212,12 +212,11 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
   font-weight: 700; font-size: var(--t-label-size); box-shadow: var(--shadow);
 }
 
-/* Prototype-only bar above the navbar: which role the site is shown as. */
+/* Local development bar above the navbar: API status, on the right. */
 .protobar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px var(--s-3);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px var(--s-3);
   padding: 6px var(--s-4); font-size: 13px; color: var(--ink2); background: var(--sunken); border-bottom: 1px solid var(--line);
 }
-.protobar-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--s-3); }
 .protobar-right { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .api-badge {
   display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--r-pill);
@@ -225,14 +224,6 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 }
 .api-badge.on { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
 .api-badge.off { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-line); }
-
-/* Staff pages: the Express API is not answering. */
-.apidown {
-  display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 10px 14px;
-  border: 1px solid var(--bad-line); border-radius: var(--r-card, 16px);
-  background: var(--bad-soft); color: var(--bad);
-}
-.apidown span { color: var(--ink); }
 .api-badge.syncing { background: var(--info-soft); color: var(--info); border-color: var(--info-line); }
 .api-badge.session { background: var(--acc-soft); color: var(--acc); border-color: var(--acc-line); }
 .protobar-sync {
@@ -242,13 +233,14 @@ main { flex: 1 0 auto; width: 100%; max-width: var(--page-max); margin: 0 auto; 
 }
 .protobar-sync:hover { background: var(--hover); color: var(--ink); }
 .protobar-sync:disabled { opacity: 0.5; cursor: not-allowed; }
-.roleswitch { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); }
-.roleswitch button {
-  min-height: 32px; padding: 3px 14px; border: 0; border-radius: var(--r-pill);
-  background: transparent; color: var(--ink); font: 600 13px var(--f-text); cursor: pointer;
+
+/* Staff pages: the Express API is not answering. */
+.apidown {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 10px 14px;
+  border: 1px solid var(--bad-line); border-radius: var(--r-card, 16px);
+  background: var(--bad-soft); color: var(--bad);
 }
-.roleswitch button:hover { background: var(--raised); }
-.roleswitch button.on { background: var(--acc); color: var(--on-acc); font-weight: 700; }
+.apidown span { color: var(--ink); }
 
 .scrim { position: fixed; inset: 0; z-index: 200; background: var(--scrim); }
 .drawer {
@@ -1256,7 +1248,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 @media (prefers-reduced-motion: no-preference) {
   /* Colour, border and shadow changes: hover, selection, and switching theme */
   .site, .top, .foot, .protobar, .bottom, .glass, .side a, .links a, .drawer a,
-  .btn, .pill, .ic, .fam, .chip, .tabs button, .seg button, .themeswitch button, .roleswitch button,
+  .btn, .pill, .ic, .fam, .chip, .tabs button, .seg button, .themeswitch button,
   .item, .rqcard, .note, .thumbnail, .switch, .tagpill, .record, .post,
   .site input, .site select, .site textarea {
     transition:

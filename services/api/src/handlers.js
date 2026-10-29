@@ -6,6 +6,8 @@ import { observationHandlers } from './observations.js';
 import { fieldHandlers } from './field.js';
 import { staffHandlers } from './staff.js';
 import { sessionHandlers } from './session.js';
+import { protectSpecimen } from './distribution.js';
+import { tooMany } from './rateLimit.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,6 +21,33 @@ export function coverUrl(db, media = []) {
   const cover = media.find((m) => m.is_primary) ?? [...media].sort((a, b) => a.sort_order - b.sort_order)[0];
   return cover ? mediaUrl(db, cover) : null;
 }
+
+// One published species with its gallery, visitor fields only (listed one by
+// one so internal fields never reach a visitor). null when it is missing,
+// unpublished or deleted.
+async function loadPublicSpecies(db, id) {
+  const { data: species, error } = await db
+    .from('species')
+    .select(`id, scientific_name, common_name, family, genus, description, conservation_status,
+      cultural_significance, species_media (id, species_id, s3_bucket, s3_key, caption, credit,
+      is_primary, sort_order, created_at)`)
+    .eq('id', id)
+    .eq('is_published', true)
+    .eq('is_deleted', false)
+    .order('sort_order', { referencedTable: 'species_media' })
+    .maybeSingle();
+  if (error) throw error;
+  if (!species) return null;
+  const { species_media, ...fields } = species;
+  const media = species_media.map(({ s3_bucket, s3_key, ...m }) => ({ ...m, url: mediaUrl(db, { s3_bucket, s3_key }) }));
+  return { ...fields, primary_image_url: coverUrl(db, species_media), media };
+}
+
+// Visitor tag lookups per caller address: enough for anyone walking the trail,
+// too few to read every tag in turn (CTIP-33).
+export const TAG_LOOKUP_LIMIT = 30;
+export const TAG_LOOKUP_WINDOW_MS = 60 * 1000;
+const QR_ID = /^[A-Z0-9-]{1,32}$/;
 
 // Implemented endpoints, keyed "method path" to match permissions.js.
 // Anything not listed here answers 501 until someone builds it.
@@ -59,30 +88,58 @@ export const handlers = {
     res.json({ data: rows, meta: paged ? { page, limit, total } : { page: 1, limit: total, total } });
   },
 
-  // Visitor QR page (CTIP-33). Columns are listed one by one so internal
-  // fields never reach a visitor, and nothing here joins specimens, so no
+  // A species page for visitors. Nothing here joins specimens, so no
   // coordinates can leak. RLS hides unpublished species as a second guard.
   'get /public/species/:id': async (req, res) => {
-    const notFound = () => res.status(404).json({ code: 'NOT_FOUND', message: 'Species not found' });
-    if (!UUID.test(req.params.id)) return notFound();
+    if (!UUID.test(req.params.id)) return res.status(404).json({ code: 'NOT_FOUND', message: 'Species not found' });
+    try {
+      const species = await loadPublicSpecies(supabaseAnon(), req.params.id);
+      if (!species) return res.status(404).json({ code: 'NOT_FOUND', message: 'Species not found' });
+      res.json(species);
+    } catch (error) {
+      res.status(500).json({ code: 'DB_ERROR', message: error.message });
+    }
+  },
 
-    const db = supabaseAnon();
-    const { data: species, error } = await db
-      .from('species')
-      .select(`id, scientific_name, common_name, family, genus, description, conservation_status,
-        cultural_significance, species_media (id, species_id, s3_bucket, s3_key, caption, credit,
-        is_primary, sort_order, created_at)`)
-      .eq('id', req.params.id)
-      .eq('is_published', true)
-      .eq('is_deleted', false)
-      .order('sort_order', { referencedTable: 'species_media' })
-      .maybeSingle();
-    if (error) return res.status(500).json({ code: 'DB_ERROR', message: error.message });
-    if (!species) return notFound();
+  // Visitor QR page (CTIP-33): the plant on a scanned tag. Visitors cannot read
+  // the specimens table, so public_plant_by_tag() (migration 20261030000000)
+  // returns the plant only once it is approved on a published species, with an
+  // endangered location already reduced. protectSpecimen() runs again here so
+  // the API rule holds even if the function changes. Unknown, unused and
+  // unpublished tags all get the same 404, so the answer says nothing about
+  // plants that are not public yet.
+  'get /public/tags/:qrId': async (req, res) => {
+    if (tooMany(req, 'public-tag', { limit: TAG_LOOKUP_LIMIT, windowMs: TAG_LOOKUP_WINDOW_MS })) {
+      res.set('Retry-After', String(TAG_LOOKUP_WINDOW_MS / 1000));
+      return res.status(429).json({ code: 'TOO_MANY_ATTEMPTS', message: 'Too many tag lookups. Wait a minute and try again.' });
+    }
+    const notFound = () => res.status(404).json({ code: 'NOT_FOUND', message: 'No published plant on this tag' });
+    const qrId = String(req.params.qrId).trim().toUpperCase();
+    if (!QR_ID.test(qrId)) return notFound();
 
-    const { species_media, ...fields } = species;
-    const media = species_media.map(({ s3_bucket, s3_key, ...m }) => ({ ...m, url: mediaUrl(db, { s3_bucket, s3_key }) }));
-    res.json({ ...fields, primary_image_url: coverUrl(db, species_media), media });
+    try {
+      const db = supabaseAnon();
+      const { data, error } = await db.rpc('public_plant_by_tag', { p_qr_id: qrId });
+      if (error) throw error;
+      const plant = data?.[0];
+      if (!plant) return notFound();
+      const species = await loadPublicSpecies(db, plant.species_id);
+      if (!species) return notFound();
+
+      const shown = protectSpecimen(
+        { ...plant, endangered_override: plant.location_reduced === true },
+        { role: null, userId: null, status: species.conservation_status },
+      );
+      res.json({
+        qr_id: plant.qr_id,
+        lat: shown.lat ?? null,
+        lng: shown.lng ?? null,
+        location_reduced: shown.location_reduced,
+        species,
+      });
+    } catch (error) {
+      res.status(500).json({ code: 'DB_ERROR', message: error.message });
+    }
   },
 
   'get /me': async (req, res) => {
