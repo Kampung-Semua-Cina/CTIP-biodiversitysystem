@@ -21,6 +21,7 @@ export const NEEDS = {
   alerts: "bell",
   discussion: "discuss",
   staffMore: "pending",
+  tagQr: "pending", // any signed-in role: a tag's QR code to share or print (CTIP-27)
 };
 
 // Screens that cover the whole phone (no bottom bar).
@@ -33,7 +34,7 @@ export const ROUTE_NAMES = [
   "tagged", "add", "submitted", "revisit",
   "records", "record", "alerts", "discussion",
   "review", "reviewItem", "monitor", "alert",
-  "staffMore", "speciesAdmin", "tags", "reports",
+  "staffMore", "speciesAdmin", "tags", "tagQr", "reports",
   "users", "audit",
 ];
 

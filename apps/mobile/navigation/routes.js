@@ -14,6 +14,7 @@ import Alerts from '../pages/Notifications.js';
 import Discussion from '../pages/Discussion.js';
 import SpeciesAdmin from '../pages/Species.js';
 import Tags from '../pages/Tags.js';
+import TagQr from '../pages/TagQr.js';
 import Reports from '../pages/Reports.js';
 import { StaffMore, Users, Audit } from '../pages/Admin.js';
 import { can } from '../../shared/permissions.js';
@@ -25,7 +26,7 @@ export const SCREENS = {
   tagged: TaggedPlants, add: AddPlant, submitted: Submitted, revisit: Revisit,
   records: MyRecords, record: RecordDetail, alerts: Alerts, discussion: Discussion,
   review: ReviewQueue, reviewItem: ReviewRecord, monitor: Monitor, alert: AlertDetail,
-  staffMore: StaffMore, speciesAdmin: SpeciesAdmin, tags: Tags, reports: Reports,
+  staffMore: StaffMore, speciesAdmin: SpeciesAdmin, tags: Tags, tagQr: TagQr, reports: Reports,
   users: Users, audit: Audit,
 };
 
