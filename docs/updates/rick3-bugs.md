@@ -65,7 +65,7 @@ App-side integrity fixes:
 | F6 | A failed photo upload saved the phone's local `blob:` URL as the photo's storage key. | The upload error is now raised and retried. |
 | F7 | A failed species photo save showed "Species photos updated" and put **fake photos** on screen. It also deleted the existing photos *before* uploading the new ones. | It now uploads first, deletes after, and reports failures honestly. |
 
-### 2.3 Earlier change on this branch (see `changes.md`)
+### 2.3 Earlier change on this branch (see `rick3-changes.md`)
 
 - Species create and edit now go through the API (`POST/PATCH /v1/species`, `OFFICER_ADMIN`). Before, the web wrote to Supabase directly.
 - `conservation_status` is validated server-side against the 9 IUCN categories.

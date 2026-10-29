@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { supabaseAnon, supabaseAs, supabaseFresh } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
 import { withSignedUrls } from './field.js';
+import { protectSpecimen } from './distribution.js';
 
 // Everything else the apps used to do straight against Supabase: the start-up
 // load, accounts, QR tags, publishing, alerts, sensor thresholds and
@@ -115,6 +116,11 @@ export const staffHandlers = {
     try {
       const out = await loadWorkspace(db, Object.keys(WORKSPACE));
       out.observation_photos = await withSignedUrls(db, out.observation_photos);
+      // RLS lets every signed-in user read every plant, so reduce endangered
+      // spots here, as /distribution does (CTIP-71, threat T13).
+      const statusOf = new Map(out.species.map((s) => [s.id, s.conservation_status ?? null]));
+      out.specimens = out.specimens.map((s) =>
+        protectSpecimen(s, { role: req.user.role, userId: req.user.id, status: statusOf.get(s.species_id) }));
       res.json(out);
     } catch (error) {
       dbError(res, error);

@@ -294,6 +294,85 @@ test('visitor workspace needs no token and holds only species and their photos',
   assert.deepEqual(res.body.specimens, []);
 });
 
+/* ---------- endangered locations (CTIP-71, threat T13) ---------- */
+
+// An endangered plant registered by someone other than the caller, at a spot
+// that is not on the 0.01 degree grid.
+const EXACT = { lat: 3.81234, lng: 113.78123 };
+const species = (conservation_status) => {
+  const row = { id: crypto.randomUUID(), scientific_name: 'Nepenthes test', conservation_status, is_deleted: false };
+  db.species.push(row);
+  return row;
+};
+const plant = (fields = {}) => {
+  const row = { id: crypto.randomUUID(), qr_id: 'NIAH-0099', species_id: null, registered_by: crypto.randomUUID(),
+    endangered_override: false, is_deleted: false, gps_accuracy_m: 4, ...EXACT, ...fields };
+  db.specimens.push(row);
+  return row;
+};
+const onGrid = (v) => Math.abs(((v / 0.01) % 1) - 0.5) < 1e-6;
+const workspacePlant = async (role) => (await request(app).get('/v1/workspace').set(as(role))).body.specimens[0];
+
+test("workspace: another botanist's endangered plant comes back reduced", async () => {
+  plant({ species_id: species('endangered').id });
+  const p = await workspacePlant('botanist');
+  assert.notEqual(p.lat, EXACT.lat);
+  assert.notEqual(p.lng, EXACT.lng);
+  assert.ok(onGrid(p.lat) && onGrid(p.lng), 'snapped to the grid used by /distribution');
+  assert.equal(p.gps_accuracy_m, 1100);
+  assert.equal(p.location_reduced, true);
+});
+
+test('workspace: officer sees exact', async () => {
+  plant({ species_id: species('endangered').id });
+  const p = await workspacePlant('officer');
+  assert.equal(p.lat, EXACT.lat);
+  assert.equal(p.lng, EXACT.lng);
+  assert.equal(p.location_reduced, false);
+});
+
+test('workspace: own plant stays exact', async () => {
+  plant({ species_id: species('endangered').id, registered_by: users.botanist });
+  const p = await workspacePlant('botanist');
+  assert.equal(p.lat, EXACT.lat);
+  assert.equal(p.location_reduced, false);
+});
+
+test('workspace: null coordinates stay null', async () => {
+  plant({ species_id: species('endangered').id, lat: null, lng: null });
+  const p = await workspacePlant('botanist');
+  assert.equal(p.lat, null);
+  assert.equal(p.lng, null);
+});
+
+test('workspace: override and capitalised status both reduce', async () => {
+  plant({ endangered_override: true });
+  plant({ qr_id: 'NIAH-0098', species_id: species('Critically Endangered').id });
+  plant({ qr_id: 'NIAH-0097', species_id: species('least concern').id });
+  const res = await request(app).get('/v1/workspace').set(as('botanist'));
+  const byTag = Object.fromEntries(res.body.specimens.map((p) => [p.qr_id, p]));
+  assert.equal(byTag['NIAH-0099'].location_reduced, true, 'override with no species');
+  assert.equal(byTag['NIAH-0098'].location_reduced, true, 'status in capitals');
+  assert.equal(byTag['NIAH-0097'].lat, EXACT.lat, 'not endangered stays exact');
+});
+
+test('workspace: a species the botanist cannot see (unpublished) counts as endangered', async () => {
+  // RLS only shows botanists published species, so the status is unknown here.
+  plant({ species_id: crypto.randomUUID() });
+  const p = await workspacePlant('botanist');
+  assert.equal(p.location_reduced, true, 'unknown status fails closed');
+});
+
+test("by-qr reduces another botanist's endangered plant", async () => {
+  plant({ species_id: species('endangered').id });
+  const res = await request(app).get('/v1/specimens/by-qr/NIAH-0099').set(as('botanist'));
+  assert.equal(res.status, 200);
+  assert.notEqual(res.body.lat, EXACT.lat);
+  assert.equal(res.body.location_reduced, true);
+  const officer = await request(app).get('/v1/specimens/by-qr/NIAH-0099').set(as('officer'));
+  assert.equal(officer.body.lat, EXACT.lat);
+});
+
 /* ---------- accounts, notifications ---------- */
 
 test('an admin cannot change their own role or turn off their own account', async () => {

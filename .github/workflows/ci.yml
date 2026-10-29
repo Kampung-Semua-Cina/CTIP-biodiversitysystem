@@ -29,6 +29,18 @@ jobs:
       - run: npm ci
       - run: npm test
   #end of API
+  shared:
+    name: Shared (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test
   web:
     name: Web (lint and build)
     runs-on: ubuntu-latest

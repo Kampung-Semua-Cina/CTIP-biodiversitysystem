@@ -1,6 +1,6 @@
 # Must fix: apply three Supabase migrations
 
-**For:** backend team · **Branch:** `PR-rick3` · **Date:** 2026-10-29
+**For:** backend team · **Branch:** `rick3` (PR #26) · **Date:** 2026-10-29
 
 ## Problem
 
@@ -18,7 +18,21 @@ select tgname from pg_trigger where tgname = 'trg_notify_on_submission';
 
 ## What to run
 
-Run these files from `supabase/migrations/`, **in this order**, in the Supabase SQL Editor:
+**Do not paste these into the Supabase SQL Editor.** That leaves the migration
+history out of step with the database, which is what blocked CTIP-86 for two
+days. Push them with the Supabase CLI, from the **repository root**, after
+PR #26 is merged, and tell Amberlyn first:
+
+```powershell
+npx supabase db push --dry-run   # must list exactly the three files below, nothing else
+npx supabase db push
+```
+
+If the dry run lists any other file, stop and ask in the group: something was
+applied by hand again, and `npx supabase migration repair --status applied <timestamp>`
+may be needed first.
+
+The CLI applies them in this order:
 
 1. **`20261028000000_tag_assignment.sql`**: marks QR tags that already have a plant as used. This fixes the "specimens_qr_id_key" error.
 2. **`20261029000000_staff_notifications.sql`**: notifies every active officer and admin when a record is sent for review, and tells staff when a botanist replies. It also creates one notification per record that is already waiting.
@@ -39,5 +53,5 @@ Run these files from `supabase/migrations/`, **in this order**, in the Supabase 
 
 ## More detail
 
-- `bugs.md`: T8 (staff notifications) and T10 (approving without a species)
-- `changes.md`: "Update 3"
+- `rick3-bugs.md`: T8 (staff notifications) and T10 (approving without a species)
+- `rick3-changes.md`: "Update 3"
