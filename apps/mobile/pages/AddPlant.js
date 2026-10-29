@@ -17,6 +17,7 @@ import {
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
+import { prefillFromSpecies } from '../../shared/speciesSearch.js';
 import { uid } from '../../shared/utils.js';
 import { extractTag } from '../../shared/selectors.js';
 
@@ -208,6 +209,7 @@ export function AddPlant({ nav, params = {} }) {
   const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
   const [photos, setPhotos] = useState([]);
   const [sp, setSp] = useState('');
+  const [picked, setPicked] = useState(null); // species chosen from search (CTIP-63)
   const [height, setHeight] = useState('');
   const [looks, setLooks] = useState('');
   const [notes, setNotes] = useState('');
@@ -317,6 +319,7 @@ export function AddPlant({ nav, params = {} }) {
       getDraft(qr).then((d) => {
         if (d) {
           if (d.proposed_species) setSp(d.proposed_species);
+          if (d.picked_species) setPicked(d.picked_species);
           if (d.height_cm) setHeight(String(d.height_cm));
           if (d.morphology) setLooks(d.morphology);
           if (d.notes) setNotes(d.notes);
@@ -332,9 +335,9 @@ export function AddPlant({ nav, params = {} }) {
   useEffect(() => {
     if (!qr) return;
     if (sp || looks || height || notes || photos.length > 0) {
-      saveDraft(qr, { proposed_species: sp, height_cm: height, morphology: looks, notes, photos, gps });
+      saveDraft(qr, { proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
     }
-  }, [qr, sp, looks, height, notes, photos, gps]);
+  }, [qr, sp, picked, looks, height, notes, photos, gps]);
 
   if (!qr) {
     return (
@@ -386,9 +389,12 @@ export function AddPlant({ nav, params = {} }) {
     );
   }
 
+  // Picking a search result fills the name, and the appearance only if it is empty (CTIP-63).
   const pick = (s) => {
-    setSp(s.scientific_name);
-    if (!looks) setLooks(s.description || '');
+    const filled = prefillFromSpecies(s, { proposed_species: sp, morphology: looks });
+    setSp(filled.proposed_species);
+    setLooks(filled.morphology);
+    setPicked(filled.picked);
   };
 
   const addPhotoItems = (items) => {
@@ -503,6 +509,7 @@ export function AddPlant({ nav, params = {} }) {
           value={sp}
           onChange={setSp}
           onPick={pick}
+          picked={picked}
           error={tried && problems.species ? 'Species is required before submitting for review' : undefined}
         />
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" width={140} />

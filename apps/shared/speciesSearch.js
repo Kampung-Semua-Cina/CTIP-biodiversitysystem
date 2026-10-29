@@ -80,3 +80,28 @@ export function searchErrorMessage(err) {
   }
   return err?.userMessage ?? "Species search failed. Please try again.";
 }
+
+// Picking a search result on a new record (CTIP-63). The name becomes the picked
+// species' scientific name; the appearance is filled from its description only if
+// the botanist has not written one. `picked` is what the form remembers (and the
+// crash-safe draft keeps) to show where the name came from.
+export function prefillFromSpecies(species, current = {}) {
+  const own = String(current.morphology ?? "").trim();
+  return {
+    proposed_species: species.scientific_name,
+    morphology: own ? current.morphology : (species.description ?? ""),
+    picked: {
+      id: species.id,
+      scientific_name: species.scientific_name,
+      common_name: species.common_name ?? null,
+      family: species.family ?? null,
+      genus: species.genus ?? null,
+    },
+  };
+}
+
+// The name still is the picked species (the botanist has not edited it).
+export function isStillPicked(picked, value) {
+  if (!picked) return false;
+  return String(value ?? "").trim().toLowerCase() === String(picked.scientific_name).toLowerCase();
+}
