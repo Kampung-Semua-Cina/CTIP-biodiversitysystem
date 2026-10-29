@@ -2,6 +2,10 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { configureApiAddress } from './apiAddress';
+
+// Before anything talks to the API: on a phone it is not on localhost.
+configureApiAddress();
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
 // It also ensures that whether you load the app in Expo Go or in a native build,

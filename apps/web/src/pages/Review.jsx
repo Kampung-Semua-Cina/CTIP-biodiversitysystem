@@ -1,8 +1,9 @@
 // apps/web/src/pages/Review.jsx
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
+import MiniMap from "../components/MiniMap.jsx";
 import { Chip, Empty, Mono, Pills, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { nameOf, plantView } from "../../../shared/selectors.js";
@@ -17,17 +18,48 @@ const FILTERS = [
 ];
 
 // Officer review queue: records synced from the field and waiting for a decision.
+// The records come from the API (GET /v1/observations, CTIP-86), which only
+// lets a botanist see their own. Photos, plant and comments come from the store.
 export default function Review() {
-  const { db } = useStore();
+  const { db, loadReviewQueue } = useStore();
   const [filter, setFilter] = useState("synced");
   const [picked, setPicked] = useState(null);
+  const [queue, setQueue] = useState(null); // null while loading
+  const [error, setError] = useState(null);
+  const [sort, setSort] = useState("newest");
 
-  const counts = Object.fromEntries(FILTERS.map((f) => [f.key, db.observations.filter(f.test).length]));
+  const reload = useCallback(() => loadReviewQueue().then((r) => {
+    setError(r.ok ? null : r.message);
+    setQueue(r.ok ? r.observations : []);
+  }), [loadReviewQueue]);
+  useEffect(() => { reload(); }, [reload]);
+
+  // Only records whose plant has loaded can be shown with photos and details.
+  const known = (queue || []).filter((o) => db.plants.some((p) => p.id === o.specimen_id));
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.key, known.filter(f.test).length]));
   const cur = FILTERS.find((f) => f.key === filter);
-  const list = db.observations
+  const list = known
     .filter(cur.test)
     // Oldest first while waiting, so nothing sits at the bottom forever; newest first otherwise.
-    .sort((a, b) => (filter === "synced" ? 1 : -1) * (a.last_synced_at || a.observed_at || "").localeCompare(b.last_synced_at || b.observed_at || ""));
+    .sort((a, b) => {
+      if (sort === "oldest") return (a.last_synced_at || a.observed_at || "").localeCompare(b.last_synced_at || b.observed_at || "");
+      if (sort === "plant") {
+        const pa = plantView(db, db.plants.find((x) => x.id === a.specimen_id));
+        const pb = plantView(db, db.plants.find((x) => x.id === b.specimen_id));
+        return (pa.name || "").localeCompare(pb.name || "");
+      }
+      if (sort === "botanist") {
+        const ba = nameOf(db, a.recorded_by);
+        const bb = nameOf(db, b.recorded_by);
+        return ba.localeCompare(bb);
+      }
+      if (sort === "tag") {
+        const pa = db.plants.find((x) => x.id === a.specimen_id);
+        const pb = db.plants.find((x) => x.id === b.specimen_id);
+        return (pa?.qr_id || "").localeCompare(pb?.qr_id || "");
+      }
+      return (b.last_synced_at || b.observed_at || "").localeCompare(a.last_synced_at || a.observed_at || "");
+    });
   const obs = list.find((o) => o.id === picked) || list[0];
   const waiting = counts.synced;
 
@@ -40,11 +72,27 @@ export default function Review() {
             {waiting ? `${waiting} field ${waiting === 1 ? "record is" : "records are"} waiting for a decision.` : "Nothing is waiting for a decision."}
           </p>
         </div>
-        <Pills label="Show" value={filter} onChange={(k) => { setFilter(k); setPicked(null); }}
+        <div className="row wrap" style={{ alignItems: "center", gap: 16 }}>
+          <Pills label="Show" value={filter} onChange={(k) => { setFilter(k); setPicked(null); }}
           items={FILTERS.map((f) => ({ key: f.key, label: f.label, count: f.key === "all" ? undefined : counts[f.key] }))} />
+          <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>Sort</span>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort review records">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="plant">Plant name A–Z</option>
+              <option value="botanist">Botanist A–Z</option>
+              <option value="tag">Tag ID</option>
+            </select>
+          </label>
+        </div>
       </div>
 
-      {!obs ? (
+      {error && <p className="mute small" role="alert">Could not load the review queue from the API: {error}</p>}
+
+      {queue === null ? (
+        <div className="glass pad"><p className="mute">Loading the review queue…</p></div>
+      ) : !obs ? (
         <div className="glass pad">
           <Empty icon="clipboard">{filter === "synced" ? "No records are waiting for review." : "No records here."}</Empty>
         </div>
@@ -65,15 +113,17 @@ export default function Review() {
               );
             })}
           </div>
-          <ReviewDetail key={obs.id} obs={obs} />
+          <ReviewDetail key={obs.id} obs={obs} onDecided={reload} />
         </div>
       )}
     </Shell>
   );
 }
 
-function ReviewDetail({ obs }) {
-  const { db, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
+function ReviewDetail({ obs, onDecided }) {
+  const { db, apiStatus, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
+  const [deciding, setDeciding] = useState(false);
+  const apiDown = apiStatus === "offline"; // decisions only go through the API
   const [comment, setComment] = useState("");
   const [note, setNote] = useState("");
   const rawPlant = db.plants.find((p) => p.id === obs.specimen_id);
@@ -84,11 +134,17 @@ function ReviewDetail({ obs }) {
   const species = db.species.filter((s) => !s.is_deleted);
   const open = obs.status === "synced"; // only records waiting for review can be decided
 
-  const decide = (decision) => {
+  // Where this visit was recorded; older records only have the plant's position.
+  const coords = { lat: obs.lat ?? rawPlant.lat, lng: obs.lng ?? rawPlant.lng };
+  const hasCoords = coords.lat != null && coords.lng != null;
+
+  const decide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
-    reviewObservation(obs.id, decision, comment.trim());
-    notify(decision === "approve" ? "Record approved and published" : decision === "return" ? "Record returned to the botanist" : "Record rejected");
+    setDeciding(true);
+    const r = await reviewObservation(obs.id, decision, comment.trim()); // shows its own message
+    setDeciding(false);
+    if (r?.ok || r?.error === "WRONG_STATUS") onDecided(); // reload: decided, or decided by someone else
   };
 
   return (
@@ -115,15 +171,44 @@ function ReviewDetail({ obs }) {
             {species.map((s) => <option key={s.id} value={s.id}>{s.scientific_name}</option>)}
           </select>
         </label>
-        {rawPlant.proposed_species && <p className="mute small">Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>}
+        {rawPlant.proposed_species && (
+          <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
+            <p className="mute small" style={{ margin: 0 }}>Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>
+            {open && !rawPlant.species_id && (() => {
+              const needle = rawPlant.proposed_species.trim().toLowerCase();
+              const match = species.find(
+                (s) => s.scientific_name.toLowerCase() === needle ||
+                       (s.common_name && s.common_name.toLowerCase() === needle) ||
+                       needle.includes(s.scientific_name.toLowerCase()) ||
+                       s.scientific_name.toLowerCase().includes(needle)
+              );
+              return match ? (
+                <button
+                  type="button"
+                  className="btn ghost small-btn"
+                  onClick={() => setPlantSpecies(rawPlant.id, match.id)}
+                >
+                  Use guess: {match.scientific_name}
+                </button>
+              ) : null;
+            })()}
+          </div>
+        )}
       </div>
+
+      {!hasCoords && (
+        <div className="callout" role="status">
+          <p><b>Location not captured.</b> The botanist's device had no GPS fix, so this plant will not appear on the map. Ask them where it is, or return the record for a location.</p>
+        </div>
+      )}
+      {hasCoords && <MiniMap points={[{ p: plant, c: coords }]} height={180} highlight={plant.qr_id} label={`Where ${plant.qr_id} was recorded`} />}
 
       <dl>
         <dt>Recorded by</dt><dd>{nameOf(db, obs.recorded_by)} · {fmtDateTime(obs.observed_at)}</dd>
         <dt>Height</dt><dd>{obs.height_cm != null ? `${obs.height_cm} cm` : "-"}</dd>
         <dt>Appearance</dt><dd>{obs.morphology || "-"}</dd>
         <dt>Notes</dt><dd>{obs.notes || "-"}</dd>
-        <dt>Location</dt><dd><Mono>{rawPlant.lat.toFixed(5)}, {rawPlant.lng.toFixed(5)}</Mono> <span className="mute">±{obs.gps_accuracy_m} m</span></dd>
+        <dt>Location</dt><dd>{hasCoords ? <><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono> {obs.gps_accuracy_m != null && <span className="mute">±{obs.gps_accuracy_m} m</span>}</> : "Not captured"}</dd>
         <dt>Device</dt><dd><Mono>{obs.device_id}</Mono></dd>
       </dl>
 
@@ -158,10 +243,11 @@ function ReviewDetail({ obs }) {
               <textarea rows="3" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What needs to change?" />
             </label>
           </div>
+          {apiDown && <p className="callout" role="status">The API is down, so decisions can't be saved right now. You can still read the record; the buttons come back when the API does.</p>}
           <div className="decide">
-            <button className="btn" onClick={() => decide("approve")}><Icon name="check" size={18} /> Approve &amp; publish</button>
-            <button className="btn ghost" onClick={() => decide("return")}><Icon name="undo" size={18} /> Return for changes</button>
-            <button className="btn danger" onClick={() => decide("reject")}><Icon name="x" size={18} /> Reject</button>
+            <button className="btn" disabled={apiDown || deciding} onClick={() => decide("approve")}><Icon name="check" size={18} /> Approve &amp; publish</button>
+            <button className="btn ghost" disabled={apiDown || deciding} onClick={() => decide("return")}><Icon name="undo" size={18} /> Return for changes</button>
+            <button className="btn danger" disabled={apiDown || deciding} onClick={() => decide("reject")}><Icon name="x" size={18} /> Reject</button>
           </div>
         </>
       ) : (

@@ -82,7 +82,9 @@ export function createApiClient({ baseUrl, fetch: fetchFn = (...args) => globalT
   async function send(method, path, body, query, token) {
     // Checked here, not at import, so an app without .env still starts.
     if (!root) throw new Error("API base URL is missing. Set it in the app's .env (see .env.example).");
-    const url = new URL(root + path);
+    const isAbsolute = root.startsWith("http://") || root.startsWith("https://");
+    const base = isAbsolute ? undefined : (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://localhost:8000");
+    const url = new URL(root + path, base);
     for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
     const headers = { Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;

@@ -1,7 +1,11 @@
 // apps/mobile/api.js
-// The mobile app's API client (CTIP-54). Usage: see apps/shared/apiClient.js.
-// EXPO_PUBLIC_API_URL comes from apps/mobile/.env (copy .env.example).
-import { createApiClient, ApiError } from '../shared/apiClient.js';
+// Express API client for the mobile application (CTIP-54).
+import { createApiClient, ApiError } from "../shared/apiClient.js";
+import { getApiBaseUrl } from "../shared/api.js";
 
-export const api = createApiClient({ baseUrl: process.env.EXPO_PUBLIC_API_URL });
+export const api = createApiClient({
+  baseUrl: getApiBaseUrl(),
+});
+
 export { ApiError };
+export * from "../shared/api.js";

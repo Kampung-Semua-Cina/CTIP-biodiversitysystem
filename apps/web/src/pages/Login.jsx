@@ -9,12 +9,21 @@ import { PasswordInput } from "../components/Bits.jsx";
 // The same page lets staff change their password with just their email and a new password.
 // After a first sign-in with the default password, staff are asked to choose a new one.
 export default function Login() {
-  const { login, signIn, changePassword, notify } = useStore();
-  const [mode, setMode] = useState("signin"); // signin | change | first
+  const { login, signIn, changePassword, notify, loginWithToken, apiStatus, addUser } = useStore();
+  const [tokenInput, setTokenInput] = useState("");
+  const [isTokenBusy, setIsTokenBusy] = useState(false);
+  const [mode, setMode] = useState("signin"); // signin | change | first | token | register
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pending, setPending] = useState(null); // user id waiting to choose a new password
+
+  // Register form state
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPw, setRegPw] = useState("");
+  const [regRole, setRegRole] = useState("botanist");
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const switchTo = (next) => {
     setMode(next);
@@ -22,9 +31,9 @@ export default function Login() {
     setNewPw("");
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const res = login(email, pw);
+    const res = await login(email, pw);
     if (!res.ok) return notify(res.message);
     if (res.first) {
       setPending(res.id);
@@ -34,10 +43,30 @@ export default function Login() {
     go("/dashboard");
   };
 
-  // Used by both the "Change password" form and the first sign-in prompt.
-  const change = (e) => {
+  const submitRegister = async (e) => {
     e.preventDefault();
-    const res = changePassword(email, newPw);
+    if (regPw.length < 8) return notify("Use at least 8 characters for the password");
+    setIsRegistering(true);
+    const res = await addUser({
+      full_name: regName.trim(),
+      email: regEmail.trim(),
+      role: regRole,
+      password: regPw,
+    });
+    setIsRegistering(false);
+    if (!res || res.ok === false) {
+      return notify(res?.message || "Failed to create account");
+    }
+    notify(`Account created for ${regEmail}! You can now sign in.`);
+    setEmail(regEmail);
+    setPw(regPw);
+    switchTo("signin");
+  };
+
+  // Used by both the "Change password" form and the first sign-in prompt.
+  const change = async (e) => {
+    e.preventDefault();
+    const res = await changePassword(email, newPw);
     if (!res.ok) return notify(res.message);
     notify("Password changed");
     if (mode === "first") {
@@ -45,6 +74,16 @@ export default function Login() {
       return go("/dashboard");
     }
     switchTo("signin");
+  };
+
+  const submitToken = async (e) => {
+    e.preventDefault();
+    setIsTokenBusy(true);
+    const res = await loginWithToken(tokenInput);
+    setIsTokenBusy(false);
+    if (res.ok) {
+      go("/dashboard");
+    }
   };
 
   const skip = () => {
@@ -61,6 +100,9 @@ export default function Login() {
 
   return (
     <section className="glass pad narrow">
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+        <img src="/logo.svg" alt="Daun Sense" style={{ width: 56, height: 56, borderRadius: 14 }} />
+      </div>
       {mode === "signin" && (
         <form onSubmit={submit}>
           <h1>Staff sign in</h1>
@@ -71,7 +113,71 @@ export default function Login() {
           <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
           <div className="row wrap gap-top">
             <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("register")}><Icon name="plus" size={18} /> Create account</button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("token")}><Icon name="shield" size={18} /> Sign in with API token</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Change password</button>
+          </div>
+          <p className="mute small" style={{ marginTop: 12 }}>
+            Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
+          </p>
+        </form>
+      )}
+
+      {mode === "register" && (
+        <form onSubmit={submitRegister}>
+          <h1>Create staff account</h1>
+          <p className="mute">
+            Add a botanist, conservation officer, or administrator account directly to Supabase Auth and the database.
+          </p>
+          <label>Full name<input value={regName} onChange={(e) => setRegName(e.target.value)} placeholder="Dr. Jane Doe" required /></label>
+          <label>Email<input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="email" required /></label>
+          <label>Password<PasswordInput value={regPw} onChange={(e) => setRegPw(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
+          <p className="mute small">At least 8 characters.</p>
+          <label>Role
+            <select value={regRole} onChange={(e) => setRegRole(e.target.value)}>
+              <option value="botanist">Botanist</option>
+              <option value="officer">Conservation Officer</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </label>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit" disabled={isRegistering}>
+              <Icon name="plus" size={18} /> {isRegistering ? "Creating account..." : "Create account"}
+            </button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>
+              <Icon name="chevL" size={18} /> Back to sign in
+            </button>
+          </div>
+        </form>
+      )}
+
+      {mode === "token" && (
+        <form onSubmit={submitToken}>
+          <h1>API Token Sign In</h1>
+          <p className="mute">
+            Authenticate directly with your Supabase Bearer token. Your identity and permissions will be verified via <code>GET /v1/me</code>.
+          </p>
+          <label>
+            Supabase Access Token (JWT)
+            <textarea
+              rows={4}
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="eyJhbGciOi..."
+              required
+              style={{ fontFamily: "monospace", fontSize: 13, resize: "vertical" }}
+            />
+          </label>
+          <p className="mute small">
+            Endpoint: <code>/v1/me</code> · Header: <code>Authorization: Bearer &lt;token&gt;</code>
+          </p>
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit" disabled={isTokenBusy}>
+              <Icon name="check" size={18} /> {isTokenBusy ? "Verifying token..." : "Verify & Sign In"}
+            </button>
+            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>
+              <Icon name="chevL" size={18} /> Back to email sign in
+            </button>
           </div>
         </form>
       )}

@@ -12,10 +12,15 @@
     "android": {
       "package": "com.ctip.biodiversity",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#294f33",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "38d8304d-e84b-4068-a6a1-6a86c1e6657b"
       }
     }
   }

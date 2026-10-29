@@ -17,9 +17,9 @@ export default function Tags({ nav }) {
   const n = (s) => db.tags.filter((t) => t.status === s).length;
   const order = { unused: 0, assigned: 1, retired: 2 };
   const needle = q.trim().toUpperCase();
-  const rows = db.tags
-    .filter((t) => !needle || t.qr_id.includes(needle))
-    .sort((a, b) => order[a.status] - order[b.status] || a.qr_id.localeCompare(b.qr_id));
+  const rows = (db.tags || [])
+    .filter((t) => !needle || (t?.qr_id && t.qr_id.includes(needle)))
+    .sort((a, b) => order[a.status] - order[b.status] || String(a?.qr_id || '').localeCompare(String(b?.qr_id || '')));
   const plantFor = (qr) => plantView(db, db.plants.find((p) => p.qr_id === qr));
 
   return (

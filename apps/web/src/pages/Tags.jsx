@@ -27,11 +27,11 @@ export default function Tags() {
   const unused = db.tags.filter((t) => t.status === "unused");
   const printable = db.tags.filter((t) => t.status !== "retired"); // assigned ones can be reprinted if a tag gets damaged
 
-  const make = (e) => {
+  const make = async (e) => {
     e.preventDefault();
     const n = Math.min(Math.max(Number(count) || 0, 1), 50);
-    generateTags(n, batch.trim() || "batch");
-    notify(`${n} new tag${n > 1 ? "s" : ""} created`);
+    const ids = await generateTags(n, batch.trim() || "batch");
+    if (ids.length) notify(`${ids.length} new tag${ids.length > 1 ? "s" : ""} created`); // on failure generateTags says why
   };
 
   return (

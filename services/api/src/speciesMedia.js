@@ -23,7 +23,16 @@ const MediaFields = z.strictObject({
   sort_order: z.coerce.number().int().min(0).max(1000).optional(),
 });
 
+// Same fields as an upload, as JSON (so is_primary is a real boolean). At least one.
+const MediaUpdate = z.strictObject({
+  caption: z.string().trim().min(1).max(300).optional(),
+  credit: z.string().trim().min(1).max(200).nullable().optional(),
+  is_primary: z.boolean().optional(),
+  sort_order: z.number().int().min(0).max(1000).optional(),
+}).refine((b) => Object.keys(b).length > 0, 'Send at least one field to change');
+
 const fail = (res, status, code, message) => res.status(status).json({ code, message });
+const mediaNotFound = (res) => fail(res, 404, 'NOT_FOUND', 'Photo not found');
 
 export const speciesMediaHandlers = {
   // multipart/form-data: file (the image), caption, credit, is_primary, sort_order
@@ -74,5 +83,55 @@ export const speciesMediaHandlers = {
       await db.from('species_media').update({ is_primary: false }).eq('species_id', req.params.id).neq('id', id);
     }
     res.status(201).json({ ...data, url: db.storage.from(BUCKET).getPublicUrl(key).data.publicUrl });
+  },
+
+  // JSON: caption, credit, is_primary, sort_order. The file itself never changes;
+  // a new picture is a new upload.
+  'patch /species/:id/media/:mediaId': async (req, res) => {
+    if (!UUID.test(req.params.id) || !UUID.test(req.params.mediaId)) return mediaNotFound(res);
+    const body = MediaUpdate.safeParse(req.body ?? {});
+    if (!body.success) {
+      return res.status(422).json({
+        code: 'VALIDATION_ERROR',
+        message: 'Request body failed validation',
+        details: { fields: body.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
+      });
+    }
+    const db = supabaseAs(req.user);
+    const { data, error } = await db
+      .from('species_media')
+      .update(body.data)
+      .eq('id', req.params.mediaId)
+      .eq('species_id', req.params.id)
+      .select('id, species_id, caption, credit, is_primary, sort_order, created_at')
+      .maybeSingle();
+    if (error) return fail(res, 500, 'DB_ERROR', error.message);
+    if (!data) return mediaNotFound(res);
+    if (body.data.is_primary) {
+      await db.from('species_media').update({ is_primary: false }).eq('species_id', req.params.id).neq('id', data.id);
+    }
+    res.json(data);
+  },
+
+  // Removes the record, then the file. A file left behind (Storage error) is
+  // harmless: nothing points at it any more.
+  'delete /species/:id/media/:mediaId': async (req, res) => {
+    if (!UUID.test(req.params.id) || !UUID.test(req.params.mediaId)) return mediaNotFound(res);
+    const db = supabaseAs(req.user);
+    const { data, error } = await db
+      .from('species_media')
+      .delete()
+      .eq('id', req.params.mediaId)
+      .eq('species_id', req.params.id)
+      .select('s3_bucket, s3_key')
+      .maybeSingle();
+    if (error) return fail(res, 500, 'DB_ERROR', error.message);
+    if (!data) return mediaNotFound(res);
+    // Older rows may hold a full link instead of a Storage path; there is no file of ours to remove.
+    if (data.s3_bucket === BUCKET && !/^[a-z]+:/i.test(data.s3_key)) {
+      const removed = await db.storage.from(BUCKET).remove([data.s3_key]);
+      if (removed.error) console.warn('species photo file not removed:', data.s3_key, removed.error.message);
+    }
+    res.status(204).end();
   },
 };

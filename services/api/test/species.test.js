@@ -150,6 +150,17 @@ test('update changes only the sent fields and records who changed it', async () 
   assert.equal(res.body.updated_by, users.admin);
 });
 
+test('conservation status must be an IUCN category, in any case', async () => {
+  const ok = await create({ scientific_name: 'Nepenthes rajah', conservation_status: 'Critically Endangered' });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.body.conservation_status, 'critically endangered');
+  const bad = await create({ scientific_name: 'Nepenthes x', conservation_status: 'very rare' });
+  assert.equal(bad.status, 422);
+  assert.deepEqual(bad.body.details.fields.map((f) => f.path), ['conservation_status']);
+  const patch = await request(app).patch(`/v1/species/${ok.body.id}`).set(as('officer')).send({ conservation_status: 'rare' });
+  assert.equal(patch.status, 422);
+});
+
 test('update rejects an empty body and unknown fields', async () => {
   const { body } = await create({ scientific_name: 'Nepenthes rajah' });
   assert.equal((await request(app).patch(`/v1/species/${body.id}`).set(as('admin')).send({})).status, 422);

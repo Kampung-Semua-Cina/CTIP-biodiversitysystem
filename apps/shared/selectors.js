@@ -3,6 +3,7 @@
 
 import { can } from "./permissions.js";
 import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
+import { THREATENED } from "./data.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -13,12 +14,37 @@ export function orderedPhotos(photos = []) {
 
 export const nameOf = (db, id) => db.profiles.find((p) => p.id === id)?.full_name || "Unknown";
 
+// Visits grouped by plant, newest first, built once per observations list.
+// Without it every plant scanned every visit (twice), which took over a second
+// with 5,000 plants. The store always replaces the list, never edits it in
+// place, so a new list gets a new index.
+const visitIndex = new WeakMap();
+function visitsOf(db, specimenId) {
+  let index = visitIndex.get(db.observations);
+  if (!index) {
+    index = new Map();
+    for (const o of db.observations) {
+      if (!index.has(o.specimen_id)) index.set(o.specimen_id, []);
+      index.get(o.specimen_id).push(o);
+    }
+    for (const list of index.values()) list.sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    visitIndex.set(db.observations, index);
+  }
+  return index.get(specimenId) || [];
+}
+
 export function plantStatus(db, specimenId) {
-  const obs = db.observations
-    .filter((o) => o.specimen_id === specimenId)
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  const obs = visitsOf(db, specimenId);
   if (obs.some((o) => o.status === "approved")) return "approved";
   return obs[0]?.status || "draft";
+}
+
+// Plants this user registered that have no observation: a send that failed
+// half-way (the plant was saved, its record was not). Adding a plant on the
+// same tag again finishes them.
+export function unfinishedPlants(db, userId) {
+  if (!userId) return [];
+  return db.plants.filter((p) => p.registered_by === userId && !p.is_deleted && !visitsOf(db, p.id).length);
 }
 
 // One plant = a specimen + its species + its photos + its record status.
@@ -26,10 +52,8 @@ export function plantView(db, p) {
   if (!p) return null;
   const species = db.species.find((s) => s.id === p.species_id && !s.is_deleted) || null;
   const status = plantStatus(db, p.id);
-  const obs = db.observations
-    .filter((o) => o.specimen_id === p.id && o.status === "approved")
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
-  const endangered = p.endangered_override || species?.conservation_status === "endangered";
+  const obs = visitsOf(db, p.id).find((o) => o.status === "approved");
+  const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
   return {
     ...p,
     species,
@@ -54,7 +78,9 @@ export function visiblePlants(db, role) {
 }
 
 // Visitors never get any location for an endangered plant (returns null). Staff get the exact spot.
+// Also null when the botanist's phone could not capture a location, so it never lands on a map.
 export function shownCoords(p, role) {
+  if (p.lat == null || p.lng == null) return null;
   if (p.endangered && !can(role, "pending")) return null;
   return { lat: p.lat, lng: p.lng };
 }
@@ -96,9 +122,7 @@ export function staffCounts(db, me) {
 
 // Visits to one tagged plant (observations), newest first. Visitors only see approved visits.
 export function plantVisits(db, plantId, role) {
-  return db.observations
-    .filter((o) => o.specimen_id === plantId && (can(role, "pending") || o.status === "approved"))
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+  return visitsOf(db, plantId).filter((o) => can(role, "pending") || o.status === "approved");
 }
 
 // Date of the newest visit, or null.
@@ -107,6 +131,46 @@ export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0
 // Captioned catalogue photos of one species, cover photo first.
 export const speciesMedia = (db, speciesId) =>
   db.species_media.filter((m) => m.species_id === speciesId).sort((a, b) => a.sort_order - b.sort_order);
+
+// Observation photos for one species across all its tagged specimens.
+export function speciesObservationPhotos(db, speciesId) {
+  if (!speciesId || !db?.plants) return [];
+  const species = db.species?.find((s) => s.id === speciesId);
+  const matchingPlants = (db.plants || []).filter((p) => {
+    if (p.is_deleted) return false;
+    if (p.species_id === speciesId) return true;
+    if (species && p.proposed_species) {
+      const prop = p.proposed_species.trim().toLowerCase();
+      if (species.scientific_name && prop === species.scientific_name.toLowerCase()) return true;
+      if (species.common_name && prop === species.common_name.toLowerCase()) return true;
+    }
+    return false;
+  });
+
+  const photos = [];
+  const seen = new Set();
+  for (const plant of matchingPlants) {
+    for (const ph of plant.photos || []) {
+      const key = ph.url || ph.id;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        photos.push({
+          id: ph.id,
+          observation_id: ph.observation_id || null,
+          url: ph.url,
+          s3_bucket: ph.s3_bucket || "observation-photos",
+          s3_key: ph.s3_key || null,
+          created_at: ph.created_at || "",
+          plant_qr: plant.qr_id,
+          plant_name: plant.name,
+          caption: ph.caption || (plant.qr_id ? `Observation from ${plant.qr_id}` : "Field observation"),
+          is_primary: false,
+        });
+      }
+    }
+  }
+  return photos;
+}
 
 // One entry per species for the catalogue, with the tagged plants this role can see.
 // Visitors only get published species. Staff also see unpublished ones.
@@ -117,12 +181,17 @@ export function speciesCatalogue(db, role) {
     .map((s) => {
       const mine = plants.filter((p) => p.species_id === s.id);
       const media = speciesMedia(db, s.id);
+      const obsPhotos = speciesObservationPhotos(db, s.id);
+      const effectiveMedia = media.length > 0 ? media : obsPhotos;
+      const defaultObsPhoto = obsPhotos[0]?.url || mine.find((p) => p.photos?.length)?.photos[0]?.url || null;
       return {
         ...s,
         name: s.common_name || s.scientific_name,
         plants: mine,
-        media,
-        photo: media[0]?.url || mine.find((p) => p.photos.length)?.photos[0]?.url || null,
+        media: effectiveMedia,
+        raw_media: media,
+        observation_photos: obsPhotos,
+        photo: (media.length > 0 ? media[0]?.url : defaultObsPhoto) || defaultObsPhoto || null,
         endangered: s.conservation_status === "endangered",
       };
     });
@@ -130,3 +199,23 @@ export function speciesCatalogue(db, role) {
 
 // Plants that are not on the map for this role (endangered for visitors) still count, but have no coords.
 export const mappable = (plants, role) => plants.map((p) => ({ p, c: shownCoords(p, role) })).filter((x) => x.c);
+
+// Pull "NIAH-0007" out of whatever the QR holds (a bare ID, a URL, or image path).
+export function extractTag(raw) {
+  const match = String(raw || "").toUpperCase().match(/NIAH-\d{4}/);
+  return match ? match[0] : String(raw || "").trim().toUpperCase();
+}
+
+// What a scanned or picked ID refers to.
+export function lookupTag(db, id) {
+  const cleanId = String(id || "").trim().toUpperCase();
+  if (!cleanId || !db) return { kind: "unknown", id: cleanId };
+  const plants = db.plants || [];
+  const tags = db.tags || [];
+  const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
+  if (plant) return { kind: "used", id: cleanId, plant: plantView(db, plant) };
+  const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
+  if (tag?.status === "unused") return { kind: "unused", id: cleanId, tag };
+  if (tag?.status === "retired") return { kind: "retired", id: cleanId, tag };
+  return { kind: "unknown", id: cleanId };
+}

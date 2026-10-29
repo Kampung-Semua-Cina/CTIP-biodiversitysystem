@@ -4,18 +4,27 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "instructions": "node -e \"console.log('\\n=== WEB PORTAL INSTRUCTIONS ===\\n\\n  npm run dev      Start Vite dev server with Hot Module Replacement (HMR)\\n  npm run start    Alias for npm run dev\\n  npm run build    Build production-ready bundle in dist/\\n  npm run lint     Run ESLint checks on web codebase\\n  npm run preview  Locally preview production build\\n')\"",
+    "help": "npm run instructions",
     "dev": "vite",
+    "start": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:agent": "playwright test",
+    "test:agent:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",

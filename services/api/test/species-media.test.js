@@ -76,10 +76,17 @@ beforeEach((t) => {
       const columns = url.searchParams.get('select').split(',').map((c) => c.trim());
       return json(201, Object.fromEntries(columns.map((c) => [c, row[c]])));
     }
-    if (url.pathname === '/rest/v1/species_media' && method === 'PATCH') {
-      const keepId = url.searchParams.get('id').replace('neq.', '');
-      media.filter((m) => m.id !== keepId).forEach((m) => Object.assign(m, JSON.parse(init.body)));
-      return json(200, []);
+    if (url.pathname === '/rest/v1/species_media' && (method === 'PATCH' || method === 'DELETE')) {
+      // eq.<id> picks one row (edit or delete one photo); neq.<id> is "every other photo".
+      const id = url.searchParams.get('id');
+      const species = url.searchParams.get('species_id')?.replace('eq.', '');
+      const hit = (m) => (id.startsWith('neq.') ? m.id !== id.slice(4) : m.id === id.slice(3)) && (!species || m.species_id === species);
+      const rows = media.filter(hit);
+      if (method === 'PATCH') rows.forEach((m) => Object.assign(m, JSON.parse(init.body)));
+      else media = media.filter((m) => !hit(m));
+      const one = new Headers(init.headers).get('Accept') === 'application/vnd.pgrst.object+json';
+      if (one) return rows.length ? json(200, rows[0]) : new Response(null, { status: 406 });
+      return json(200, rows);
     }
     return json(404, { message: `unexpected ${method} ${url.pathname}` });
   });
@@ -167,4 +174,46 @@ test('a new primary photo un-marks the old one', async () => {
   await upload('officer', JPEG, { is_primary: 'true' });
   await upload('officer', PNG, { is_primary: 'true' }, 'b.png');
   assert.deepEqual(media.map((m) => m.is_primary), [false, true]);
+});
+
+const edit = (role, id, body, species = SPECIES) => request(app).patch(`/v1/species/${species}/media/${id}`).set(as(role)).send(body);
+const remove = (role, id, species = SPECIES) => request(app).delete(`/v1/species/${species}/media/${id}`).set(as(role));
+
+test('officer edits a caption and moves the cover photo, without re-uploading', async () => {
+  const first = (await upload('officer', JPEG, { caption: 'Old', is_primary: 'true' })).body;
+  const second = (await upload('officer', PNG, { caption: 'Leaf' }, 'b.png')).body;
+  const res = await edit('admin', first.id, { caption: 'Lower pitcher', sort_order: 1 });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.caption, 'Lower pitcher');
+  assert.equal(Object.keys(stored).length, 2, 'no new file');
+  await edit('officer', second.id, { is_primary: true, sort_order: 0 });
+  assert.deepEqual(media.map((m) => m.is_primary), [false, true]);
+});
+
+test('edit is validated: empty body, unknown fields and blank captions get 422; unknown photo gets 404', async () => {
+  const { id } = (await upload('officer', JPEG, { caption: 'A' })).body;
+  assert.equal((await edit('officer', id, {})).status, 422);
+  assert.equal((await edit('officer', id, { s3_key: 'elsewhere.jpg' })).status, 422);
+  assert.equal((await edit('officer', id, { caption: '   ' })).status, 422);
+  assert.equal((await edit('officer', crypto.randomUUID(), { caption: 'B' })).status, 404);
+  assert.equal((await edit('officer', id, { caption: 'B' }, crypto.randomUUID())).status, 404, 'photo of another species');
+});
+
+test('delete removes the record and its file', async () => {
+  const { id } = (await upload('officer', JPEG, { caption: 'A' })).body;
+  const res = await remove('admin', id);
+  assert.equal(res.status, 204);
+  assert.deepEqual(media, []);
+  assert.deepEqual(stored, {});
+  assert.equal((await remove('admin', id)).status, 404);
+});
+
+test('only Officer and Admin can edit or delete photos', async () => {
+  const { id } = (await upload('officer', JPEG, { caption: 'A' })).body;
+  calls = [];
+  assert.equal((await edit('botanist', id, { caption: 'B' })).status, 403);
+  assert.equal((await remove('botanist', id)).status, 403);
+  assert.equal((await request(app).delete(`/v1/species/${SPECIES}/media/${id}`)).status, 401);
+  assert.deepEqual(calls, []);
+  assert.equal(media.length, 1);
 });

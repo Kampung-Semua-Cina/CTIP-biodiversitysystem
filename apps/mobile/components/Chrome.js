@@ -3,20 +3,17 @@
 // prototype role switch (until real sign-in arrives with CTIP-42).
 import React from 'react';
 import { View } from 'react-native';
+import Constants from 'expo-constants';
 
 import Icon from './Icon.js';
+import Logo from './Logo.js';
 import { useTheme } from './Theme.js';
 import { Section, Segmented, Txt } from './Bits.js';
 import { useStore } from '../../shared/store.js';
 import { ROLES } from '../../shared/permissions.js';
 
 export function LogoMark({ size = 30 }) {
-  const { c } = useTheme();
-  return (
-    <View accessibilityLabel="Daun Sense" style={{ width: size, height: size, borderRadius: size * 0.27, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent }}>
-      <Icon name="leaf" size={size * 0.6} color={c.onAccent} strokeWidth={2} />
-    </View>
-  );
+  return <Logo size={size} />;
 }
 
 export function AppearanceSection() {
@@ -42,5 +39,18 @@ export function PrototypeRoleSection() {
       <Segmented value={role} onChange={setRole} items={ROLES.map((r) => ({ key: r.key, label: r.label }))} />
       <Txt v="caption" color={c.ink3} style={{ fontWeight: undefined }}>Sample data only. This switch goes away when real sign-in is added.</Txt>
     </Section>
+  );
+}
+
+// App version, e.g. "v1.0.103 · a1b2c3d": 1.0.<commit count> and the commit
+// it was built from (scripts/version.mjs, put in by app.config.js).
+export function VersionLine() {
+  const { c } = useTheme();
+  const v = Constants.expoConfig?.extra?.appVersion;
+  if (!v) return null;
+  return (
+    <Txt v="caption" color={c.ink3} style={{ textAlign: 'center' }} accessibilityLabel={`App version ${v.version}`}>
+      v{v.version} · {v.commit}{v.dirty ? '+changes' : ''}
+    </Txt>
   );
 }

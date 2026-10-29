@@ -118,6 +118,73 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ---------------------------------------------------------------- Profiles
+  /public/workspace:
+    get:
+      tags: [Public]
+      operationId: getPublicWorkspace
+      summary: Everything the visitor pages show, in one call
+      description: >
+        Published, non-deleted species and their photos (RLS "public read").
+        No plants, observations or other tables: those lists come back empty.
+      security: []
+      responses:
+        '200':
+          description: Species and species photos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  species:
+                    type: array
+                    items: { $ref: '#/components/schemas/Species' }
+                  species_media:
+                    type: array
+                    items: { $ref: '#/components/schemas/SpeciesMedia' }
+                  unavailable:
+                    type: array
+                    items: { type: string }
+
+  /workspace:
+    get:
+      tags: [Profiles]
+      operationId: getWorkspace
+      summary: The apps' start-up load (any staff role)
+      description: >
+        Every list the apps show, each holding what RLS lets this user read:
+        species, species_media, qr_tags, specimens, observations,
+        observation_photos (with signed links), observation_reviews,
+        observation_comments, alerts, alert_notes, sensor_nodes, notifications,
+        audit_logs and profiles. If qr_tags, specimens or observations cannot
+        be read the request fails with 500; any other list that fails comes
+        back empty and is named in `unavailable`.
+
+
+        **Endangered locations (threat T13, CTIP-71):** for any role other
+        than officer and admin, an endangered plant that the caller did not
+        register has its `lat`/`lng` snapped to the 0.01 degree grid used by
+        `/distribution`, `gps_accuracy_m` set to 1100 and `location_reduced`
+        true. A plant whose species the caller cannot see counts as endangered.
+      responses:
+        '200':
+          description: One array per table, plus `unavailable`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  specimens:
+                    type: array
+                    items: { $ref: '#/components/schemas/Specimen' }
+                  unavailable:
+                    type: array
+                    items: { type: string }
+                additionalProperties:
+                  type: array
+                  items: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /me:
     get:
       tags: [Profiles]
@@ -130,6 +197,41 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Profile' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Profiles]
+      operationId: updateMyProfile
+      summary: Change your own name, username, phone or photo
+      description: Role and active status are not changed here (admins use PATCH /profiles/{id}).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                full_name: { type: string, minLength: 1, maxLength: 200 }
+                username:
+                  type: string
+                  pattern: '^[a-z0-9._]{3,20}$'
+                  description: Stored lower case
+                phone: { type: string, pattern: '^(\+?[0-9 -]{7,15})?$' }
+                avatar_url: { type: [string, 'null'], maxLength: 3000000 }
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: USERNAME_TAKEN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /profiles:
     get:
@@ -152,6 +254,52 @@ paths:
                     items: { $ref: '#/components/schemas/Profile' }
                   meta: { $ref: '#/components/schemas/PageMeta' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Profiles]
+      operationId: createProfile
+      summary: Create an account with a role (admin)
+      description: >
+        Creates the Supabase Auth user and sets its profile. Without a
+        password, a random one is set and the person is emailed a link to
+        choose their own (`invited: true`). Needs "Allow new users to sign up"
+        on in Supabase Auth, otherwise 503 SIGNUP_DISABLED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, full_name, role]
+              additionalProperties: false
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 200 }
+                full_name: { type: string, minLength: 1, maxLength: 200 }
+                role: { $ref: '#/components/schemas/Role' }
+                username: { type: string, pattern: '^[a-z0-9._]{3,20}$' }
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Profile'
+                  - type: object
+                    properties:
+                      invited: { type: boolean }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: EMAIL_TAKEN
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503':
+          description: SIGNUP_DISABLED
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /profiles/{id}:
     patch:
@@ -240,6 +388,38 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/QrTag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [QR Tags]
+      operationId: deleteQrTag
+      summary: Delete an unused tag (officer/admin)
+      description: Only a tag that is `unassigned` and not on any plant. A tag on a plant is retired instead.
+      parameters:
+        - $ref: '#/components/parameters/QrId'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: TAG_IN_USE (the tag is on a plant)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /qr-tags/{qrId}/retire:
+    post:
+      tags: [QR Tags]
+      operationId: retireQrTag
+      summary: Retire a tag so it can never be used again (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/QrId'
+      responses:
+        '200':
+          description: The tag, now `retired`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QrTag' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------------- Species
@@ -370,6 +550,22 @@ paths:
               schema: { $ref: '#/components/schemas/Species' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /species/{id}/restore:
+    post:
+      tags: [Species]
+      operationId: restoreSpecies
+      summary: Undo a soft delete (officer/admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The species, no longer deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Species' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /species/{id}/media:
     get:
       tags: [Species, Photos]
@@ -431,6 +627,51 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /species/{id}/media/{mediaId}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: mediaId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Species, Photos]
+      operationId: updateSpeciesMedia
+      summary: Change a species photo's caption, credit, order or cover flag (officer/admin)
+      description: >
+        The file itself never changes; a new picture is a new upload. Setting
+        is_primary makes this the only cover photo of the species.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                caption: { type: string, minLength: 1, maxLength: 300 }
+                credit: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+                is_primary: { type: boolean }
+                sort_order: { type: integer, minimum: 0, maximum: 1000 }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpeciesMedia' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Species, Photos]
+      operationId: deleteSpeciesMedia
+      summary: Remove a species photo and its file (officer/admin)
+      responses:
+        '204': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # --------------------------------------------------------------- Specimens
   /specimens:
     get:
@@ -486,6 +727,10 @@ paths:
       tags: [Specimens]
       operationId: getSpecimenByQr
       summary: Find the specimen attached to a scanned QR code
+      description: >
+        An endangered plant's exact spot is reduced as in GET /workspace (see
+        `Specimen.location_reduced`), unless the caller is an officer or admin
+        or registered the plant.
       parameters:
         - $ref: '#/components/parameters/QrId'
       responses:
@@ -752,7 +997,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+        '422':
+          description: >
+            VALIDATION_ERROR for a bad body or a missing reason, or SPECIES_REQUIRED when
+            approving an observation whose plant is not linked to a species yet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /observations/{id}/comments:
     get:
@@ -1451,6 +1702,12 @@ components:
         created_at: { type: string, format: date-time }
 
     # ---------- species
+    ConservationStatusValue:
+      description: IUCN Red List category. Any case is accepted; it is stored lower case.
+      type: [string, 'null']
+      enum: ['least concern', 'near threatened', 'vulnerable', 'endangered', 'critically endangered',
+        'extinct in the wild', 'extinct', 'data deficient', 'not evaluated', null]
+
     SpeciesInput:
       type: object
       required: [scientific_name]
@@ -1460,7 +1717,7 @@ components:
         family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
-        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        conservation_status: { $ref: '#/components/schemas/ConservationStatusValue' }
         cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     SpeciesCreate:
@@ -1486,7 +1743,7 @@ components:
         family: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         genus: { type: [string, 'null'], minLength: 1, maxLength: 100 }
         description: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
-        conservation_status: { type: [string, 'null'], minLength: 1, maxLength: 50 }
+        conservation_status: { $ref: '#/components/schemas/ConservationStatusValue' }
         cultural_significance: { type: [string, 'null'], minLength: 1, maxLength: 5000 }
 
     Species:
@@ -1579,10 +1836,16 @@ components:
         species_id: { type: [string, 'null'], format: uuid }
         proposed_species_name: { type: [string, 'null'] }
         registered_by: { type: string, format: uuid }
-        lat: { type: number }
-        lng: { type: number }
+        lat: { type: [number, 'null'], description: Null when no GPS fix was captured }
+        lng: { type: [number, 'null'] }
         gps_accuracy_m: { type: [number, 'null'] }
         endangered_override: { type: boolean }
+        location_reduced:
+          type: boolean
+          description: >
+            True when lat/lng were snapped to the 0.01 degree grid because the
+            plant is endangered and the caller may not see its exact spot
+            (GET /workspace, GET /specimens/by-qr/{qrId}; threat T13).
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 

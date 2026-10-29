@@ -1,95 +1,193 @@
 // apps/web/src/pages/MapPage.jsx
-import { useState } from "react";
+// Plant map: every plant this role may see as a pin on OpenStreetMap / Leaflet.
+// Endangered plants have no pin for visitors (their location is protected, CTIP-71).
+// Aligned to the Daun design language with Lucide line icons, search, and live user tracking.
+import { useState, useMemo, useEffect } from "react";
 import Img from "../components/Img.jsx";
 import Icon from "../components/Icon.jsx";
 import { Mono, Sci } from "../components/Bits.jsx";
+import LeafletMap from "../components/LeafletMap.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../shared/selectors.js";
-import { MAP_BOUNDS } from "../../../shared/site.js";
+import { MAP_BOUNDS } from "../../../shared/mapConfig.js";
 
-// Schematic map: dots are placed from lat/lng inside the fixed MAP_BOUNDS area (site.js).
-// Replace the background with Leaflet + OpenStreetMap later; the pin data stays the same.
-// Each dot is one plant and its colour is the plant's family. Conservation status is not shown on the map for anyone,
-// and visitors get no dot at all for endangered plants.
 export default function MapPage({ arg }) {
-  const { db, role } = useStore();
+  const { db, role, getDistributionPoints } = useStore();
+  const [apiDistribution, setApiDistribution] = useState(null);
   const [picked, setPicked] = useState(null);
   const [only, setOnly] = useState(null); // family picked in the legend, or null for all
+  const [q, setQ] = useState("");
   const staff = can(role, "pending");
 
-  const all = visiblePlants(db, role)
-    .map((p) => ({ p, c: shownCoords(p, role) }))
-    .filter((x) => x.c);
-  const colors = familyColors(db.species, all.map((x) => x.p));
-  const pts = all.filter((x) => !only || familyOf(x.p) === only);
+  // Fetch API-sanitized distribution coordinates (CTIP-88: snaps endangered coordinates to ~1.1km grid for non-officers)
+  useEffect(() => {
+    let active = true;
+    if (getDistributionPoints) {
+      getDistributionPoints().then((res) => {
+        if (active && res?.ok && res.source === "api" && Array.isArray(res.points)) {
+          setApiDistribution(res.points);
+        }
+      }).catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [getDistributionPoints, role]);
 
-  // Fixed bounds (not the visible plants' bounds), so every role sees each plant in the same place.
-  const { minLat, maxLat, minLng, maxLng } = MAP_BOUNDS;
-  const pct = (v) => `${Math.min(97, Math.max(3, v * 100))}%`;
-  const place = (c) => ({
-    left: pct((c.lng - minLng) / (maxLng - minLng)),
-    top: pct((maxLat - c.lat) / (maxLat - minLat)),
-  });
+  const plants = useMemo(() => {
+    if (apiDistribution) {
+      return apiDistribution.map((pt) => {
+        const local = db.plants.find((p) => p.id === pt.specimen_id || p.qr_id === pt.qr_id);
+        return {
+          id: pt.specimen_id,
+          qr_id: pt.qr_id,
+          name: pt.common_name || local?.name || pt.scientific_name || "Unknown plant",
+          scientific: pt.scientific_name || local?.scientific || "",
+          species: {
+            id: pt.species_id,
+            scientific_name: pt.scientific_name,
+            common_name: pt.common_name,
+            family: pt.family,
+            conservation_status: pt.conservation_status,
+          },
+          photos: local?.photos || [],
+          endangered: pt.endangered,
+          location_reduced: pt.location_reduced,
+          lat: pt.lat,
+          lng: pt.lng,
+        };
+      });
+    }
+    return visiblePlants(db, role);
+  }, [apiDistribution, db, role]);
+
+  const colors = useMemo(() => familyColors(db.species, plants), [db.species, plants]);
+  const families = useMemo(
+    () => [...new Set(plants.map((p) => familyOf(p)).filter(Boolean))].sort(),
+    [plants],
+  );
+
+  const needle = q.trim().toLowerCase();
+  const { onMap, hidden } = useMemo(() => {
+    const s = plants
+      .filter((p) => !only || familyOf(p) === only)
+      .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].join(" ").toLowerCase().includes(needle))
+      .map((p) => {
+        if (apiDistribution) {
+          return { p, c: (p.lat != null && p.lng != null) ? { lat: p.lat, lng: p.lng } : null };
+        }
+        return { p, c: shownCoords(p, role) };
+      });
+    const m = s.filter((x) => x.c);
+    return { onMap: m, hidden: s.length - m.length };
+  }, [plants, only, needle, role, apiDistribution]);
 
   const selId = picked || arg;
-  const sel = pts.find((x) => x.p.qr_id === selId);
-  const count = (f) => all.filter((x) => familyOf(x.p) === f).length;
+  const sel = onMap.find((x) => x.p.qr_id === selId || x.p.id === selId) || onMap[0];
+  const count = (f) => onMap.filter((x) => familyOf(x.p) === f).length;
+
+  const mapPoints = useMemo(() => {
+    return onMap.map(({ p, c }) => ({
+      id: p.id,
+      qr_id: p.qr_id,
+      name: p.name,
+      scientific: p.scientific || p.species?.scientific || "",
+      family: familyOf(p),
+      color: colors[familyOf(p)] || "var(--acc)",
+      lat: c.lat,
+      lng: c.lng,
+    }));
+  }, [onMap, colors]);
 
   return (
     <section className="glass pad">
-      <h1>Plant map</h1>
-      <p className="mute">
-        Each dot is one plant and its colour shows the plant family (see the legend). Select a dot to see the plant,
-        or a family in the legend to show only that family.
-        {!staff && " Locations of endangered plants are not shown, to protect them."}
-      </p>
-
-      <div className="map" role="group" aria-label="Map of tagged plants by family">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 72 Q22 56 44 68 T100 52" className="river" />
-          <path d="M0 30 Q30 40 55 24 T100 34" className="river thin" />
-          <path d="M10 100 Q30 70 60 80 T100 96" className="contour" />
-          <path d="M0 52 Q35 46 62 56 T100 70" className="contour" />
-          <path d="M20 0 Q40 22 70 14 T100 8" className="contour" />
-        </svg>
-        <span className="north">N</span>
-        {pts.map(({ p, c }) => (
-          <button
-            key={p.id}
-            className={"plantdot" + (p.qr_id === selId ? " on" : "")}
-            style={{ ...place(c), background: colors[familyOf(p)] }}
-            onClick={() => setPicked(p.qr_id)}
-            title={`${p.name} (${familyOf(p)})`}
-            aria-label={`${p.name}, family ${familyOf(p)}`}
-          />
-        ))}
+      <div className="pagehead">
+        <div>
+          <h1>Plant map</h1>
+          <p className="mute">
+            Each pin is one plant and its colour shows the plant family (see the legend). Select a pin to see the plant,
+            or a family in the legend to show only that family. Switch between street map and satellite view at any time.
+            {!staff && " Locations of endangered plants are not shown, to protect them."}
+          </p>
+        </div>
       </div>
+
+      {/* Search Bar matching mobile styling and functionality */}
+      <div className="row wrap between gap-bottom" style={{ alignItems: "center" }}>
+        <label className="search" style={{ maxWidth: 360, width: "100%" }}>
+          <Icon name="search" size={18} />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search the map"
+            aria-label="Search the map"
+          />
+        </label>
+        {q ? (
+          <button className="btn ghost" onClick={() => setQ("")}>
+            <Icon name="x" size={16} /> Clear search
+          </button>
+        ) : null}
+      </div>
+
+      <LeafletMap
+        points={mapPoints}
+        selectedId={selId}
+        onSelect={(id, qr_id) => setPicked(qr_id || id)}
+        bounds={MAP_BOUNDS}
+        height={480}
+      />
 
       <div className="maplegend" role="group" aria-labelledby="legend-title">
         <h3 id="legend-title">Legend</h3>
-        <p className="mute small"><i className="dot" style={{ background: "var(--ink2)" }} /> One dot = one plant. Colour = plant family.</p>
+        <p className="mute small">
+          <i className="dot" style={{ background: "var(--ink2)" }} /> One pin = one plant. Colour = plant family.
+        </p>
         <div className="legend">
-          <button className={"fam" + (!only ? " on" : "")} onClick={() => setOnly(null)} aria-pressed={!only}>All families ({all.length} {all.length === 1 ? "plant" : "plants"})</button>
-          {Object.entries(colors).map(([f, color]) => (
-            <button key={f} className={"fam" + (only === f ? " on" : "")} onClick={() => setOnly(only === f ? null : f)} aria-pressed={only === f}>
-              <i style={{ background: color }} /> {f} ({count(f)} {count(f) === 1 ? "plant" : "plants"})
+          <button
+            className={"fam" + (!only ? " on" : "")}
+            onClick={() => setOnly(null)}
+            aria-pressed={!only}
+          >
+            All families ({onMap.length} {onMap.length === 1 ? "plant" : "plants"})
+          </button>
+          {families.map((f) => (
+            <button
+              key={f}
+              className={"fam" + (only === f ? " on" : "")}
+              onClick={() => setOnly(only === f ? null : f)}
+              aria-pressed={only === f}
+            >
+              <i style={{ background: colors[f] }} /> {f} ({count(f)} {count(f) === 1 ? "plant" : "plants"})
             </button>
           ))}
         </div>
       </div>
 
+      {hidden > 0 && (
+        <div className="row gap-top-s" style={{ alignItems: "center", color: "var(--ink2)" }}>
+          <Icon name="lock" size={16} />
+          <small className="mute">
+            {hidden} endangered plant{hidden === 1 ? " is" : "s are"} not shown on the map, to protect {hidden === 1 ? "it" : "them"}.
+          </small>
+        </div>
+      )}
+
       {sel && (
-        <div className="item on card-row">
+        <div className="item on card-row gap-top">
           <Img src={sel.p.photos[0]?.url} />
           <span>
             <b>{sel.p.name}</b>
             {sel.p.scientific ? <Sci block className="small">{sel.p.scientific}</Sci> : <Mono className="block">{sel.p.qr_id}</Mono>}
             <small className="mute block">
-              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>
+              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>{sel.p.location_reduced ? " (approximate ~1.1km area)" : ""}
             </small>
           </span>
-          <a className="btn" href={"#/tag/" + sel.p.qr_id}>View plant <Icon name="arrowR" size={18} /></a>
+          <a className="btn" href={"#/tag/" + sel.p.qr_id}>
+            View plant <Icon name="arrowR" size={18} />
+          </a>
         </div>
       )}
     </section>

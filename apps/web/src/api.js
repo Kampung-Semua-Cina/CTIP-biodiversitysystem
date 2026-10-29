@@ -1,6 +1,11 @@
-// The web app's API client (CTIP-54). Usage: see apps/shared/apiClient.js.
-// VITE_API_URL comes from apps/web/.env (copy .env.example).
+// apps/web/src/api.js
+// Express API client for the web application (CTIP-54).
 import { createApiClient, ApiError } from "../../shared/apiClient.js";
+import { getApiBaseUrl } from "../../shared/api.js";
 
-export const api = createApiClient({ baseUrl: import.meta.env.VITE_API_URL });
+export const api = createApiClient({
+  baseUrl: getApiBaseUrl(),
+});
+
 export { ApiError };
+export * from "../../shared/api.js";

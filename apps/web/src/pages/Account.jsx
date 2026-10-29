@@ -141,6 +141,7 @@ function PasswordCard() {
 }
 
 function DetailsCard({ me }) {
+  const { authToken } = useStore();
   return (
     <section className="glass pad">
       <h2 className="cardtitle">Account details</h2>
@@ -149,6 +150,14 @@ function DetailsCard({ me }) {
         <dt>Role</dt><dd>{ROLE_LABEL[me.role]}</dd>
         <dt>Status</dt><dd><Chip value={me.is_active ? "active" : "inactive"}>{me.is_active ? "Active" : "Turned off"}</Chip></dd>
         <dt>Member since</dt><dd>{fmtDate(me.created_at)}</dd>
+        <dt>Backend Session</dt>
+        <dd>
+          {authToken ? (
+            <Chip value="active">Verified via /v1/me</Chip>
+          ) : (
+            <Chip value="draft">Local Prototype</Chip>
+          )}
+        </dd>
       </dl>
       <p className="mute small"><Icon name="lock" size={14} /> Your email and role are managed by an admin. Ask them if either needs to change.</p>
     </section>

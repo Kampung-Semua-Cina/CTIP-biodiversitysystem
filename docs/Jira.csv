@@ -1,0 +1,1051 @@
+Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Project type,Project lead,Project lead id,Project description,Priority,Resolution,Assignee,Assignee Id,Reporter,Reporter Id,Creator,Creator Id,Created,Updated,Last Viewed,Resolved,Due date,Votes,Labels,Labels,Labels,Description,Environment,Watchers,Watchers,Watchers Id,Watchers Id,Original estimate,Remaining Estimate,Time Spent,Work Ratio,Σ Original Estimate,Σ Remaining Estimate,Σ Time Spent,Security Level,Inward issue link (Blocks),Outward issue link (Blocks),Outward issue link (Blocks),Custom field (Development),Custom field (Issue color),Custom field (Rank),Sprint,Sprint,Custom field (Start date),Custom field (Story point estimate),Custom field (Team),Custom field (Vulnerability),Comment,Comment,Parent,Parent key,Parent summary,Status category,Status category changed
+Initial Discussion,CTIP-2,10216,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,07/Sep/26 11:34 AM,24/Sep/26 11:04 PM,,10/Sep/26 3:09 PM,,0,docs,,,"Kick-off meeting to go through the NeuonAI project scope, agree on team roles (Product Owner, Scrum Master) and working norms.
+
+*Acceptance criteria*
+
+* Team has read the project scope and agreed on the four focus areas
+* Product Owner and Scrum Master confirmed
+* Communication channels and meeting cadence agreed",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i00071:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,10/Sep/26 3:09 PM
+GitHub Repository Initial Setup,CTIP-12,10258,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:51 AM,24/Sep/26 11:05 PM,,22/Sep/26 11:44 AM,,0,api,devops,,"Scaffold the monorepo structure and get it ready for the team to start Sprint 1 workstreams.
+
+* {{apps/mobile}} — Expo blank template, SDK 57, plain JS, Android-only
+* {{apps/web}} — React + Vite, plain JS, ESLint with react-hooks rules (no React Compiler)
+* {{services/api}} — Express scaffold
+* Placeholder folders for {{apps/firmware}}, {{services/anomaly-detection}}, {{packages/api-contract}}, {{infra/mosquitto}}, {{infra/supabase}}, {{docs/*}}
+* Root {{.gitignore}} covering {{.env}}, certs/keys, {{node_modules}}, build output, {{.expo/}}, {{.pio/}}, Python venvs
+* {{.gitattributes}} for consistent line endings
+* {{.github/workflows/ci.yml}} — lint + build check for {{apps/web}}
+* {{.github/CODEOWNERS}} — placeholder, needs real GitHub handles before the 2-approval rule on {{packages/api-contract}} can be enforced
+* {{CLAUDE.md}} and {{README.md}} with project context, stack, conventions
+
+Remaining before this can close: first commit + PR (branch-per-task, PR review required, never push to {{main}}).",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i00075:,CTIP Sprint 0,,,,,,,,10269,CTIP-23,Platform & API Foundation,Done,22/Sep/26 11:44 AM
+Set up live document for System Design Proposal (Google Docs),CTIP-3,10217,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,09/Sep/26 9:38 PM,24/Sep/26 11:04 PM,,10/Sep/26 3:09 PM,,0,docs,,,"Create the shared Google Doc for the System Design Proposal with the agreed section headings so everyone can write in parallel.
+
+*Acceptance criteria*
+
+* Doc created with all proposal section headings
+* All 7 members have edit access
+* Link shared with the team",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i00079:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,10/Sep/26 3:09 PM
+Task Distribution (Proposal),CTIP-4,10218,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,14/Sep/26 11:40 AM,24/Sep/26 11:04 PM,28/Sep/26 11:06 AM,14/Sep/26 11:40 AM,,0,docs,,,"Split the System Design Proposal sections across the 7 team members and record who owns what.
+
+*Acceptance criteria*
+
+* Every proposal section has one owner
+* Workload is roughly balanced across members
+* Each section has a matching Jira task assigned to its owner",,Patrick Lip Siang SIM,,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,,,,,,,,,,,,,{},,0|i0007h:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,14/Sep/26 11:40 AM
+Proposal: Background,CTIP-5,10219,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,24/Sep/26 11:04 PM,,21/Sep/26 9:19 AM,,0,docs,,,"Write the Background section of the System Design Proposal.
+
+*Should cover*
+
+* Current manual plant documentation practice at Niah National Park (handwritten records, physical tags, later data entry)
+* The two problem statements: manual/inefficient documentation, and limited digital access to biodiversity knowledge
+* Industry partner context: NeuonAI as SFC's commercialisation partner
+
+*Acceptance criteria*
+
+* Section drafted in the proposal doc
+* Problem statements match the project scope
+* Sources cited",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i0007p:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,21/Sep/26 9:19 AM
+"Proposal: Scope, Stakeholder",CTIP-6,10220,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,24/Sep/26 11:04 PM,,21/Sep/26 9:19 AM,,0,docs,,,"Write the Scope and Stakeholder sections of the System Design Proposal.
+
+*Should cover*
+
+* In-scope: the four required focus areas (mobile ground-truthing, web knowledge system, cybersecurity/SSDLC, IoT plant protection) and whether the optional innovation objective is included
+* Out-of-scope items (e.g. production IoT hardware)
+* Stakeholders: NeuonAI, SFC, botanists, conservation officers, system admins, park visitors, tutor
+
+*Acceptance criteria*
+
+* Scope boundaries clearly stated
+* Each stakeholder listed with their interest/role in the system",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i0007x:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,21/Sep/26 9:19 AM
+Proposal: Deliverables,CTIP-7,10221,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,24/Sep/26 11:04 PM,,19/Sep/26 1:30 PM,,0,docs,,,"Write the Deliverables section of the System Design Proposal.
+
+*Should cover*
+
+* Software deliverables: mobile app, web knowledge system, API/database, IoT prototype + dashboard
+* Security deliverables: SSDLC plan, vulnerability assessment test plan, results, remediation and reassessment evidence
+* Documentation deliverables: proposal, final report, presentation/demo
+
+*Acceptance criteria*
+
+* Every deliverable maps back to an objective in the project scope
+* Rough timing (which sprint) noted for each",,Nicole Tan Jia Xin,Norman Zhi Wen CHUNG,712020:f2680229-acf2-4643-995a-678f45f084a2,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,,,,,,,,,,,,{},,0|i00085:,CTIP Sprint 0,,,,,,19/Sep/26 12:49 PM;712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5;🎉 Looks good!,,10270,CTIP-24,Project Management & Documentation,Done,19/Sep/26 1:30 PM
+Proposal: Diagrams,CTIP-8,10222,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,27/Sep/26 3:01 PM,,27/Sep/26 3:01 PM,,0,docs,,,"Produce the system design diagrams for the System Design Proposal.
+
+*Suggested set*
+
+* System architecture (mobile, web, API, Supabase, MQTT broker, ESP32 nodes)
+* Use case diagram for the four roles (Botanist, Conservation Officer, System Admin, Visitor)
+* Data flow / offline sync flow (capture, local SQLite, sync, review/approve)
+* ERD for the core entities (specimens, observations, users/roles, sensor nodes, telemetry, alerts)
+
+*Acceptance criteria*
+
+* Diagrams inserted into the proposal doc with captions
+* Consistent with the tech stack in README.md
+* Editable source files saved in docs/",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i0008d:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,27/Sep/26 3:01 PM
+Proposal: Alternative Solutions,CTIP-9,10223,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,24/Sep/26 11:05 PM,,21/Sep/26 9:09 AM,,0,docs,,,"Write the Alternative Solutions section of the System Design Proposal.
+
+*Should cover*
+
+* Alternatives considered for key decisions (e.g. native vs cross-platform mobile, Supabase vs other backends, MQTT vs HTTP for telemetry, pre-printed QR tags vs on-demand generation)
+* Pros/cons of each and why the chosen option was selected
+
+*Acceptance criteria*
+
+* At least two alternatives compared per major decision
+* Justification links back to project constraints (offline-first, cost, team skills)",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i0008l:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,21/Sep/26 9:09 AM
+Proposal: Quality Management,CTIP-10,10224,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:05 PM,24/Sep/26 11:05 PM,,21/Sep/26 9:19 AM,,0,docs,,,"Write the Quality Management section of the System Design Proposal.
+
+*Should cover*
+
+* Quality standards and how they are checked (PR review required, branch-per-task, CI lint/build, two approvals for api-contract changes)
+* Testing approach (unit, integration, field/offline testing, security testing)
+* Definition of Done for stories
+
+*Acceptance criteria*
+
+* Section drafted in the proposal doc
+* Matches the conventions actually set up in the repo",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i0008t:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,21/Sep/26 9:19 AM
+Proposal: Resources,CTIP-11,10225,Task,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,15/Sep/26 3:06 PM,24/Sep/26 11:05 PM,,20/Sep/26 11:14 PM,,0,docs,,,"Write the Resources section of the System Design Proposal.
+
+*Should cover*
+
+* People: the 7 team members and their roles
+* Hardware: ESP32-CAM nodes, sensors, Android test devices, printed QR tags
+* Software/services: Supabase, Mosquitto, GitHub, Jira, Expo, hosting, and any costs
+
+*Acceptance criteria*
+
+* All required resources listed with estimated cost where relevant
+* Any items needing purchase or sponsor approval flagged",,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i00091:,CTIP Sprint 0,,,,,,,,10270,CTIP-24,Project Management & Documentation,Done,20/Sep/26 11:14 PM
+API: Auth & RBAC Middleware,CTIP-14,10260,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,High,Done,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:58 AM,13/Oct/26 11:22 PM,28/Sep/26 11:06 AM,13/Oct/26 11:22 PM,,0,api,security,,"Supabase Auth (JWT) verification and role-based access control in the Express API for the four roles: Botanist, Officer, System Administrator and unauthenticated Visitor.
+
+All authorisation is enforced *at the API layer, never in the client*. Stateless JWTs, not session cookies.
+
+*Subtasks*
+
+* CTIP-40: Backend Authentication (Supabase Auth, JWT)
+* CTIP-41: Backend RBAC & Testing
+
+The mobile and web login screens were split out on 13 Oct 2026 into their own stories: CTIP-42 (mobile) and CTIP-43 (web). Client sign-in, session caching and token refresh are tracked there.
+
+*Acceptance criteria*
+
+* [x] API accepts Supabase Auth access tokens (JWT)
+* [x] Middleware verifies the JWT signature and expiry on every protected route
+* [x] Role is read from a trusted claim ({{user_role}}, added by the access token hook), not from the request body
+* [x] Each route declares which roles may access it; unauthorised requests get 401/403
+* [x] Visitor-only public endpoints work without a token
+* [x] Tests cover each role hitting allowed and forbidden routes
+* [x] Expired tokens get {{401 TOKEN_EXPIRED}}, so clients know to refresh
+
+Delivered in PR #12 (merged 12 Oct 2026).
+
+*Before deploying:* turn on the custom access token hook in the hosted Supabase project (Authentication > Hooks).",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:,CTIP Sprint 1,,,8.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved from In Review back to In Progress, because [PR #12|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/12] has merged and there is no open PR for this story. The backend half is done: CTIP-40 and CTIP-41 are Done. CTIP-42 (mobile login) and CTIP-43 (web login) are In Progress because both still sign in against sample data. This story closes when all four subtasks are Done.","13/Oct/26 11:22 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Rescoped to the backend only and moved to Done (13 Oct). Both remaining subtasks, CTIP-40 and CTIP-41, are Done, and all of the backend acceptance criteria were met in [PR #12|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/12].
+
+The mobile and web login subtasks are now their own stories: CTIP-42 (mobile, 3 pts) and CTIP-43 (web, 2 pts). This story's estimate went from 13 to 8, so the total is still 13. Client sign-in, session caching and token refresh moved to those two stories.",10267,CTIP-21,Cybersecurity & SSDLC,Done,13/Oct/26 11:22 PM
+Mobile: Species Search via API,CTIP-26,10272,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:06 PM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist in the field, I want to search the plant species reference on my phone, so I can identify plants and pick the correct taxonomy.
+
+Online-first (lecturer directive, 28 Sep 2026). Offline caching is CTIP-84.
+
+*Split on 13 Oct 2026.* Pre-filling a record from a result is now CTIP-63.
+
+*Progress:* the mobile Species page (PR #11) does partial-match search on sample data. Note: {{GET /species}} currently allows only Officer and Admin; see CTIP-87.
+
+*Acceptance criteria*
+
+* Search by scientific or common name, with partial matching, through the API
+* Results show names, taxonomy, key features and a thumbnail
+* Thumbnails only in results; full photos load on demand
+* Clear message when the search fails because there is no connection
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0i,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to In Progress: the mobile Species page from [PR #11|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/11] does partial-match search by scientific name, common name or family. It searches sample data, not the API. Still to do: online search against the API, pre-filling a new record from a result, and a no-connection message.
+
+Note: in {{services/api/src/permissions.js}}, {{GET /species}} only allows officer and admin, so botanists would get a 403. Either let botanists read species there, or have the app search {{GET /public/species}}.",,10265,CTIP-19,Mobile Ground-Truthing App,To Do,15/Oct/26 6:57 PM
+Mobile: Sync Queue Upload with Idempotency Keys,CTIP-16,10262,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:58 AM,25/Oct/26 1:16 PM,,,,0,api,mobile,offline,"Upload the local record queue ({{apps/mobile/src/db/}}) to the API once connectivity returns, without ever losing or duplicating a field record.
+
+Silent loss or duplication of field records is the single worst failure mode in this system: those observations are irreplaceable. Server-assigned IDs with client-side idempotency keys. Scheduled last in Sprint 2 (lecturer directive, 28 Sep 2026).
+
+*Split on 13 Oct 2026.* The rest is now separate stories: CTIP-66 resumable photo upload, CTIP-67 conflict handling, CTIP-68 sync status and triggers.
+
+*Acceptance criteria*
+
+* Every queued record carries an idempotency key; retrying never creates duplicates
+* The server-assigned ID is written back to the local record after upload
+* Records are only removed from the queue after the server confirms
+* Tested with the network dropped mid-sync",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0r,CTIP Sprint 2,,,3.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,22/Sep/26 9:58 AM
+Mobile: QR Code Generation for Plant Records,CTIP-27,10273,Story,In Progress,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:06 PM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I want to generate a QR code for a plant record when no pre-printed tag is available, so every documented plant can still be tagged and viewed later.
+
+Pre-printed tags (CTIP-15) are the main path; this is the fallback required by the scope (""Generate a QR code for each plant record"").
+
+*Acceptance criteria*
+
+* Botanist can generate a QR code for any record, including offline
+* QR encodes a stable tag ID / URL, not the plant data itself
+* QR can be shared or saved as an image for printing
+* Scanning the generated QR opens the record in the app, and the public plant page (CTIP web story) for visitors
+* Tag IDs are unique and cannot clash with pre-printed tags",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0v,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,In Progress,20/Oct/26 1:11 AM
+Mobile: Local-First Record Store,CTIP-44,10308,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:26 AM,25/Oct/26 1:16 PM,,,,0,mobile,offline,,"Turn the crash-safety draft cache (CTIP-57) into a proper local record store in {{apps/mobile/src/db/}} ({{expo-sqlite}}), so records are kept on the device before any network call.
+
+*Schedule last in Sprint 2* (lecturer directive, 28 Sep 2026). Pairs with CTIP-16, which syncs this store.
+
+*Split on 13 Oct 2026.* Airplane-mode capture is now CTIP-83; offline species search is CTIP-84.
+
+*Acceptance criteria*
+
+* Every submitted record is saved locally first, with a client-generated ID, before any network call
+* The local schema is versioned with migrations, so app updates don't wipe unsynced records",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0x,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,28/Sep/26 11:26 AM
+Mobile: Pre-fill a New Record from a Species Result,CTIP-63,10327,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I want to pick a species from search results and have it fill in the taxonomy of a new record, so I don't type it by hand.
+
+Split from CTIP-26 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* The botanist can pick a species from the search results
+* The new record's taxonomy is pre-filled from the chosen species (capture flow, CTIP-15)
+* The pre-filled values can still be changed before submitting",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0y,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:26 PM
+Mobile: Resumable Photo Upload During Sync,CTIP-66,10330,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,api,mobile,offline,"Upload a record's photos reliably when it syncs, even over a weak connection.
+
+Split from CTIP-16 on 13 Oct 2026. Offline work is scheduled last in Sprint 2 (lecturer directive, 28 Sep 2026).
+
+*Acceptance criteria*
+
+* Photos upload reliably and resume after an interruption
+* A partly uploaded photo is never attached to a record twice
+* Tested with the network dropped mid-upload
+
+Location: {{apps/mobile/src/db/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0z,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:29 PM
+Mobile: Sync Conflict Handling for Two Devices,CTIP-67,10331,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,api,mobile,offline,"Handle a record that was edited on two devices before either synced, so no field edit is silently lost.
+
+Split from CTIP-16 on 13 Oct 2026. Offline work is scheduled last in Sprint 2.
+
+*Acceptance criteria*
+
+* [ ] The conflict strategy is written down in {{docs/}} and implemented
+* [ ] No edit is silently lost when two devices change the same record
+* [ ] The botanist is told when a conflict was resolved and how
+
+Location: {{apps/mobile/src/db/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zi,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:29 PM
+Mobile: Sync Status & Sync Triggers,CTIP-68,10332,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,mobile,offline,,"Let the botanist see and control syncing.
+
+Split from CTIP-16 on 13 Oct 2026. Offline work is scheduled last in Sprint 2.
+
+*Acceptance criteria*
+
+* Sync starts automatically when connectivity returns
+* Sync can also be started manually
+* Each record shows its sync status: pending, synced or failed
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zr,CTIP Sprint 2,,,1.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:29 PM
+Mobile: Offline Capture in Airplane Mode,CTIP-83,10347,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,25/Oct/26 1:16 PM,,,,0,mobile,offline,,"As a botanist, I want to keep recording plants with no signal, so a dropped connection never stops a survey.
+
+Split from CTIP-44 on 13 Oct 2026. Scheduled last in Sprint 2 (lecturer directive, 28 Sep 2026). Pairs with CTIP-16, which syncs these records.
+
+*Acceptance criteria*
+
+* The capture flow works in airplane mode: QR bind, photos, GPS, taxonomy, submit
+* Records captured offline are marked ""pending"" and queued for sync (CTIP-16)
+* Tested end to end in airplane mode on an Android device",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zv,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:31 PM
+Mobile: Cache Species Reference for Offline Search,CTIP-84,10348,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,25/Oct/26 1:16 PM,,,,0,mobile,offline,,"Let botanists search the species list with no signal.
+
+Split from CTIP-44 on 13 Oct 2026. Scheduled last in Sprint 2.
+
+*Acceptance criteria*
+
+* The species reference from CTIP-26 is cached on the device
+* Search works offline, with thumbnails only
+* The cache refreshes when the device is back online",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zx,CTIP Sprint 2,,,1.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:31 PM
+Web: Biodiversity Report Generation & Export,CTIP-32,10278,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 1:16 PM,,,,0,api,web,,"As a conservation officer, I want to generate and export biodiversity reports, so I can share findings with SFC and researchers.
+
+*Acceptance criteria*
+
+* Report can be generated from the current search/filter selection
+* Includes species counts, conservation status breakdown, observation list and a map snapshot
+* Export to PDF and CSV
+* Endangered species coordinates follow the same precision rules as the map
+* Only authorised roles can export",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zy,CTIP Sprint 2,,,3.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,24/Sep/26 11:07 PM
+Web: Admin User List & Invite,CTIP-34,10280,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 1:16 PM,,,,0,security,web,,"As a system administrator, I want to see and add user accounts, so the right people can get access.
+
+*Split on 13 Oct 2026.* Changing roles and approving accounts is now CTIP-72; deactivating a user is CTIP-73.
+
+*Acceptance criteria*
+
+* Admin sees every user with their role and status
+* Admin can invite or create users and assign Botanist, Officer or Admin
+* Only the Admin role can access this area, enforced by the API
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zz,CTIP Sprint 2,,,2.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,24/Sep/26 11:07 PM
+Web: Change Roles & Approve New Accounts,CTIP-72,10336,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,security,web,,"As a system administrator, I want to approve new accounts and change roles, so only verified staff get access.
+
+Split from CTIP-34 on 13 Oct 2026.
+
+*Open decision:* new accounts are currently created as active botanists ({{profiles}} defaults), but the threat model says they get no role until an Admin approves them (T25). Agree which one is right before building this.
+
+*Acceptance criteria*
+
+* Admin can change a user's role (Botanist, Officer or Admin) and approve new accounts
+* Users cannot change their own role
+* Every role change is logged with who made it and when
+* Only Admin can do this, enforced by the API
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzi,CTIP Sprint 2,,,2.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,13/Oct/26 11:29 PM
+Web: Deactivate a User,CTIP-73,10337,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,security,web,,"As a system administrator, I want to switch off an account, so someone who leaves cannot keep using the system.
+
+Split from CTIP-34 on 13 Oct 2026.
+
+*Note:* the role sits inside the login token, so a deactivated user keeps access until their current token expires (up to about an hour by default). Either document that delay or also check {{is_active}} on sensitive routes.
+
+*Acceptance criteria*
+
+* Admin can deactivate a user
+* A deactivated user gets no role in new tokens, so their access stops
+* The delay before an existing token stops working is documented or removed
+* Deactivation is logged with who did it and when",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzr,CTIP Sprint 2,,,1.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,13/Oct/26 11:29 PM
+Security: Vulnerability Assessment Test Plan,CTIP-36,10282,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 1:16 PM,,,,0,docs,security,,"Write the vulnerability assessment test plan required by the scope's Application Security Aspect.
+
+*Acceptance criteria*
+
+* Scope of testing defined: web app, API, mobile app, MQTT broker/IoT endpoints
+* Tools chosen and justified (e.g. OWASP ZAP, npm audit / Snyk, MobSF, nmap)
+* Test cases mapped to the threats from the threat model (CTIP-18) and OWASP Top 10
+* Schedule and environment for testing agreed (never against production)
+* Tester(s) are not the people who implemented the code under test
+* Plan saved in docs/security/",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzv,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,To Do,01/Oct/26 3:27 PM
+Security: Run Vulnerability Assessment,CTIP-37,10283,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 1:16 PM,,,,0,security,,,"Carry out the assess step required by the scope, following the test plan (CTIP-36). Runs at the *start* of Sprint 2 so there is time to fix and retest.
+
+Fixing the findings is CTIP-50, owned by the security architecture stream, so the person who tests is not the person who fixes.
+
+*Split on 13 Oct 2026.* Reassessment and the final report are now CTIP-74.
+
+*Acceptance criteria*
+
+* [ ] Assessment run with the planned tools (OWASP ZAP, npm audit); raw results saved in {{docs/testing/}}
+* [ ] Each finding verified (true or false positive) and rated by severity
+* [ ] Recommendation written for each confirmed vulnerability
+* [ ] Each confirmed finding raised as a Bug ticket and linked to CTIP-50",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzx,CTIP Sprint 2,,,3.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,To Do,24/Sep/26 11:07 PM
+Security: Reassessment & Final Report,CTIP-74,10338,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,security,,,"Show that the fixes worked: the reassess step of the SSDLC cycle.
+
+Split from CTIP-37 on 13 Oct 2026. Runs after the fixes in CTIP-50. Security testing (Michelle) stays separate from implementation (Nicole), so nobody tests their own code.
+
+*Acceptance criteria*
+
+* [ ] Reassessment run after the CTIP-50 fixes
+* [ ] Before and after evidence (screenshots or reports) shows each fix works
+* [ ] Final assessment report saved in {{docs/security/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzy,CTIP Sprint 2,,,2.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,To Do,13/Oct/26 11:29 PM
+"IoT Dashboard: Node Map, Status & Open Alerts",CTIP-39,10285,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:08 PM,25/Oct/26 1:16 PM,,,,0,iot,web,,"As an administrator, I want one view of all sensor nodes and their alerts, so I can monitor protected plants.
+
+*Split on 13 Oct 2026.* The rest is now separate stories: CTIP-79 live readings, CTIP-81 historical charts, CTIP-82 latest images.
+
+*Acceptance criteria*
+
+* Map of all sensor nodes, at their registered locations, with status (online, offline, alert)
+* Open alerts listed and linked to alert handling (CTIP-78)
+* Only Admin and Officer can access, enforced by the API",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzz,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,24/Sep/26 11:08 PM
+IoT Dashboard: Live Readings per Node,CTIP-79,10343,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:30 PM,25/Oct/26 1:16 PM,,,,0,iot,web,,"Show what each sensor node is reading right now.
+
+Split from CTIP-39 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* Latest temperature, humidity, soil moisture, distance and motion shown per node
+* Readings update without a page refresh
+* Only Admin and Officer can view, enforced by the API",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzi,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:30 PM
+IoT Dashboard: Historical Charts per Node,CTIP-81,10345,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,25/Oct/26 1:16 PM,,,,0,iot,web,,"Let admins analyse habitat conditions over time.
+
+Split from CTIP-39 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* Charts of each node's readings (temperature, humidity, soil moisture, distance) over time
+* The date range can be chosen
+* Only Admin and Officer can view, enforced by the API",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzr,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:31 PM
+IoT Dashboard: Latest Captured Images per Node,CTIP-82,10346,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,25/Oct/26 1:16 PM,,,,0,iot,web,,"Show the photos the laptop webcam took when a node reported motion.
+
+Split from CTIP-39 on 13 Oct 2026. Depends on the webcam capture story (CTIP-62).
+
+*Acceptance criteria*
+
+* [ ] The latest captured images can be viewed per node
+* [ ] Images load from the private {{sensor-images}} bucket through the API, only for Admin and Officer",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzv,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:31 PM
+QA: CI Pipeline & Automated Test Setup,CTIP-49,10313,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:27 AM,25/Oct/26 1:16 PM,,,,0,devops,testing,,"As the team, we need CI checks and a test setup for every app, so broken code is caught on the PR instead of after merge, and the security assessment has {{npm audit}} evidence to build on.
+
+Extends {{.github/workflows/ci.yml}} (currently web lint and build only). The API test job itself is added in CTIP-41; this story covers the rest.
+
+*Acceptance criteria*
+
+* [ ] CI jobs for {{apps/mobile}} (lint) and {{services/anomaly-detection}} (tests)
+* [ ] Test framework ready in each app with one example test other members can copy
+* [ ] {{npm audit}} runs in CI for web, mobile and API, and its output is saved as evidence
+* [ ] All jobs are required checks on {{main}} branch protection
+* [ ] Short testing guide in {{docs/testing/}} explaining how to run tests locally (PowerShell)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzx,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,,,10269,CTIP-23,Platform & API Foundation,To Do,28/Sep/26 11:27 AM
+API: Public Species Endpoints,CTIP-89,10353,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,26/Oct/26 2:54 PM,,,,0,api,security,,"Serve the visitor QR page (CTIP-33) without a login.
+
+Split from CTIP-46 on 13 Oct 2026. {{GET /public/species}} already works (PR #12). {{GET /public/species/{id}}} still returns 501.
+
+*Acceptance criteria*
+
+* [x] {{GET /public/species}} lists published species without a token
+* [ ] {{GET /public/species/{id}}} returns one published species without a token
+* [ ] Only published fields are returned, never exact coordinates of endangered specimens",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzy,CTIP Sprint 2,,,1.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+Security: Data Encryption at Rest and in Transit,CTIP-35,10281,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,26/Oct/26 2:54 PM,,,,0,security,,,"Encrypt sensitive data across all platforms, as required by the scope (Objective 3).
+
+*Acceptance criteria*
+
+* All client-to-API traffic uses HTTPS; HTTP is rejected or redirected
+* MQTT uses TLS (see CTIP-17)
+* Personal data (names, emails, contact details) encrypted at rest in the database
+* Local SQLite database on the mobile device is encrypted
+* Secrets and keys are kept in environment variables / secret storage, never in the repo
+* Approach documented in docs/security/",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzz,CTIP Sprint 2,,,3.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,In Progress,26/Oct/26 2:54 PM
+Security: Remediate Vulnerability Assessment Findings,CTIP-50,10314,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:27 AM,25/Oct/26 1:16 PM,,,,0,security,,,"As the team, we need every confirmed vulnerability from the assessment (CTIP-37) fixed, so the reassessment can show evidence that each fix works.
+
+Split out of CTIP-37 so the person who fixes the issues is not the person who tests them. The security architecture owner coordinates; fixes in other areas can go to that area's owner as Bug tickets.
+
+*Acceptance criteria*
+
+* Every confirmed finding from CTIP-37 has a linked Bug ticket
+* Each fix implemented following the written recommendation
+* Each Bug links the PR that fixes it
+* All High and Critical findings fixed before the reassessment
+* Any finding accepted rather than fixed has a written justification",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzi,CTIP Sprint 2,,,3.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,To Do,28/Sep/26 11:27 AM
+API: Species CRUD Endpoints,CTIP-46,10310,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:26 AM,26/Oct/26 2:54 PM,,,,0,api,,,"API endpoints for species records, behind the web species manager (CTIP-28, CTIP-65).
+
+Contract first ({{packages/api-contract/}}, two approvals), then implemented in {{services/api}} with Zod validation. Authorisation is enforced here, never in the client.
+
+*Split on 13 Oct 2026.* The rest is now separate stories: CTIP-85 photo upload, CTIP-86 review endpoints, CTIP-87 search and filter, CTIP-88 distribution data, CTIP-89 public species.
+
+*Acceptance criteria*
+
+* Create, read, update and soft-delete species records
+* Create accepts a client-generated ID / idempotency key, so a repeated request returns the existing record
+* Writes allowed only for Officer and Admin, through the RBAC middleware (CTIP-14)
+* Contract updated and approved before the implementation merges",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzr,CTIP Sprint 2,,,2.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+API: Shared API Client for Web & Mobile,CTIP-54,10318,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,12/Oct/26 8:54 AM,26/Oct/26 2:54 PM,,,,0,api,mobile,web,"One small, shared way for the web and mobile apps to call the Express API, so each feature story does not rebuild token handling and error handling on its own.
+
+Rewritten on 13 Oct 2026. Signing in is CTIP-42 (mobile) and CTIP-43 (web); each feature's own API calls stay in its own story (for example CTIP-28, CTIP-26, CTIP-58). They all use this client.
+
+*Tasks*
+
+* An API client module in {{apps/web/src/}} and one in {{apps/mobile/}} (or one in {{apps/shared/}} if it works for both)
+* Read the API base URL from the app's {{.env}} (never hard-coded)
+* Attach the signed-in user's Supabase access token to every request
+* On {{401 TOKEN_EXPIRED}}, refresh the Supabase session once and retry the request
+* Turn the API's {{{ code, message }}} errors into one consistent message for the user, including {{403 ACCOUNT_NOT_ACTIVE}}
+* Set the API's {{CORS_ORIGINS}} for the web app's address
+
+*Acceptance criteria*
+
+* [ ] Web and mobile both call the API through the shared client, with the base URL taken from {{.env}}
+* [ ] Every request carries the current user's access token; public routes work without one
+* [ ] An expired token is refreshed and the request retried once, without the user noticing
+* [ ] API errors are shown consistently from {{{ code, message }}}
+* [ ] The web app can call the API from its local dev address without CORS errors
+* [ ] A short usage note in the client file shows how a feature story calls it",,Albian Seo Pang,Amberlyn Lim Xi En,712020:d2164194-82be-4e8b-8a20-373a4106818a,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,,,,,,,,,,CTIP-42,CTIP-43,{},,0|i0009p:0zzzzv,CTIP Sprint 2,,,2.0,,,"13/Oct/26 11:47 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Rewritten on 13 Oct as the shared API client (2 pts, Platform & API epic). The original ""connect the API to the frontend"" scope was already covered by CTIP-42 and CTIP-43 (sign-in) and by each feature's own ""via API"" story. The one piece nobody owned was common token, refresh and error handling, and that's what this story is now.
+
+Moved from In Review to To Do, because no pull request is open, and into Sprint 2, because it's new work and the first thing to do there. It blocks CTIP-42 and CTIP-43. @Amberlyn, @Nicole: if you meant something different by this ticket, update it.",,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+API: Species Photo Upload Endpoint,CTIP-85,10349,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,26/Oct/26 2:54 PM,,,,0,api,,,"Store species photos for the web knowledge system.
+
+Split from CTIP-46 on 13 Oct 2026. Contract first ({{packages/api-contract/}}, two approvals), then implemented in {{services/api}} with Zod validation.
+
+*Acceptance criteria*
+
+* Photos upload to Supabase Storage through the API, with a caption
+* File type and size are validated
+* Only Officer and Admin can upload, enforced by the RBAC middleware",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzx,CTIP Sprint 2,,,1.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+API: Observation Review Endpoints,CTIP-86,10350,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,26/Oct/26 2:54 PM,,,,0,api,,,"Back the officer review queue (CTIP-29) and the botanist's submission status (CTIP-45).
+
+Split from CTIP-46 on 13 Oct 2026. Contract first (two approvals), then implemented with Zod validation.
+
+*Acceptance criteria*
+
+* List pending observations
+* Approve, reject with a reason, or request changes
+* Each observation's status is visible to the botanist who submitted it
+* Every decision is logged with the reviewer and time
+* Role checks through the RBAC middleware",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzy,CTIP Sprint 2,,,2.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+API: Species Search & Filter Endpoint,CTIP-87,10351,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,26/Oct/26 2:54 PM,,,,0,api,,,"Back web search (CTIP-30) and mobile species lookup (CTIP-26).
+
+Split from CTIP-46 on 13 Oct 2026.
+
+*Note:* {{GET /species}} currently allows only Officer and Admin, so botanists cannot use it for mobile lookup. Decide whether botanists may read species here or should use the public endpoint.
+
+*Acceptance criteria*
+
+* Search and filter by scientific name, common name, family, conservation status and date
+* Partial matching on names
+* Role checks through the RBAC middleware",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzz,CTIP Sprint 2,,,1.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+API: Distribution Data Endpoint with Coordinate Protection,CTIP-88,10352,Story,In Review,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:31 PM,26/Oct/26 2:54 PM,,,,0,api,security,,"Supply map data without leaking where endangered plants grow.
+
+Split from CTIP-46 on 13 Oct 2026. Feeds the distribution map (CTIP-31, CTIP-71). This is a test case in the security assessment.
+
+*Acceptance criteria*
+
+* Returns approved observation coordinates for the map
+* Coordinate precision is reduced server-side for any endangered specimen, for every role not allowed the exact location
+* Role checks through the RBAC middleware",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzi,CTIP Sprint 2,,,1.0,,,,,10269,CTIP-23,Platform & API Foundation,In Progress,26/Oct/26 2:54 PM
+Sprint #2 Report Submission,CTIP-90,10354,Task,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,25/Oct/26 1:16 PM,,,06/Nov/26 12:00 AM,0,,,,"Compile and submit the Sprint #2 Report on Canvas. *Due: Thu 6 Nov 2026, 23:59.*
+
+Nicole collates. Each workstream owner writes their own progress section.
+
+*Contents*
+
+* Sprint goal, committed vs completed work (points and stories), burndown
+* Progress per workstream: mobile, web, API/backend, IoT, security
+* Demo evidence: screenshots of the end-to-end online flow
+* Testing evidence collected so far (from {{docs/testing}})
+* Sprint retrospective: what went well, what to change
+* Carryover and plan for the next sprint
+
+*Done when*
+
+* Every workstream section written by its owner
+* Reviewed by the Product Owner
+* Submitted on Canvas before the deadline",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzr,CTIP Sprint 2,,,3.0,,,,,10270,CTIP-24,Project Management & Documentation,To Do,15/Oct/26 6:17 PM
+IoT: Sensor Simulator & Telemetry Storage,CTIP-47,10311,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:27 AM,25/Oct/26 1:16 PM,,,,0,iot,,,"As the IoT and web teams, we need realistic sensor data without depending on the physical ESP32 node, so ingestion, anomaly detection (CTIP-38) and the dashboard (CTIP-39) can be built and tested before the hardware is ready.
+
+Python simulator in {{services/anomaly-detection/}}. It mimics the real node: an ESP32 with a DHT11 (temperature, humidity), a YL-69 (soil moisture) and an HC-SR04 (distance, also used for motion detection). Images come from the laptop webcam script (CTIP-17), so the simulator does not need to produce them.
+
+*Acceptance criteria*
+
+* [ ] Simulator publishes temperature, humidity, soil moisture, {{distance_cm}} and {{motion_detected}} readings over MQTT/TLS in the same format as the firmware (CTIP-17), or calls {{POST /telemetry}} directly; {{lat}}/{{lng}} optional, to test GPS-equipped nodes
+* [ ] Can run several virtual nodes at a configurable interval
+* [ ] Can inject disturbance events on demand (motion burst from a sudden distance change, sudden temperature change, soil drying out, node silent)
+* [ ] Telemetry is stored in the database and linked to the node and nearby specimen
+* [ ] Run instructions in the folder README (PowerShell, {{python}}, {{.venv\Scripts\Activate.ps1}})",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzv,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,15/Oct/26 6:57 PM
+IoT: ESP32 Sensor Readings & Safe Wiring,CTIP-17,10263,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:58 AM,25/Oct/26 1:16 PM,,,,0,api,iot,,"Arduino IDE firmware for the ESP32 sensor node: read the environment around a protected plant.
+
+*Hardware:* ESP32 with a DHT11 (temperature and humidity), a YL-69 (soil moisture) and an HC-SR04 (ultrasonic distance). No camera and no GPS module; the node's location is recorded once, at registration.
+
+*Split on 13 Oct 2026.* The rest is now separate stories: CTIP-59 motion detection, CTIP-60 MQTT/TLS publishing, CTIP-61 MQTT bridge, CTIP-62 laptop webcam images.
+
+*Progress:* the database side (sensor fields, telemetry matching, image table) was merged on 8 Oct (PRs #4, #5). The firmware itself has not been committed yet.
+
+*Acceptance criteria*
+
+* [ ] Firmware committed as {{apps/firmware/sensor_node/sensor_node.ino}}
+* [ ] Node reads temperature and humidity (DHT11, at most about once a second), soil moisture (YL-69, converted to percent) and distance (HC-SR04) at a configurable interval
+* [ ] YL-69 on an ADC1 pin (GPIO 32 to 39) and powered from a GPIO only while reading
+* [ ] HC-SR04 echo through a voltage divider, or the 3.3 V HC-SR04P
+* [ ] Board package and libraries listed with versions in {{apps/firmware/README.md}}
+* [ ] Wi-Fi and MQTT credentials in a gitignored {{secrets.h}}; nothing secret committed",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzx,CTIP Sprint 1,CTIP Sprint 2,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,15/Oct/26 6:57 PM
+IoT: Threshold Alert Rules per Node,CTIP-38,10284,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 1:16 PM,,,,0,api,iot,,"As a conservation officer, I want an alert raised automatically when a sensor reading breaks a rule, so the team can respond quickly to possible poaching or habitat disturbance.
+
+*Split on 13 Oct 2026.* The rest is now separate stories: CTIP-75 statistical model, CTIP-76 node-silent alert, CTIP-77 notifications, CTIP-78 acknowledge and resolve.
+
+*Acceptance criteria*
+
+* [ ] Threshold rules configurable per node: motion, distance change ({{thresholds.distance_change_cm}}), sudden temperature or humidity change, soil drying out
+* [ ] A rule breach creates an alert with node, specimen, reading, severity and the captured image if available
+* [ ] Rules run in the API when telemetry arrives",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzy,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,24/Sep/26 11:07 PM
+IoT: Sensor Node Registration & Alert Routing,CTIP-48,10312,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:27 AM,25/Oct/26 1:16 PM,,,,0,iot,web,,"As a system administrator, I want to register sensor nodes and decide who receives their alerts, so each node is tied to the specimen it protects and the right officers are notified.
+
+*Acceptance criteria*
+
+* Admin can register, edit and deactivate a sensor node (ID, location, linked specimen)
+* Registering a node issues its own MQTT credentials; deactivating revokes them
+* Node GPS position is tracked, and a node moving outside its expected area is flagged
+* Admin can set which officers receive alerts per node or per severity
+* Only the System Administrator role can access these screens and endpoints",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzz,CTIP Sprint 2,,,3.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,28/Sep/26 11:27 AM
+IoT: Motion Detection from HC-SR04,CTIP-59,10323,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,iot,,,"Detect physical disturbance near a protected plant with the HC-SR04 ultrasonic sensor.
+
+Split from CTIP-17 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* [ ] Between published readings, the node samples distance every few hundred milliseconds
+* [ ] {{motion_detected}} is set when the distance changes by more than a configurable threshold
+* [ ] Single out-of-range or timed-out pings are ignored
+* [ ] The latest {{distance_cm}} is sent with each reading so the server can check it
+
+Location: {{apps/firmware/sensor_node/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzi,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:26 PM
+IoT: Publish Telemetry over MQTT/TLS,CTIP-60,10324,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,iot,security,,"Send each sensor reading securely from the ESP32 to the Mosquitto broker.
+
+Split from CTIP-17 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* [ ] Each reading is published as one JSON message to {{nodes/{node_id}/telemetry}}, matching {{TelemetryReadingInput}} in the API contract
+* [ ] Telemetry goes over MQTT with TLS to Mosquitto ({{infra/mosquitto/}}); plain-text connections are rejected
+* [ ] Each node authenticates with its own credentials
+* [ ] The node reconnects automatically after Wi-Fi or broker loss
+* [ ] No certs, keys or Wi-Fi passwords are committed ({{secrets.h}} is gitignored)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzr,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:26 PM
+IoT: MQTT Bridge to POST /telemetry,CTIP-61,10325,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,api,iot,,"A backend subscriber that takes readings from the broker and forwards them to the API, so validation, storage and alert rules live in the API only.
+
+Split from CTIP-17 on 13 Oct 2026. The database side is ready (PRs #4 and #5). {{POST /telemetry}} currently returns 501 in the API.
+
+*Open decision:* where the bridge lives ({{services/api}} or {{services/anomaly-detection}}) has not been decided yet. Agree it with the team before starting.
+
+*Acceptance criteria*
+
+* [ ] The bridge subscribes to {{nodes/{node_id}/telemetry}} (TLS, QoS 1) and forwards each reading to {{POST /telemetry}}
+* [ ] {{POST /telemetry}} checks the {{X-Sensor-Key}} header (one shared key from the API's {{.env}} for now; per-device keys come with CTIP-48)
+* [ ] Readings are validated against the contract and stored, linked to the node and the specimen it protects
+* [ ] Invalid readings are rejected and logged",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzv,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:26 PM
+IoT: Laptop Webcam Capture & Image Upload,CTIP-62,10326,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,api,iot,,"Use a laptop webcam as the sensor node's camera, since the ESP32 has none.
+
+Split from CTIP-17 on 13 Oct 2026. The image table and private bucket are ready (PR #5).
+
+*Acceptance criteria*
+
+* [ ] A capture script on the laptop takes a photo when the node reports motion
+* [ ] The raw JPEG (2 MB maximum) is uploaded to {{POST /sensor-nodes/{id}/images}} over HTTP
+* [ ] Images are stored in the private {{sensor-images}} bucket, linked to the node",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzx,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:26 PM
+IoT: Statistical Anomaly Detection,CTIP-75,10339,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,iot,,,"Flag unusual readings that simple thresholds miss.
+
+Split from CTIP-38 on 13 Oct 2026. Python with scikit-learn in {{services/anomaly-detection/}}. No deep learning: there is no labelled dataset of real disturbance events.
+
+*Acceptance criteria*
+
+* [ ] A lightweight statistical model flags readings outside a node's normal range
+* [ ] A flagged reading creates an alert in the same way as the threshold rules
+* [ ] Tested with disturbance events from the sensor simulator (CTIP-47)
+* [ ] Run instructions in the folder README (PowerShell, {{python}}, {{.venv\Scripts\Activate.ps1}})",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzy,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:29 PM
+IoT: Node Offline (Silent) Alert,CTIP-76,10340,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,iot,,,"Treat a node that stops reporting as a possible disturbance.
+
+Split from CTIP-38 on 13 Oct 2026.
+
+*Acceptance criteria*
+
+* A node silent for longer than a configurable time raises an alert
+* The node is shown as online again when readings resume",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzz,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:29 PM
+IoT: Alert Notifications to Officers,CTIP-77,10341,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:30 PM,25/Oct/26 1:16 PM,,,,0,api,iot,,"Tell the right people quickly when an alert is raised.
+
+Split from CTIP-38 on 13 Oct 2026. Recipients follow the alert routing from CTIP-48.
+
+*Acceptance criteria*
+
+* Officers are notified (in-app, email or push) within a short delay of an alert
+* Recipients follow the routing set up in CTIP-48
+* Notifications never include exact plant coordinates (threat model: no plant data or coordinates are emailed)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzzi,CTIP Sprint 2,,,2.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:30 PM
+API: Acknowledge & Resolve Alerts,CTIP-78,10342,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Norman Zhi Wen CHUNG,712020:ec499c04-1f7f-48a8-b09b-4e7409d1cfd5,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:30 PM,25/Oct/26 1:16 PM,,,,0,api,iot,,"Let officers work an alert through to the end.
+
+Split from CTIP-38 on 13 Oct 2026. The endpoints are already in the contract and the route permissions ({{/alerts/{id}/assign}}, {{/acknowledge}}, {{/resolve}}, {{/notes}}), but they return 501.
+
+*Acceptance criteria*
+
+* Alerts can be assigned, acknowledged and resolved through the API
+* Notes can be added, and the full history is kept
+* Only Officer and Admin can do this (already enforced by the route permissions)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:0zzzzzzzr,CTIP Sprint 2,,,1.0,,,,,10268,CTIP-22,IoT Plant Protection,To Do,13/Oct/26 11:30 PM
+Mobile: App Shell & Login (Supabase Auth),CTIP-42,10306,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:07 AM,15/Oct/26 6:57 PM,,,,0,mobile,security,,"Mobile app shell and the botanist's login screen, signing in through Supabase Auth.
+
+Split out of CTIP-14 on 13 Oct 2026 so the backend auth work could close on its own. Builds on the API auth layer from CTIP-14 (Done). API calls, token refresh and error messages come from the shared API client (CTIP-54).
+
+*Scope note:* online-first (lecturer directive, 28 Sep 2026). ""Reconnecting"" means a device coming back after being idle, not full offline operation.
+
+*Tasks*
+
+* App navigation and screen structure (done in PR #11)
+* Login screen that signs in with Supabase Auth ({{signInWithPassword}}) instead of sample data
+* Cache the session on the device and revalidate it when the app reconnects
+* Show a clear message for {{403 ACCOUNT_NOT_ACTIVE}} (through CTIP-54)
+
+*Acceptance criteria*
+
+* -App navigation and screen structure in place-
+* Botanist can log in on the mobile app through Supabase Auth and receives a JWT
+* Session is cached and revalidated when the app reconnects (not full offline auth)
+* Logging out clears the session on the device
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,CTIP-54,,,{},,0|i0009p:1,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to In Progress: the mobile app shell (page navigation) and a login screen are on main from [PR #11|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/11]. Sign-in still checks against sample data, not Supabase Auth, and the session isn't cached or revalidated yet. Both are needed to close this.",,10265,CTIP-19,Mobile Ground-Truthing App,To Do,15/Oct/26 6:57 PM
+Mobile: Capture Photos from Camera or Gallery,CTIP-55,10319,Story,In Progress,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:17 PM,,,,0,mobile,,,"As a botanist, I want to take or pick photos for a plant record, so each plant is documented visually.
+
+Split from CTIP-15 on 13 Oct 2026. The Add Plant screen in the mobile prototype (PR #11) already has a photo list, but it uses sample photos.
+
+*Acceptance criteria*
+
+* Photos can be taken with the camera or picked from the gallery
+* Several photos can be added to a record and removed before submitting
+* Photos stay on the device until the record is submitted
+* Location data (EXIF) is stripped from photos before upload (threat model T6)
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:109,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,In Progress,25/Oct/26 1:17 PM
+Mobile: QR Scan to Start or Open a Record,CTIP-15,10261,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:58 AM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I want to scan a plant's QR tag to start a new record or open its existing one, so every record is tied to a physical tag.
+
+QR tags are pre-printed and unassigned, and bound to a specimen at scan time. On-demand generation is the fallback (CTIP-27).
+
+*Split on 13 Oct 2026.* The rest of the capture flow is now separate stories: CTIP-55 photos, CTIP-56 GPS, CTIP-57 crash-safe draft, CTIP-58 submit to the API.
+
+*Progress:* live camera QR scanning (expo-camera) and scanning from a gallery image are in the mobile prototype (PR #11), but tag lookup uses sample data.
+
+*Acceptance criteria*
+
+* Scanning an unassigned QR tag starts a new record bound to that tag
+* Scanning an already-bound tag opens the existing record
+* Unknown tags show a clear message
+* Tag lookup and binding go through the API, not sample data
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10d,CTIP Sprint 1,CTIP Sprint 2,,2.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to In Progress. The mobile prototype from [PR #11|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/11] has:
+
+* Live QR scanning with expo-camera on the Scan page, plus scanning from a gallery image
+* An Add Plant form with photos and GPS
+
+Photos and GPS are still sample values, not taken from the device's camera and location. There is no SQLite draft yet, and records are not sent to the API. All three are needed to close this.",,10265,CTIP-19,Mobile Ground-Truthing App,To Do,15/Oct/26 6:57 PM
+Mobile: Submission Status & Rejected Record Edits,CTIP-45,10309,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:26 AM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I want to see whether my submitted records were approved or rejected by a conservation officer, so I can fix rejected records instead of re-surveying the plant.
+
+Mobile side of the review workflow; the officer's review queue is CTIP-29.
+
+*Acceptance criteria*
+
+* ""My submissions"" list shows each record's status: submitted / approved / rejected
+* Rejected records show the officer's reason
+* Botanist can edit a rejected record and resubmit it
+* Approved records become read-only for the botanist
+* Status refreshes on app open and pull-to-refresh",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10f,CTIP Sprint 2,,,3.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,28/Sep/26 11:26 AM
+Innovation (Optional): Improved Ground-Truthing Workflow,CTIP-51,10315,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:27 AM,25/Oct/26 1:16 PM,,,,0,innovation,mobile,stretch,"*Optional / stretch* — scope Objective 5. Only start once the stream's committed Sprint 2 work is done.
+
+Design and build an improvement to the field ground-truthing workflow that makes plant identification, location, recording or management faster, more accurate or more scalable in remote forest conditions. Automated species identification from photos is out of scope (NeuonAI's product).
+
+*Acceptance criteria*
+
+* Limitations of the current ground-truthing workflow identified and written up
+* Improved workflow or design proposed and agreed with the team
+* Improvement implemented in the app
+* Effectiveness evaluated with a suitable test (for example, time per record before vs after)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10g,CTIP Sprint 2,,,,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,28/Sep/26 11:27 AM
+Mobile: Capture GPS Coordinates & Accuracy,CTIP-56,10320,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I want the phone's location saved with each record, so the plant can be found again.
+
+Split from CTIP-15 on 13 Oct 2026. The mobile prototype currently uses a simulated position.
+
+*Acceptance criteria*
+
+* The device's GPS position is captured with each record
+* Accuracy in metres is stored and shown to the botanist
+* A clear message is shown if location permission is denied
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10h,CTIP Sprint 2,,,1.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:26 PM
+Mobile: Crash-Safe Record Draft (SQLite),CTIP-57,10321,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,mobile,,,"As a botanist, I don't want to lose a half-filled record if the app closes or crashes.
+
+Split from CTIP-15 on 13 Oct 2026. This is a local draft cache only, not a sync queue. Full offline storage is CTIP-44.
+
+*Acceptance criteria*
+
+* [ ] A local SQLite draft ({{expo-sqlite}}) holds taxonomy, morphology, height, notes, photos, GPS and QR tag ID
+* [ ] An in-progress draft survives an accidental app close or crash
+* [ ] The draft is cleared after a successful submit
+
+Location: {{apps/mobile/src/db/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10hi,CTIP Sprint 2,,,2.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:26 PM
+Mobile: Submit Record to API with Retry,CTIP-58,10322,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:26 PM,25/Oct/26 1:16 PM,,,,0,api,mobile,,"As a botanist, I want my finished record sent to the server, so it reaches the knowledge system.
+
+Split from CTIP-15 on 13 Oct 2026. Online-first: Sprint 1 assumes internet connectivity (lecturer directive, 28 Sep 2026), so this is a direct submit, not a sync queue.
+
+*Acceptance criteria*
+
+* On submit, the record is sent to the API endpoint defined in the contract
+* Each submit carries a client-generated ID / idempotency key, so a retry never creates a duplicate record
+* The server-assigned ID is kept with the record after a successful submit
+* A failed submit shows an error and lets the botanist retry
+* A successful submit is confirmed to the botanist
+
+Location: {{apps/mobile/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10hr,CTIP Sprint 2,,,1.0,,,,,10265,CTIP-19,Mobile Ground-Truthing App,To Do,13/Oct/26 11:26 PM
+Web: Species Distribution Map,CTIP-31,10277,Story,In Progress,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,25/Oct/26 4:33 PM,,,,0,web,,,"As a conservation officer, I want to see where each species has been recorded on a map of Niah National Park, so I can understand its distribution.
+
+Leaflet + OpenStreetMap.
+
+*Split on 13 Oct 2026.* Clustering and filters are now CTIP-70; hiding exact coordinates of endangered species is CTIP-71.
+
+*Acceptance criteria*
+
+* Map shows approved observations for a selected species, or all species, from the distribution endpoint (CTIP-88)
+* Clicking a marker shows the record summary and photo
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10hv,CTIP Sprint 2,,,3.0,,,,,10266,CTIP-20,Web Plant Knowledge System,In Progress,25/Oct/26 4:33 PM
+Web: Map Marker Clustering & Search Filters,CTIP-70,10334,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,web,,,"Keep the distribution map readable and in step with search.
+
+Split from CTIP-31 on 13 Oct 2026. Maps use Leaflet + OpenStreetMap.
+
+*Acceptance criteria*
+
+* Markers cluster when zoomed out
+* The map follows the search and filter criteria (CTIP-30)
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10hx,CTIP Sprint 2,,,1.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,13/Oct/26 11:29 PM
+Web: Hide Exact Coordinates of Endangered Species on the Map,CTIP-71,10335,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Patrick Lip Siang SIM,712020:c9317c2d-146a-419e-8aa6-cdbfaf63b5d6,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,25/Oct/26 1:16 PM,,,,0,security,web,,"Stop the map from revealing where endangered plants grow to anyone who should not see it.
+
+Split from CTIP-31 on 13 Oct 2026. Threat model T13 and T19. This is a test case in the security assessment.
+
+*Acceptance criteria*
+
+* Exact coordinates of endangered species are shown only to authorised roles
+* Other viewers see reduced-precision positions supplied by the API (CTIP-46 distribution endpoint), never trimmed only in the browser
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10hy,CTIP Sprint 2,,,1.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,13/Oct/26 11:29 PM
+Web: Species Soft Delete with Confirmation,CTIP-65,10329,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,20/Oct/26 4:52 PM,,20/Oct/26 11:10 AM,,0,web,,,"As a conservation officer, I want to remove a species record safely, so mistakes can be undone and history is kept.
+
+Split from CTIP-28 on 13 Oct 2026. The web prototype already soft-deletes on sample data and writes an audit row.
+
+*Acceptance criteria*
+
+* [ ] Delete asks for confirmation
+* [ ] Delete is a soft delete ({{is_deleted}}), done through the API
+* [ ] Deleted species are hidden from lists and the public page
+* [ ] Only Officer and Admin can delete, enforced by the API
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:10i,CTIP Sprint 2,,,1.0,,,,,10266,CTIP-20,Web Plant Knowledge System,Done,20/Oct/26 11:10 AM
+Web: Species Photo Upload with Captions,CTIP-64,10328,Story,In Progress,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:28 PM,20/Oct/26 5:01 PM,,,,0,web,,,"As a conservation officer, I want to upload several captioned photos for a species, so the knowledge base shows what the plant looks like.
+
+Split from CTIP-28 on 13 Oct 2026. The web prototype already has a photo editor and gallery (PR #7), but it uses sample data.
+
+*Acceptance criteria*
+
+* -Multiple photos can be uploaded per species, each with a caption-
+* -File type and size are validated-
+* Photos are stored in Supabase Storage through the API (CTIP-46 photo endpoint)
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:11,CTIP Sprint 2,,,1.0,,,,,10266,CTIP-20,Web Plant Knowledge System,In Progress,20/Oct/26 9:53 AM
+Web: Login & Role-Based Layouts (Supabase Auth),CTIP-43,10307,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:07 AM,15/Oct/26 6:57 PM,,,,0,security,web,,"Web login page for Officers and Admins, signing in through Supabase Auth, plus a layout for each role.
+
+Split out of CTIP-14 on 13 Oct 2026 so the backend auth work could close on its own. Builds on the API auth layer from CTIP-14 (Done). API calls, token refresh and error messages come from the shared API client (CTIP-54).
+
+*Tasks*
+
+* Login page and role-based layouts (prototype done in PR #7 and PR #10)
+* Replace the sample-data sign-in with Supabase Auth ({{signInWithPassword}})
+* Read the user's role from the session and send each role to its own layout
+* Show a clear message for {{403 ACCOUNT_NOT_ACTIVE}} (through CTIP-54)
+
+*Acceptance criteria*
+
+* -Login page and role-based layouts built-
+* Officer and Admin accounts can log in on the web app through Supabase Auth
+* Each role lands on its own layout after login
+* Logging out clears the session
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,CTIP-54,,,{},,0|i0009p:12,CTIP Sprint 1,CTIP Sprint 2,,2.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to In Progress: the web login page and role-based layouts are on main from [PR #7|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/7] and [PR #10|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/10], including the show-password button. Sign-in still checks against sample data in the store, not Supabase Auth. Connecting it to Supabase Auth is what's left to close this.",,10266,CTIP-20,Web Plant Knowledge System,To Do,15/Oct/26 6:57 PM
+"Web: Species Create, View & Edit via API",CTIP-28,10274,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:06 PM,20/Oct/26 9:54 AM,,,,0,web,,,"As a conservation officer, I want to add, view and edit plant species records, so the knowledge base stays accurate.
+
+*Record fields:* scientific name, common/local names, full taxonomy, description, ecological characteristics, conservation status, cultural significance.
+
+*Split on 13 Oct 2026.* Photos are now CTIP-64 and soft delete is CTIP-65.
+
+*Progress:* species catalogue, species and specimen pages are on main (PRs #7, #10), on sample data.
+
+*Acceptance criteria*
+
+* Create, view and edit species records from the web app through the API
+* Conservation status selected from a fixed list (IUCN categories)
+* Only Officer and Admin can edit, enforced by the API
+* Changes record who edited and when
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009p:19,CTIP Sprint 1,CTIP Sprint 2,,3.0,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Status unchanged (In Progress). The species catalogue, species page and specimen pages are on main from [PR #10|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/10]. Adding plants with a photo editor and gallery is on main from [PR #7|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/7]. All of it still runs on sample data. Connecting it to the API or Supabase, with edits enforced by role on the API, is what's left to close this.",,10266,CTIP-20,Web Plant Knowledge System,To Do,20/Oct/26 9:54 AM
+Web: Observation Review Queue,CTIP-29,10275,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:06 PM,15/Oct/26 6:18 PM,,,,0,web,,,"As a conservation officer, I want a queue of field observations waiting for review, so nothing submitted by a botanist is missed.
+
+*Split on 13 Oct 2026.* Approve, reject and request changes is now CTIP-69. The botanist-facing outcome is CTIP-45.
+
+*Acceptance criteria*
+
+* Queue lists newly submitted observations with photos, GPS on a map and the submitted details
+* Data comes from the review endpoints (CTIP-86)
+* Only Officer and Admin can open it, enforced by the API
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009s:y,CTIP Sprint 2,,,2.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,24/Sep/26 11:06 PM
+Web: Search & Filter Biodiversity Records,CTIP-30,10276,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,15/Oct/26 6:18 PM,,,,0,web,,,"As a conservation officer or researcher, I want to search and filter plant records, so I can quickly find the species and observations I need.
+
+*Acceptance criteria*
+
+* Search by scientific or common name, with partial matching
+* Filter by family/genus, conservation status, location/zone, date range and approval status
+* Results are paginated and sortable
+* Filters are reflected in the URL so a search can be shared or bookmarked
+* Search is fast enough on the full seed dataset (under ~1 second)",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009s:z,CTIP Sprint 2,,,3.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,24/Sep/26 11:07 PM
+Web: Public Visitor Plant Page (QR Landing),CTIP-33,10279,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:07 PM,15/Oct/26 6:18 PM,,,,0,security,web,,"As a park visitor, I want to scan a plant's QR tag and see information about it without logging in, so I can learn about the plants I see on the trail.
+
+*Acceptance criteria*
+
+* Scanning a QR tag opens a mobile-friendly public page for that plant
+* Shows common and scientific name, photo, description, conservation status and cultural significance
+* No login required; only public fields are returned by the API
+* Coordinate precision reduced server-side for endangered specimens (never exact location)
+* Unknown or unassigned tags show a friendly ""not found"" page
+* Endpoint is rate-limited to prevent scraping",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i0009s:zv,CTIP Sprint 2,,,3.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,24/Sep/26 11:07 PM
+"Web: Approve, Reject or Request Changes on Observations",CTIP-69,10333,Story,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Ricardo Zhen Wei CHEW,712020:48c68c50-bae7-4539-96f1-9c6f176dbed3,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,13/Oct/26 11:29 PM,15/Oct/26 6:19 PM,,,,0,web,,,"As a conservation officer, I want to approve or reject field observations, so only verified data enters the official records.
+
+Split from CTIP-29 on 13 Oct 2026. The botanist-facing outcome is covered by CTIP-45. Uses the review endpoints from CTIP-46.
+
+*Acceptance criteria*
+
+* Officer can approve, reject (with a reason) or request changes
+* Approved observations are linked to the correct species and appear in search and maps
+* Every decision is logged with the reviewer and a timestamp
+* Only Officer and Admin can decide, enforced by the API
+
+Location: {{apps/web/src/}}",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000ak:zx,CTIP Sprint 2,,,3.0,,,,,10266,CTIP-20,Web Plant Knowledge System,To Do,13/Oct/26 11:29 PM
+Security: Threat Modelling,CTIP-18,10264,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:58 AM,07/Oct/26 4:19 PM,,07/Oct/26 4:19 PM,,0,security,,,"Kick off the SSDLC ""assess"" step: threat model the system ahead of the Sprint 2 vulnerability assessment (which needs to show a real assess, remediate, reassess cycle).
+
+Cover: the four roles and their trust boundaries, offline-first sync (server-assigned IDs + idempotency), IoT telemetry ingestion over MQTT, image upload over HTTP, and the public unauthenticated Visitor QR flow (including that coordinate precision must be reduced server-side for endangered specimens before reaching a public view).
+
+Security implementation and security testing must go to *different people*, so whoever threat-models/tests should not be the one implementing the auth/RBAC or IoT ingestion code.
+
+*Acceptance criteria*
+
+* Data flow diagram with trust boundaries marked
+* Threats identified per component using STRIDE (or similar)
+* Each threat rated for likelihood/impact and given a mitigation
+* Mitigations that need code turned into Jira tickets
+* Document saved in docs/security/",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000al:,CTIP Sprint 1,,,3.0,,,,,10267,CTIP-21,Cybersecurity & SSDLC,Done,07/Oct/26 4:19 PM
+Mobile Ground-Truthing App,CTIP-19,10265,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:02 PM,28/Sep/26 11:56 AM,,,,0,mobile,,,"*Scope Focus Area 1 — Smart Digital Ground-Truthing Platform* (Objective 1)
+
+Android mobile app ({{apps/mobile}}, Expo) that lets botanists document plant specimens in the field at Niah National Park.
+
+*Connectivity (lecturer directive, 28 Sep 2026):* built online-first, assuming internet is available in the field, so the whole system works end to end first. Full offline data collection and sync are added at the end of Sprint 2 (CTIP-44, CTIP-16). This differs from the submitted proposal, which stated offline-first as a hard requirement.
+
+*Botanist role must be able to:*
+
+* Register new plant records on site
+* Record detailed plant information (taxonomy, morphological characteristics, height, related attributes)
+* Capture and attach photographs
+* Record GPS location
+* Synchronise field data with the central database
+* Generate / bind a QR code for each plant record so users can view its details
+
+*Also in scope:* QR scanning of tagged plants, searchable plant species reference, offline data collection (Sprint 2, last).
+
+*Stories:* CTIP-15, CTIP-42 (stream A, Sprint 1); CTIP-26, CTIP-27 (stream B, Sprint 1); CTIP-45, CTIP-51 (stream A, Sprint 2); CTIP-44, CTIP-16 (stream B, Sprint 2).
+
+*Outcome:* botanists and conservation officers identify, document and manage plant records during field surveys with less manual effort and better data quality.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000at:,,,,,,,,,,,,To Do,24/Sep/26 11:02 PM
+Web Plant Knowledge System,CTIP-20,10266,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:02 PM,24/Sep/26 11:02 PM,,,,0,web,,,"*Scope Focus Area 2 — Digital Plant Knowledge System* (Objective 2)
+
+Web-based biodiversity knowledge system ({{apps/web}}, React + Vite) for managing and accessing plant species information.
+
+*Features:* plant taxonomy and scientific names, species descriptions, botanical photographs, conservation status, species distribution maps, search and filtering by scientific or common name.
+
+*Conservation Officer role must be able to:*
+
+* Add, edit and delete plant species records
+* Upload plant photographs and supporting information
+* Review and approve submitted observations (from the mobile app)
+* Search and filter biodiversity records
+* Generate and export biodiversity reports
+
+*Outcome:* conservation officers can manage, retrieve and update accurate biodiversity information to support conservation, research and public education.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000b1:,,,,,,,,,,,,To Do,24/Sep/26 11:02 PM
+Cybersecurity & SSDLC,CTIP-21,10267,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:02 PM,24/Sep/26 11:02 PM,,,,0,security,,,"*Scope Focus Area 3 — Cybersecurity and Data Protection* (Objective 3)
+
+*Implementation (all platforms):*
+
+* Secure login for all users with simple authentication methods
+* Encryption of sensitive/personal data
+* Role-based access control (Botanist, Conservation Officer, System Administrator, unauthenticated Visitor)
+
+*Application Security Aspect (assessed deliverables):*
+
+* Project planning and execution based on the Secure Software Development Lifecycle (SSDLC)
+* Vulnerability assessment test plan — tools and scope of testing defined
+* Vulnerability assessment results with verification of each vulnerability
+* Recommendations and their implementation
+* Evidence of reassessment showing the vulnerabilities were fixed
+
+*Team rule:* security implementation and security testing must be done by different people.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000b9:,,,,,,,,,,,,To Do,24/Sep/26 11:02 PM
+IoT Plant Protection,CTIP-22,10268,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:02 PM,24/Sep/26 11:02 PM,,,,0,iot,,,"*Scope Focus Area 4 — IoT-Enabled Plant Protection* (Objective 4)
+
+GPS and environmental sensor nodes (ESP32-CAM, {{apps/firmware}}) deployed near rare or endangered plant species.
+
+*Basic functionalities:*
+
+* Real-time environmental sensing (temperature, humidity, movement)
+* GPS-based plant and sensor tracking
+* Threat detection and automated alerts for unusual activity (e.g. potential poaching, habitat disturbance)
+* Centralised monitoring dashboard for administrators
+* Ecological data storage and analysis
+
+*Out of scope:* production hardware (weatherproofing, solar, LoRa backhaul) and deep learning on sensor time series — threshold rules plus a lightweight statistical model only.
+
+*Outcome:* continuous monitoring of endangered species, rapid response to threats, and long-term habitat records.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000bh:,,,,,,,,,,,,To Do,24/Sep/26 11:02 PM
+Platform & API Foundation,CTIP-23,10269,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:03 PM,24/Sep/26 11:03 PM,,,,0,api,,,"Shared foundations that the mobile app, web system and IoT ingestion all depend on.
+
+* Monorepo structure, CI and conventions (see {{README.md}} / {{CLAUDE.md}})
+* {{services/api}} (Express) — the single backend for all clients
+* {{packages/api-contract}} — OpenAPI spec as the single source of truth, validated at runtime with Zod
+* Supabase (database, auth, storage) under {{infra/supabase}}
+
+*Rule:* changes to {{packages/api-contract/}} need two PR approvals because they affect three consumers at once.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000bp:,,,,,,,,,,,,To Do,24/Sep/26 11:03 PM
+Project Management & Documentation,CTIP-24,10270,Epic,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:03 PM,24/Sep/26 11:03 PM,,,,0,docs,,,"Unit deliverables and team process for COS30049, separate from the software itself.
+
+* System Design Proposal (Sprint 1) and its sections
+* Sprint planning, reviews and retrospectives
+* Client/sponsor communication with NeuonAI and the tutor
+* Final report, presentation and demo preparation",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000bx:,,,,,,,,,,,,To Do,24/Sep/26 11:03 PM
+Supabase Database Schema & Storage Setup,CTIP-25,10271,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,High,Done,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,24/Sep/26 11:06 PM,12/Oct/26 10:40 AM,,12/Oct/26 10:40 AM,,0,api,,,"As the team, we need the central database and file storage set up in {{infra/supabase/}} so the API has somewhere real to persist data.
+
+*Scope*
+
+* Postgres tables for species, specimens (field records), observations, photos, users/roles, sensor nodes, telemetry, alerts
+* Supabase Storage buckets for plant photos and sensor images
+* Migrations checked into the repo so every environment can be rebuilt
+
+*Acceptance criteria*
+
+* Schema matches the entities in the OpenAPI contract (CTIP-13)
+* Migrations run cleanly on a fresh project
+* Storage buckets are private by default; only the API can issue access
+* Row Level Security enabled on all tables as a second line of defence
+* Seed script with sample Niah species for development",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000c5:,CTIP Sprint 1,,,5.0,,,,,10269,CTIP-23,Platform & API Foundation,Done,12/Oct/26 10:40 AM
+"Backend Authentication (Supabase Auth, JWT)",CTIP-40,10304,Subtask,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:07 AM,13/Oct/26 10:52 PM,,13/Oct/26 10:52 PM,,0,security,,,"Scaffold the Express app (entry point, config, {{.env.example}} — only {{package.json}} exists right now) and integrate Supabase Auth.\n\n*Scope note:* Sprint 1 assumes internet connectivity is available (lecturer directive, 28 Sep 2026); build for the normal online case, not offline queuing.\n\n*Tasks*\n- Scaffold {{services/api/src/}}\n- Integrate Supabase Auth: sign in, issue JWT\n- Logout invalidation and token refresh for a reconnecting device\n- Public Visitor endpoints that need no token\n\n*Acceptance criteria*\n- [ ] Users can sign in via Supabase Auth and receive a JWT\n- [ ] Logout invalidates the token\n- [ ] Token refresh works for a device reconnecting after being idle\n- [ ] Visitor-only public endpoints work without a token\n\nSplit out of CTIP-14 so Backend Authentication and Backend RBAC & Testing can be picked up by two different people instead of one.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000fh:,CTIP Sprint 1,,,,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to Done: merged into main in [PR #12|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/12] on 12 Oct.
+
+* Express API scaffolded in {{services/api/src/}} with {{.env.example}}
+* Supabase access tokens are checked against the project's published keys (signature, expiry, issuer, audience). The role comes from a {{user_role}} claim added by the {{custom_access_token_hook}} migration.
+* Public visitor endpoints work without a token
+* An expired token returns {{401 TOKEN_EXPIRED}}, which tells clients to refresh
+
+Sign-out and token refresh are handled by supabase-js on the clients. They still need a check once the web and mobile apps sign in for real (CTIP-42, CTIP-43). Before deploying, turn on the hook in the hosted Supabase project (Authentication > Hooks).",,10260,CTIP-14,API: Auth & RBAC Middleware,Done,13/Oct/26 10:52 PM
+Backend RBAC &amp; Testing,CTIP-41,10305,Subtask,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,28/Sep/26 11:07 AM,13/Oct/26 10:52 PM,,13/Oct/26 10:52 PM,,0,security,,,"Role-based access control middleware for Botanist, Conservation Officer, System Administrator and unauthenticated Visitor.\n\nDepends on the Backend Authentication subtask being far enough along to have a working login to test against.\n\n*Tasks*\n- Role middleware: each route declares its allowed roles; read the role from a trusted claim; return 401/403\n- Jest tests for each role on allowed and forbidden routes\n- Add an API test job to CI\n\n*Acceptance criteria*\n- [ ] Each route declares which roles may access it; unauthorised requests get 401/403\n- [ ] Role is read from a trusted claim, not from the request body\n- [ ] Tests cover each role hitting allowed and forbidden routes\n- [ ] API test job added to {{.github/workflows/ci.yml}}\n\nSplit out of CTIP-14 so this and Backend Authentication can be picked up by two different people instead of one.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000fp:,CTIP Sprint 1,,,,,,"13/Oct/26 10:52 PM;712020:d2164194-82be-4e8b-8a20-373a4106818a;Moved to Done: merged into main in [PR #12|https://github.com/Kampung-Semua-Cina/CTIP-biodiversitysystem/pull/12] on 12 Oct.
+
+* {{permissions.js}} sets the allowed roles for every route in {{openapi.yaml}}. Unauthorised requests get 401 or 403.
+* The role comes from the signed token claim, never from the request body, and a test checks this
+* 13 tests in {{services/api/test/rbac.test.js}}. They cover every role on allowed and forbidden routes, plus expired, forged and wrong-project tokens.
+* An ""API (tests)"" job was added to {{.github/workflows/ci.yml}} and passes
+
+The tests use Node's built-in test runner, not Jest.",,10260,CTIP-14,API: Auth & RBAC Middleware,Done,13/Oct/26 10:52 PM
+ER Diagram,CTIP-52,10316,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,Done,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,Nicole Tan Jia Xin,712020:f2680229-acf2-4643-995a-678f45f084a2,05/Oct/26 11:08 AM,12/Oct/26 10:38 AM,,12/Oct/26 10:38 AM,,0,,,,,,Nicole Tan Jia Xin,,712020:f2680229-acf2-4643-995a-678f45f084a2,,,,,,,,,,,,,{},,0|i000hs:,CTIP Sprint 1,,,,,,,,,,,Done,12/Oct/26 10:38 AM
+API Foundation: OpenAPI Contract Skeleton,CTIP-13,10259,Story,Done,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,High,Done,Amberlyn Lim Xi En,712020:5c150f89-18aa-4b57-82f9-1441f9cdc88f,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,22/Sep/26 9:57 AM,12/Oct/26 10:40 AM,,12/Oct/26 10:40 AM,,0,api,,,"Draft the initial OpenAPI spec in {{packages/api-contract/}} — the single source of truth for the API, validated at runtime with Zod on the API side.
+
+Cover the core resource shapes (specimens, users/roles, IoT sensor nodes/telemetry) even as stubs, so mobile, web and API work can start against a shared contract instead of guessing at each other's payloads.
+
+Note: changes to {{packages/api-contract/}} need *two approvals* (see CLAUDE.md Conventions) since a change there breaks three consumers at once.
+
+*Prepare for offline later:* Sprint 1 is online-first (lecturer directive, 28 Sep 2026), but create endpoints should already accept a client-generated ID / idempotency key, so resending the same record never creates a duplicate. This keeps offline sync (CTIP-16) from needing an API rework later.
+
+*Acceptance criteria*
+
+* OpenAPI file validates with a linter (e.g. Redocly/Spectral)
+* Schemas defined for specimen, observation, user/role, sensor node, telemetry reading, alert
+* Endpoints stubbed for specimen CRUD, sync, auth, telemetry ingestion
+* Create endpoints accept a client-generated ID; a repeated request returns the existing record instead of a duplicate
+* Error response format agreed and documented
+* PR approved by two reviewers",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000i0:,CTIP Sprint 1,,,5.0,,,,,10269,CTIP-23,Platform & API Foundation,Done,12/Oct/26 10:40 AM
+Final Report Submission,CTIP-91,10355,Task,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,27/Nov/26 12:00 AM,0,,,,"Write and submit the group Final Report on Canvas. *Due: Thu 27 Nov 2026, 23:59.*
+
+Albian edits and assembles. Each section is a sub-task owned by whoever built that part, mapped to the marking rubric (Process 40% + Product 40%). Reuse System Design Proposal content where it still applies, and update it where the design changed (e.g. online-first connectivity).
+
+Start collecting test evidence during Sprint 2; testing plan and results alone are 20% of the mark.
+
+*Done when*
+
+* All section sub-tasks done
+* One consistent voice, formatting and referencing across sections
+* Reviewed by the whole team
+* Submitted on Canvas before the deadline
+
+The Learning Summary Report (same due date) is individual and not tracked here.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000qc:,,,,8.0,,,,,10270,CTIP-24,Project Management & Documentation,To Do,15/Oct/26 6:17 PM
+"Final Presentation: Slides, Live Demo & Rehearsal",CTIP-92,10356,Task,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Prepare the final presentation slides and live system demo, and rehearse as a group.
+
+*Presentation date: TBC — confirm with Ts. Dr. Lee Sue Han* (not listed on Canvas). The final presentation is marked individually (10%), so each member needs a clear speaking part.
+
+*Contents*
+
+* Slide deck: problem, solution, architecture, demo, testing and security results, future work
+* Live demo script for the end-to-end flow (mobile submit → web approve → visitor QR page; sensor reading → alert), with a recorded backup video in case the live demo fails
+* Speaking parts split across all 7 members
+
+*Done when*
+
+* Slides complete and reviewed
+* Demo script and backup recording ready
+* At least one full timed rehearsal",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000qp:,,,,3.0,,,,,10270,CTIP-24,Project Management & Documentation,To Do,15/Oct/26 6:17 PM
+Final Report: Project Description & Objectives,CTIP-93,10357,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Process §1 (10 marks). Background, introduction, problem statement, existing solutions, motivations; project objectives and scope. Update from the proposal where scope changed.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000qu:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+"Final Report: Project Planning (SWOT, KoST, SSDLC, Risks, Constraints)",CTIP-94,10358,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Process §2 (10 marks). Solution analysis (project forces, SWOT, KoST, SSDLC), risks and constraints. Note risks that actually occurred and how they were handled (e.g. connectivity directive change, Sprint 1 carryover).",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000r6:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: Deliverables & Schedule,CTIP-95,10359,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Process §3 (10 marks). Detailed breakdown of activities, tasks, milestones and key deliverables; schedule overview, delivery phases and timeline. Pull sprint data and burndowns from Jira.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000ra:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: System Architecture & Technical Design,CTIP-96,10360,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Process §4 (10 marks). Overall architecture and how it meets requirements; justification of development approach; logical breakdown of features; technical design across hardware, software and interfaces (mobile, web, API, Supabase, IoT/MQTT). Reuse diagrams in {{docs/architecture}}.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000rl:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+"Final Report: Testing Plan (Quality Management, Strategy, Environment)",CTIP-97,10361,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Product §1 (10 marks). Quality management (Definition of Done, quality attributes); test strategy listing the tests run, including security testing; test environment (hardware and software).",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000ro:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: Test Results & Discussion,CTIP-98,10362,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Product §2 (10 marks, shared with security results). Quantitative and qualitative results and analysis, reasoning on outcomes. Use evidence collected in {{docs/testing}} across the sprints.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000ry:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: Security Testing Results & Recommendations,CTIP-99,10363,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,Michelle Mei Xuan TAN,712020:65f50aca-c071-4475-9c70-e6aa85f90995,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Product §2 (security testing). Summarise the assess → remediate → reassess cycle: findings from the vulnerability assessment (CTIP-37), remediation (CTIP-50) and reassessment (CTIP-74), with recommendations. Draw on the threat model in {{docs/security}}.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000s0:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: Prototype & Software Usability,CTIP-100,10364,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Product §3 + §4 (20 marks). How the prototype matches the user needs analysis and shows understanding of the problem; usability against relevant guidelines (task flow and navigation, ease of use for new and experienced users). Include screenshots of mobile and web flows.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000s9:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM
+Final Report: Future Enhancements & Conclusion,CTIP-101,10365,Subtask,To Do,CTIP,CTIP,software,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,,Medium,,,,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,Albian Seo Pang,712020:d2164194-82be-4e8b-8a20-373a4106818a,15/Oct/26 6:17 PM,15/Oct/26 6:17 PM,,,,0,,,,"Rubric: Product §2 (recommendations for future enhancement). Work not completed (e.g. any offline features that slipped), out-of-scope items such as automated species ID with NeuonAI, production hardware, and a conclusion.",,Albian Seo Pang,,712020:d2164194-82be-4e8b-8a20-373a4106818a,,,,,,,,,,,,,{},,0|i000sa:,,,,,,,,,10355,CTIP-91,Final Report Submission,To Do,15/Oct/26 6:17 PM

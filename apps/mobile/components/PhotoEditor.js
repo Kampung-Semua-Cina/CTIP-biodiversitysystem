@@ -60,11 +60,7 @@ export default function PhotoEditor({ photos = [], onSave, onClose }) {
             <View style={styles.cardInfo}>
               <View style={styles.badgeRow}>
                 <Text style={styles.photoNum}>Photo {idx + 1}</Text>
-                {idx === 0 && (
-                  <View style={styles.primaryPill}>
-                    <Text style={styles.primaryPillText}>★ Primary</Text>
-                  </View>
-                )}
+
               </View>
 
               <View style={styles.actionsRow}>
@@ -76,13 +72,7 @@ export default function PhotoEditor({ photos = [], onSave, onClose }) {
                   <Text style={styles.actionBtnText}>▲ Up</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionBtn, idx === 0 && styles.disabledBtn]}
-                  disabled={idx === 0}
-                  onPress={() => move(idx, 0)}
-                >
-                  <Text style={styles.actionBtnText}>★ Make primary</Text>
-                </TouchableOpacity>
+
 
                 <TouchableOpacity
                   style={[styles.actionBtn, idx === list.length - 1 && styles.disabledBtn]}

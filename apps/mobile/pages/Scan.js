@@ -6,9 +6,10 @@
 //   tag already on a plant  -> botanist: "Record a revisit" / everyone else: plant page
 //   retired or unknown      -> explain, scan again
 import React, { useState } from 'react';
-import { View, Text, Pressable, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { View, Text, Pressable, TextInput, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useStore } from '../../shared/store.js';
 import { plantView } from '../../shared/selectors.js';
@@ -28,19 +29,24 @@ export function extractTag(raw) {
 
 // What a scanned ID refers to. Supabase: GET /tags/{qrId} once the apps use the API.
 export function lookupTag(db, id) {
-  const plant = db.plants.find((p) => p.qr_id.toUpperCase() === id && !p.is_deleted);
-  if (plant) return { kind: 'used', id, plant: plantView(db, plant) };
-  const tag = db.tags.find((t) => t.qr_id.toUpperCase() === id);
-  if (tag?.status === 'unused') return { kind: 'unused', id, tag };
-  if (tag?.status === 'retired') return { kind: 'retired', id, tag };
-  return { kind: 'unknown', id };
+  const cleanId = String(id || '').trim().toUpperCase();
+  if (!cleanId || !db) return { kind: 'unknown', id: cleanId };
+  const plants = db.plants || [];
+  const tags = db.tags || [];
+  const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
+  if (plant) return { kind: 'used', id: cleanId, plant: plantView(db, plant) };
+  const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
+  if (tag?.status === 'unused') return { kind: 'unused', id: cleanId, tag };
+  if (tag?.status === 'retired') return { kind: 'retired', id: cleanId, tag };
+  return { kind: 'unknown', id: cleanId };
 }
 
 export default function Scan({ nav, params = {} }) {
-  const { db, role } = useStore();
+  const { db, role, me } = useStore();
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
-  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code)) : null);
+  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code), me?.id) : null);
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState('');
 
@@ -48,11 +54,45 @@ export default function Scan({ nav, params = {} }) {
 
   const handle = (raw) => {
     if (result) return; // ignore repeat reads while a result is showing
-    const r = lookupTag(db, extractTag(raw));
+    const r = lookupTag(db, extractTag(raw), me?.id);
     // A visitor who scans a published plant goes straight to its page.
     if (r.kind === 'used' && role !== 'botanist') return nav.replace('tag', { qr: r.id });
     setTyping(false);
     setResult(r);
+  };
+
+  const pickFromGallery = async () => {
+    try {
+      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!lib.granted) {
+        const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!ask.granted) {
+          Alert.alert('Permission needed', 'Allow photo library access to choose images.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (!result.canceled && result.assets?.length) {
+        const asset = result.assets[0];
+        let foundData = null;
+        try {
+          if (typeof scanFromURLAsync === 'function') {
+            const barcodes = await scanFromURLAsync(asset.uri, ['qr']);
+            if (barcodes && barcodes.length > 0) foundData = barcodes[0].data;
+          }
+        } catch (e) {
+          console.warn('scanFromURLAsync error in Scan:', e);
+        }
+        const tag = extractTag(foundData || asset.fileName || asset.uri);
+        if (tag && /NIAH-\d{4}/.test(tag)) {
+          handle(tag);
+        } else {
+          Alert.alert('No QR detected', 'Could not detect a valid plant QR tag in this photo.');
+        }
+      }
+    } catch (err) {
+      console.warn('Gallery pick error in Scan:', err);
+    }
   };
 
   const granted = permission?.granted;
@@ -69,7 +109,7 @@ export default function Scan({ nav, params = {} }) {
         />
       ) : null}
 
-      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
         <View style={{ height: 56, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 }}>
           <IconButton name="x" label="Close scanner" color={CAMERA_TEXT} onPress={close} />
           {granted && !result ? <IconButton name="torch" label={torch ? 'Turn off torch' : 'Turn on torch'} color={torch ? '#e8bd5c' : CAMERA_TEXT} size={22} onPress={() => setTorch(!torch)} /> : null}
@@ -92,16 +132,23 @@ export default function Scan({ nav, params = {} }) {
                 </Text>
               </View>
             </View>
-            <View style={{ alignItems: 'center', paddingBottom: 20 }}>
-              <Pressable accessibilityRole="button" onPress={() => setTyping(true)}
-                style={{ height: 48, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, borderRadius: 999, backgroundColor: 'rgba(238, 244, 228, 0.12)' }}>
-                <Icon name="keyboard" size={18} color={CAMERA_TEXT} />
-                <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: CAMERA_TEXT }}>Tag damaged? Type the ID</Text>
-              </Pressable>
+            <View style={{ alignItems: 'center', paddingBottom: 20, gap: 10 }}>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <Pressable accessibilityRole="button" onPress={pickFromGallery}
+                  style={{ height: 46, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(238, 244, 228, 0.12)' }}>
+                  <Icon name="plus" size={18} color={CAMERA_TEXT} />
+                  <Text style={{ fontFamily: font('text', 700), fontSize: 14, color: CAMERA_TEXT }}>From gallery</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={() => setTyping(true)}
+                  style={{ height: 46, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(238, 244, 228, 0.12)' }}>
+                  <Icon name="keyboard" size={18} color={CAMERA_TEXT} />
+                  <Text style={{ fontFamily: font('text', 700), fontSize: 14, color: CAMERA_TEXT }}>Type ID</Text>
+                </Pressable>
+              </View>
             </View>
           </>
         )}
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -160,6 +207,22 @@ function ManualEntry({ value, onChange, onSubmit, onCancel }) {
 function Result({ result, role, nav, onAgain }) {
   const { c } = useTheme();
   const { db } = useStore();
+
+  if (result.kind === 'unfinished') {
+    return (
+      <Sheet>
+        <Mono size={20}>{result.id}</Mono>
+        <View style={{ gap: 6 }}>
+          <Txt v="title2" style={{ fontSize: 26, lineHeight: 32 }}>Finish this plant record?</Txt>
+          <Txt v="body" color={c.ink2}>You saved this plant, but its record did not reach the server. Send it again to put it in the review queue.</Txt>
+        </View>
+        <View style={{ gap: 4 }}>
+          <Button label="Finish and send" onPress={() => nav.replace('add', { qr: result.id })} />
+          <Button label="Scan a different tag" kind="text" height={48} size={15} onPress={onAgain} />
+        </View>
+      </Sheet>
+    );
+  }
 
   if (result.kind === 'unused') {
     const botanist = role === 'botanist';

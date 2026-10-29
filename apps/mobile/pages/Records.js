@@ -9,9 +9,9 @@ import { plantView, nameOf } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Bar, TitleBlock, Pills, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty,
+  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty,
 } from '../components/Bits.js';
-import { shortDate, dateTime, coords } from '../components/format.js';
+import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 
 const GROUPS = [
   { key: 'fix', title: 'Needs you', statuses: ['returned', 'draft'] },
@@ -20,15 +20,28 @@ const GROUPS = [
   { key: 'rejected', title: 'Rejected', statuses: ['rejected'] },
 ];
 
+const SORT_RECORDS = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'oldest', label: 'Oldest' },
+  { key: 'name', label: 'Plant (A–Z)' },
+  { key: 'tag', label: 'Tag ID' },
+];
+
 export function MyRecords({ nav }) {
   const { db, me } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id)
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
     .filter((o) => o.plant)
-    .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    .sort((a, b) => {
+      if (sort === 'oldest') return a.observed_at.localeCompare(b.observed_at);
+      if (sort === 'name') return (a.plant?.name || '').localeCompare(b.plant?.name || '');
+      if (sort === 'tag') return (a.plant?.qr_id || '').localeCompare(b.plant?.qr_id || '');
+      return b.observed_at.localeCompare(a.observed_at);
+    });
   const count = (g) => mine.filter((o) => g.statuses.includes(o.status)).length;
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
   // A plant's later visits are labelled as revisits.
@@ -42,6 +55,7 @@ export function MyRecords({ nav }) {
         onChange={setFilter}
         items={[{ key: 'all', label: `All ${mine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
       />
+      <SortBar items={SORT_RECORDS} value={sort} onChange={setSort} />
       {mine.length === 0 ? <Empty icon="file">No records yet. Scan an unused tag to add your first plant.</Empty> : null}
       {groups.map((g, gi) => {
         const rows = mine.filter((o) => g.statuses.includes(o.status));
@@ -75,10 +89,13 @@ export function MyRecords({ nav }) {
 const lastReview = (db, obsId) => db.reviews.filter((r) => r.observation_id === obsId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
 export function RecordDetail({ nav, params = {} }) {
-  const { db, me, resubmit, notify } = useStore();
+  const { db, me, resubmit, syncObservation } = useStore();
   const { c } = useTheme();
   const [message, setMessage] = useState('');
   const o = db.observations.find((x) => x.id === params.id);
+  // Editable copy while the record is returned; saved only when it is sent again.
+  const [fix, setFix] = useState(() => ({ morphology: o?.morphology || '', height_cm: o?.height_cm != null ? String(o.height_cm) : '', notes: o?.notes || '' }));
+  const [sending, setSending] = useState(false);
   const plant = o ? plantView(db, db.plants.find((p) => p.id === o.specimen_id)) : null;
   if (!o || !plant) {
     return <Screen header={<Bar title="Record" onBack={nav.back} />}><Empty>This record no longer exists.</Empty></Screen>;
@@ -88,10 +105,20 @@ export function RecordDetail({ nav, params = {} }) {
   const photos = plant.photos.filter((p) => p.observation_id === o.id);
   const returned = o.status === 'returned';
 
-  const send = () => {
-    resubmit(o.id, message.trim());
-    notify(`${plant.qr_id} sent for review again`);
-    nav.back();
+  const send = async () => {
+    if (sending) return;
+    setSending(true);
+    const r = await resubmit(o.id, message.trim(), fix); // shows its own success or error message
+    setSending(false);
+    if (r.ok) nav.back(); // on failure the edits stay on screen
+  };
+  const unsent = o.status === 'draft' || o.status === 'queued';
+  const sendDraft = async () => {
+    if (sending) return;
+    setSending(true);
+    const r = await syncObservation(o.id);
+    setSending(false);
+    if (r.ok) nav.back();
   };
 
   return (
@@ -99,7 +126,9 @@ export function RecordDetail({ nav, params = {} }) {
       header={<Bar title={plant.qr_id} sub={`${o.status === 'returned' ? 'Returned' : o.status === 'approved' ? 'Published' : 'Recorded'} ${shortDate(returned ? review?.created_at : o.observed_at)}`} onBack={nav.back} />}
       gap={20}
       top={20}
-      footer={returned ? <View style={{ flex: 1 }}><Button label="Resubmit for review" onPress={send} /></View> : null}
+      footer={returned
+        ? <View style={{ flex: 1 }}><Button label={sending ? 'Sending…' : 'Resubmit for review'} onPress={send} disabled={sending} /></View>
+        : unsent ? <View style={{ flex: 1 }}><Button label={sending ? 'Sending…' : 'Send for review'} onPress={sendDraft} disabled={sending} /></View> : null}
     >
       <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
         <Thumb uri={plant.photos[0]?.url} size={64} />
@@ -143,13 +172,21 @@ export function RecordDetail({ nav, params = {} }) {
         </View>
       </Section>
 
+      {returned ? (
+        <Section title="Fix the record" gap={12}>
+          <Area label="Appearance" value={fix.morphology} onChangeText={(t) => setFix({ ...fix, morphology: t })} />
+          <Field label="Height (cm)" value={fix.height_cm} onChangeText={(t) => setFix({ ...fix, height_cm: t.replace(/[^\d.]/g, '') })} keyboardType="decimal-pad" width={140} />
+          <Area label="Field notes" optional value={fix.notes} onChangeText={(t) => setFix({ ...fix, notes: t })} rows={2} />
+        </Section>
+      ) : null}
+
       <Section title="Record" gap={0}>
         <KV rows={[
           ['Seen', dateTime(o.observed_at)],
           ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
           ['Appearance', o.morphology || '-'],
           ['Notes', o.notes || '-'],
-          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>±{Math.round(o.gps_accuracy_m || plant.gps_accuracy_m)} m</Text></Text>],
+          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
           ['Version', `${o.version}`],
         ]} />
       </Section>

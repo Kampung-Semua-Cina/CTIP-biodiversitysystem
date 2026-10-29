@@ -7,9 +7,9 @@ import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
 import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
-import { AppearanceSection, PrototypeRoleSection } from '../components/Chrome.js';
+import { AppearanceSection, PrototypeRoleSection, VersionLine } from '../components/Chrome.js';
 import {
-  Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, Row, DotLabel,
+  Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, SortBar, Row, DotLabel,
   Field, Segmented, Empty,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
@@ -18,6 +18,7 @@ export function StaffMore({ nav }) {
   const { me, role, logout } = useStore();
   const { c } = useTheme();
   const tools = [
+    can(role, 'monitor') && { icon: 'activity', label: 'Monitoring', go: 'monitor' },
     can(role, 'species') && { icon: 'leaf', label: 'Species', go: 'speciesAdmin' },
     can(role, 'tags') && { icon: 'qr', label: 'QR tags', go: 'tags' },
     can(role, 'reports') && { icon: 'chart', label: 'Reports', go: 'reports' },
@@ -42,6 +43,7 @@ export function StaffMore({ nav }) {
       </Section>
       <AppearanceSection />
       <PrototypeRoleSection />
+      <VersionLine />
       <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={logout} />
     </Screen>
   );
@@ -55,11 +57,20 @@ const ROLE_FILTERS = [
   { key: 'off', label: 'Deactivated' },
 ];
 
+const SORT_USERS = [
+  { key: 'active', label: 'Active first' },
+  { key: 'name', label: 'Name (A–Z)' },
+  { key: 'nameDesc', label: 'Name (Z–A)' },
+  { key: 'role', label: 'Role' },
+  { key: 'email', label: 'Email' },
+];
+
 export function Users({ nav }) {
   const { db, addUser, notify } = useStore();
   const { c } = useTheme();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('active');
   const [inviting, setInviting] = useState(false);
   const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist' });
   const [error, setError] = useState('');
@@ -67,13 +78,21 @@ export function Users({ nav }) {
   const rows = db.profiles
     .filter((p) => (filter === 'all' ? true : filter === 'off' ? !p.is_active : p.role === filter && p.is_active))
     .filter((p) => !needle || `${p.full_name} ${p.email}`.toLowerCase().includes(needle))
-    .sort((a, b) => b.is_active - a.is_active || a.full_name.localeCompare(b.full_name));
+    ;
+  const sorted = [...rows].sort((a, b) => {
+    if (sort === 'name') return a.full_name.localeCompare(b.full_name);
+    if (sort === 'nameDesc') return b.full_name.localeCompare(a.full_name);
+    if (sort === 'role') return (a.role || '').localeCompare(b.role || '') || a.full_name.localeCompare(b.full_name);
+    if (sort === 'email') return (a.email || '').localeCompare(b.email || '');
+    return (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name);
+  });
   const off = db.profiles.filter((p) => !p.is_active).length;
 
-  const invite = () => {
+  const invite = async () => {
     if (!form.full_name.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Enter a name and a valid email.');
-    if (!addUser({ ...form, full_name: form.full_name.trim() })) return setError('Someone already uses this email.');
-    notify(`${form.full_name.trim()} can now sign in`);
+    const res = await addUser({ ...form, full_name: form.full_name.trim() });
+    if (!res?.ok) return setError(res?.message || 'Someone already uses this email.');
+    notify(res.invited ? `Invitation sent to ${form.email.trim()}` : `${form.full_name.trim()} can now sign in`);
     setInviting(false);
     setForm({ full_name: '', email: '', role: 'botanist' });
     setError('');
@@ -97,13 +116,14 @@ export function Users({ nav }) {
       ) : null}
       <SearchField value={q} onChangeText={setQ} placeholder="Search name or email" />
       <Pills value={filter} onChange={setFilter} items={ROLE_FILTERS} />
+      <SortBar items={SORT_USERS} value={sort} onChange={setSort} />
       <View>
-        {rows.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
-        {rows.map((p, i) => (
+        {sorted.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
+        {sorted.map((p, i) => (
           <Row key={p.id} serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={p.full_name}
             sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
             right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
-            last={i === rows.length - 1} />
+            last={i === sorted.length - 1} />
         ))}
       </View>
       <Button label="Audit log" kind="text" icon="shield" height={48} size={15} onPress={() => nav.go('audit')} />
@@ -140,6 +160,7 @@ export function Audit({ nav }) {
   const { db } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('active');
   const rows = db.audit
     .filter((a) => filter === 'all' || (filter === 'accounts' ? a.table_name === 'profiles' : a.table_name !== 'profiles'))
     .sort((a, b) => b.changed_at.localeCompare(a.changed_at));
