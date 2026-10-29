@@ -234,8 +234,8 @@ and `package-lock.json`. The root `package.json` (adopted with `rick3`) only hol
 scripts that run them (`npm run web`, `npm run mobile`, `npm run api`,
 `npm run api:test`, …); it has no dependencies and is not an npm workspace. The
 old shared packages (`design-system`, `hooks`, `types`, `ui`) were removed on
-7 Oct 2026, so do not import from `@ctip/*`. The empty `eas.json` at the repo
-root is a stray file; the real one is `apps/mobile/eas.json`.
+7 Oct 2026, so do not import from `@ctip/*`. The EAS build profiles are in
+`apps/mobile/eas.json` (the empty stray one at the repo root was deleted, CTIP-118).
 
 ## Database changes (Supabase)
 
@@ -452,12 +452,10 @@ is empty), Mosquitto config (`infra/mosquitto/` is empty), vulnerability test
 plan (`docs/testing/` is empty on `main`).
 
 **Leftovers to clean up before the demo** (details in
-`docs/updates/rick3-bugs.md` §7): hard-coded placeholder profiles in
-`apps/shared/data.js` (`initialProfiles`, S3); the web "Scan or upload QR"
-button picks the next unused tag instead of reading the image (S6); unused
-`apps/mobile/components/PhotoEditor.js` adds Unsplash stock photos (S7);
-prototype wording ("Local Prototype" chip in web `Account.jsx`, S8; the mobile
-"Sample data only…" line went with the role switch in #36).
+`docs/updates/rick3-bugs.md` §7): the web "Scan or upload QR" button picks the
+next unused tag instead of reading the image (S6, needs its own story). S3
+(placeholder profiles), S7 (mobile `PhotoEditor.js`) and S8 (prototype
+wording) were removed with CTIP-118 on 30 Oct.
 
 **Open security findings, for the assessment (CTIP-37):** see
 `docs/updates/rick3-bugs.md` §3. Still open: new sign-ups default to active
@@ -519,12 +517,13 @@ checks the role itself).
   `location_reduced: true`, null stays null, unknown species fails closed). Any
   new endpoint that returns specimens must use it; this is a test case in the
   security assessment.
-- The demo role switcher's buttons were removed from both apps on 30 Oct
-  (#36): they no longer signed in, so they showed pages the API refused. The
-  store's `setRole` still works only in local dev builds (`ROLE_SWITCH_ENABLED`
-  in `StoreProvider.js`: `import.meta.env.DEV` / `__DEV__`), with its password
-  only from a gitignored `.env` (`VITE_DEMO_PASSWORD` /
-  `EXPO_PUBLIC_DEMO_PASSWORD`). Never put a password in the code (CTIP-113).
+- There is no demo role switcher any more. Its buttons were removed from both
+  apps in #36, and the store code (`setRole`, `ROLE_SWITCH_ENABLED`) and the
+  demo profiles in `apps/shared/data.js` in CTIP-118. The role always comes from
+  the signed-in user's profile, loaded through the API. To try another role,
+  sign in as that account. Never put a password in the code (CTIP-113). The
+  agent test suites keep their sample profiles in
+  `apps/mobile/tests/helpers/demoProfiles.mjs`.
 - Never commit `.env`, Supabase keys, or MQTT certs. Check `.gitignore` covers them
   before any first commit in a new folder.
 - Record creation uses server-assigned IDs with client-side idempotency keys, from

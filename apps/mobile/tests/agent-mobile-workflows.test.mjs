@@ -4,7 +4,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { ROUTE_NAMES, FULL_SCREEN, canAccess } from "../navigation/routeMeta.js";
-import { initialProfiles, DEMO_EMAILS, DEMO_USER } from "../../shared/data.js";
+import { initialProfiles, DEMO_EMAILS, DEMO_USER } from "./helpers/demoProfiles.mjs";
 import { MobileDriver } from "./helpers/mobileDriver.mjs";
 import { attachLogcatWatchdog } from "./helpers/logcatWatchdog.mjs";
 import { auditWithOllama } from "./helpers/ollama.mjs";

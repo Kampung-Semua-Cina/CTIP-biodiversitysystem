@@ -1,18 +1,17 @@
 // apps/mobile/pages/AddPlant.js
 // New plant record after scanning an unused tag, the "Sent for review" screen,
 // and a revisit to a plant that is already tagged.
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { scanFromURLAsync } from 'expo-camera';
 
 import { useStore } from '../../shared/store.js';
-import { plantView } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Header, IconButton, TextLink, Txt, Mono, Sci, Section, Field, Area, Button, DotLabel, Thumb, Empty,
+  Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
