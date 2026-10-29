@@ -2,10 +2,15 @@
 import process from 'node:process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { getVersion } from '../../scripts/version.mjs'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // The app version, 1.0.<commit count> (scripts/version.mjs), shown in the footer.
+  define: {
+    __APP_VERSION__: JSON.stringify(getVersion()),
+  },
   resolve: {
     // The repo has more than one React (web + mobile). Always use the web app's own copy.
     dedupe: ['react', 'react-dom'],

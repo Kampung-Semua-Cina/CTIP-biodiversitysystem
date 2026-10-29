@@ -4,8 +4,9 @@
   "private": true,
   "description": "Daun Sense — Smart Ground-Truthing & Digital Biodiversity System",
   "scripts": {
-    "instructions": "node -e \"console.log('\\n=== DAUN SENSE WORKSPACE INSTRUCTIONS ===\\n\\nMobile App (Expo):\\n  npm run mobile              Start mobile app on local network (same Wi-Fi)\\n  npm run mobile:tunnel       Start mobile app with tunnel (connect across different networks/cellular)\\n  npm run mobile:android      Start mobile app on connected Android device/emulator\\n  npm run mobile:web          Start mobile app in web browser mode\\n  npm run mobile:test:agent   Run automated Android emulator + local AI agent test suite\\n  npm run mobile:test:agent:ui Launch interactive Web Test Studio dashboard\\n  npm run mobile:test:agent:watch Run mobile agent tests in live watch mode\\n\\nWeb Portal (React + Vite):\\n  npm run web                 Start web dev server at http://localhost:5173\\n  npm run web:build           Build web portal for production\\n  npm run web:lint            Run ESLint code quality checks\\n  npm run test:agent          Run automated Web + local AI agent test suite\\n  npm run test:agent:ui       Launch Playwright interactive UI test runner\\n\\nBackend API (Express):\\n  npm run api                 Start backend API in development watch mode\\n  npm run api:start           Start backend API in production mode\\n  npm run api:test            Run API automated test suite\\n')\"",
+    "instructions": "node -e \"console.log('\\n=== DAUN SENSE WORKSPACE INSTRUCTIONS ===\\n\\nVersion:\\n  npm run app-version         Show the version: 1.0.<commit count>, raised by every commit.\\n                              Change MAJOR.MINOR in package.json \\\"version\\\" for a new release line.\\n\\nMobile App (Expo):\\n  npm run mobile              Start mobile app on local network (same Wi-Fi)\\n  npm run mobile:tunnel       Start mobile app with tunnel (connect across different networks/cellular)\\n  npm run mobile:android      Start mobile app on connected Android device/emulator\\n  npm run mobile:web          Start mobile app in web browser mode\\n  npm run mobile:build:apk    Build the Android APK on EAS (stamps the app version first)\\n  npm run mobile:test:agent   Run automated Android emulator + local AI agent test suite\\n  npm run mobile:test:agent:ui Launch interactive Web Test Studio dashboard\\n  npm run mobile:test:agent:watch Run mobile agent tests in live watch mode\\n\\nWeb Portal (React + Vite):\\n  npm run web                 Start web dev server at http://localhost:5173\\n  npm run web:build           Build web portal for production\\n  npm run web:lint            Run ESLint code quality checks\\n  npm run test:agent          Run automated Web + local AI agent test suite\\n  npm run test:agent:ui       Launch Playwright interactive UI test runner\\n\\nBackend API (Express):\\n  npm run api                 Start backend API in development watch mode\\n  npm run api:start           Start backend API in production mode\\n  npm run api:test            Run API automated test suite\\n')\"",
     "help": "npm run instructions",
+    "app-version": "node scripts/version.mjs",
     "mobile": "npm --prefix apps/mobile run start",
     "mobile:test": "npm --prefix apps/mobile test",
     "mobile:test:agent": "npm --prefix apps/mobile run test:agent",
@@ -14,6 +15,7 @@
     "mobile:tunnel": "npm --prefix apps/mobile run tunnel",
     "mobile:android": "npm --prefix apps/mobile run android",
     "mobile:web": "npm --prefix apps/mobile run web",
+    "mobile:build:apk": "npm --prefix apps/mobile run build:apk",
     "web": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:lint": "npm --prefix apps/web run lint",

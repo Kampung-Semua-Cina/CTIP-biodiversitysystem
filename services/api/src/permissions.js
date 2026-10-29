@@ -12,16 +12,24 @@ export const routes = [
   // Public (Visitor)
   ['get', '/public/species', PUBLIC],
   ['get', '/public/species/:id', PUBLIC],
+  ['get', '/public/workspace', PUBLIC], // published species and photos for the visitor pages
+
+  // Start-up load: everything the apps show, as the signed-in user's RLS allows
+  ['get', '/workspace', ANY_STAFF],
 
   // Profiles
   ['get', '/me', ANY_STAFF],
+  ['patch', '/me', ANY_STAFF],
   ['get', '/profiles', ADMIN],
+  ['post', '/profiles', ADMIN],
   ['patch', '/profiles/:id', ADMIN],
 
   // QR tags
   ['get', '/qr-tags', ANY_STAFF],
   ['post', '/qr-tags/batch', OFFICER_ADMIN],
   ['get', '/qr-tags/:qrId', ANY_STAFF],
+  ['delete', '/qr-tags/:qrId', OFFICER_ADMIN],
+  ['post', '/qr-tags/:qrId/retire', OFFICER_ADMIN],
 
   // Species
   ['get', '/species', OFFICER_ADMIN],
@@ -30,6 +38,7 @@ export const routes = [
   ['patch', '/species/:id', OFFICER_ADMIN],
   ['delete', '/species/:id', OFFICER_ADMIN],
   ['post', '/species/:id/publish', OFFICER_ADMIN],
+  ['post', '/species/:id/restore', OFFICER_ADMIN],
   ['get', '/species/:id/media', OFFICER_ADMIN],
   ['post', '/species/:id/media', OFFICER_ADMIN],
   ['patch', '/species/:id/media/:mediaId', OFFICER_ADMIN],

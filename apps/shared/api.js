@@ -64,6 +64,14 @@ export function setApiBaseUrl(url) {
 
 export function getApiBaseUrl() {
   if (customBaseUrl) return customBaseUrl;
+  // React Native also defines window, so check it first. A phone cannot use a
+  // relative path or its own localhost: set EXPO_PUBLIC_API_URL (apps/mobile/.env,
+  // eas.json) to the API's address, e.g. http://192.168.1.20:8000.
+  // Expo inlines EXPO_PUBLIC_ variables only when written out in full like this.
+  if (typeof navigator !== "undefined" && navigator.product === "ReactNative") {
+    const fromEnv = typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL : undefined;
+    return fromEnv ? fromEnv.replace(/\/+$/, "") + "/v1" : "http://localhost:8000/v1";
+  }
   // Browser environment: use Vite proxy path or environment variable
   if (typeof window !== "undefined") {
     // If running under Vite in dev or preview, check env
@@ -255,7 +263,8 @@ export async function updateSpeciesApi(id, sp, { token } = {}) {
 export async function uploadSpeciesMediaApi(speciesId, file, fields = {}, { token } = {}) {
   const form = new FormData();
   for (const [k, v] of Object.entries(fields)) if (v != null) form.append(k, String(v));
-  form.append("file", file, file.name || "photo");
+  if (file.uri) form.append("file", file); // React Native: { uri, name, type }
+  else form.append("file", file, file.name || "photo");
   // Up to 10 MB on a field connection: allow longer than the usual 8 s.
   return apiFetch(`/species/${encodeURIComponent(speciesId)}/media`, { method: "POST", token, body: form, timeout: 60000 });
 }
@@ -304,6 +313,87 @@ export async function fetchDistribution({ speciesId, family, token } = {}) {
   const qStr = query.toString();
   return apiFetch(`/distribution${qStr ? `?${qStr}` : ""}`, { token });
 }
+
+/**
+ * Everything the apps show, in one request. Signed in: GET /v1/workspace, the
+ * rows this user's role may see. Visitor: GET /v1/public/workspace, published
+ * species and their photos. Photo rows come with a `url` ready to show.
+ */
+export async function fetchWorkspace({ token } = {}) {
+  return token ? apiFetch("/workspace", { token, timeout: 20000 }) : apiFetch("/public/workspace", { timeout: 20000 });
+}
+
+const enc = encodeURIComponent;
+const send = (method, path, body, token) => apiFetch(path, { method, token, body });
+
+// Own account
+export const updateMeApi = (changes, { token } = {}) => send("PATCH", "/me", changes, token);
+
+// Accounts (Admin)
+export const createProfileApi = (profile, { token } = {}) => send("POST", "/profiles", profile, token);
+export const updateProfileApi = (id, changes, { token } = {}) => send("PATCH", `/profiles/${enc(id)}`, changes, token);
+
+// Plants and observations
+export const findSpecimenByQrApi = (qrId, { token } = {}) => apiFetch(`/specimens/by-qr/${enc(qrId)}`, { token });
+export const createSpecimenApi = (specimen, { token } = {}) => send("POST", "/specimens", specimen, token);
+export const updateSpecimenApi = (id, changes, { token } = {}) => send("PATCH", `/specimens/${enc(id)}`, changes, token);
+export const createObservationApi = (obs, { token } = {}) => send("POST", "/observations", obs, token);
+// Draft/queued: sent as it is. Returned: with fixes (height_cm, morphology, notes) and an optional comment.
+export const submitObservationApi = (id, body = {}, { token } = {}) => send("POST", `/observations/${enc(id)}/submit`, body, token);
+export const addCommentApi = (id, body, { token } = {}) => send("POST", `/observations/${enc(id)}/comments`, { body }, token);
+
+// The file part of an upload. In the browser a File or Blob; in React Native
+// FormData takes { uri, name, type } and streams the file from the device.
+const isReactNative = typeof navigator !== "undefined" && navigator.product === "ReactNative";
+export async function filePart(photo) {
+  if (photo.file) return photo.file;
+  if (!photo.url) return null;
+  if (isReactNative && !/^https?:/i.test(photo.url)) {
+    return { uri: photo.url, name: photo.name || "photo.jpg", type: photo.type || "image/jpeg" };
+  }
+  try {
+    return await (await fetch(photo.url)).blob();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Field photo: POST /v1/observations/:id/photos. photo is the app's photo
+ * object ({ file } on web, { url: file:// or content:// } on mobile). Its id is
+ * sent too, so a retry does not save the same photo twice.
+ */
+export async function uploadObservationPhotoApi(observationId, photo, { token } = {}) {
+  const part = await filePart(photo);
+  if (!part) return { ok: false, code: "UNREADABLE_PHOTO", message: "This photo could not be read. Remove it and add it again." };
+  const form = new FormData();
+  if (photo.id) form.append("id", photo.id);
+  if (part.uri) form.append("file", part);
+  else form.append("file", part, part.name || photo.name || "photo");
+  return apiFetch(`/observations/${enc(observationId)}/photos`, { method: "POST", token, body: form, timeout: 60000 });
+}
+
+// Species: publish/unpublish, soft delete, restore
+export const publishSpeciesApi = (id, is_published, { token } = {}) => send("POST", `/species/${enc(id)}/publish`, { is_published }, token);
+export const deleteSpeciesApi = (id, { token } = {}) => send("DELETE", `/species/${enc(id)}`, undefined, token);
+export const restoreSpeciesApi = (id, { token } = {}) => send("POST", `/species/${enc(id)}/restore`, undefined, token);
+
+// QR tags (Officer/Admin). The API picks the next free ids.
+export const createTagBatchApi = (count, batch_label, { token } = {}) => send("POST", "/qr-tags/batch", { count, batch_label }, token);
+export const deleteTagApi = (qrId, { token } = {}) => send("DELETE", `/qr-tags/${enc(qrId)}`, undefined, token);
+export const retireTagApi = (qrId, { token } = {}) => send("POST", `/qr-tags/${enc(qrId)}/retire`, undefined, token);
+
+// Alerts and sensors (Officer/Admin)
+export const assignAlertApi = (id, assigned_to, { token } = {}) => send("POST", `/alerts/${enc(id)}/assign`, { assigned_to }, token);
+export const acknowledgeAlertApi = (id, { token } = {}) => send("POST", `/alerts/${enc(id)}/acknowledge`, undefined, token);
+export const resolveAlertApi = (id, outcome, { token } = {}) => send("POST", `/alerts/${enc(id)}/resolve`, { outcome }, token);
+export const addAlertNoteApi = (id, note, { token } = {}) => send("POST", `/alerts/${enc(id)}/notes`, { note }, token);
+export const setThresholdsApi = (nodeId, thresholds, { token } = {}) => send("PATCH", `/sensor-nodes/${enc(nodeId)}`, { thresholds }, token);
+
+// Notifications (the signed-in person's own)
+export const fetchNotificationsApi = ({ token } = {}) => apiFetch("/notifications", { token });
+export const markReadApi = (id, { token } = {}) => send("POST", `/notifications/${enc(id)}/read`, undefined, token);
+export const markAllReadApi = ({ token } = {}) => send("POST", "/notifications/read-all", undefined, token);
 
 /**
  * Check if the backend API server is reachable and active.

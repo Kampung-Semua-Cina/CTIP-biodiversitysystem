@@ -3,6 +3,8 @@ import { speciesHandlers, applySearch, parseSearch } from './species.js';
 import { distributionHandlers } from './distribution.js';
 import { speciesMediaHandlers } from './speciesMedia.js';
 import { observationHandlers } from './observations.js';
+import { fieldHandlers } from './field.js';
+import { staffHandlers } from './staff.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -68,4 +70,6 @@ export const handlers = {
   ...distributionHandlers,
   ...speciesMediaHandlers,
   ...observationHandlers,
+  ...fieldHandlers,
+  ...staffHandlers,
 };

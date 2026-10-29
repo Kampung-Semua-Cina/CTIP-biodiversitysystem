@@ -7,7 +7,7 @@ import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
 import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
-import { AppearanceSection, PrototypeRoleSection } from '../components/Chrome.js';
+import { AppearanceSection, PrototypeRoleSection, VersionLine } from '../components/Chrome.js';
 import {
   Screen, Header, IconButton, TitleBlock, Section, MenuRow, Button, Avatar, Txt, Mono, SearchField, Pills, SortBar, Row, DotLabel,
   Field, Segmented, Empty,
@@ -43,6 +43,7 @@ export function StaffMore({ nav }) {
       </Section>
       <AppearanceSection />
       <PrototypeRoleSection />
+      <VersionLine />
       <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={logout} />
     </Screen>
   );
@@ -87,10 +88,11 @@ export function Users({ nav }) {
   });
   const off = db.profiles.filter((p) => !p.is_active).length;
 
-  const invite = () => {
+  const invite = async () => {
     if (!form.full_name.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Enter a name and a valid email.');
-    if (!addUser({ ...form, full_name: form.full_name.trim() })) return setError('Someone already uses this email.');
-    notify(`${form.full_name.trim()} can now sign in`);
+    const res = await addUser({ ...form, full_name: form.full_name.trim() });
+    if (!res?.ok) return setError(res?.message || 'Someone already uses this email.');
+    notify(res.invited ? `Invitation sent to ${form.email.trim()}` : `${form.full_name.trim()} can now sign in`);
     setInviting(false);
     setForm({ full_name: '', email: '', role: 'botanist' });
     setError('');

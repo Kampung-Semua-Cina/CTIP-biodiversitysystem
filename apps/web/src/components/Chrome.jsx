@@ -196,6 +196,10 @@ export function BottomBar({ role, seg, unread }) {
   );
 }
 
+// App version, 1.0.<commit count> and the commit it was built from (vite.config.js, scripts/version.mjs).
+const APP_VERSION = __APP_VERSION__;
+const versionText = `v${APP_VERSION.version} · ${APP_VERSION.commit}${APP_VERSION.dirty ? "+changes" : ""}`;
+
 // Footer: brand and park, live counts, link columns, and a bottom bar.
 // The third column and the counts change with the role: visitors get "Staff sign in",
 // staff get their own tools and the counts that need their attention.
@@ -255,7 +259,7 @@ export function Footer({ role, mode, onMode }) {
         </div>
         <div className="footbar">
           <span>
-            © 2026 {SITE} · A CTIP project
+            © 2026 {SITE} · A CTIP project · <span title={`Built ${APP_VERSION.builtAt}`}>{versionText}</span>
             {me && <> · Signed in as <b>{me.full_name || me.email}</b> ({ROLE_LABEL[me.role] || me.role})</>}
           </span>
           <span className="footactions">
