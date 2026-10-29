@@ -13,7 +13,7 @@ telemetry), T13 (exact GPS leaks), asset 3 (accounts, emails, tokens).
 | API to Supabase uses TLS | `SUPABASE_URL` is `https://`; the API refuses to start in production otherwise | Done (CTIP-35) |
 | MQTT uses TLS | Mosquitto listener on 8883 with TLS only, no anonymous clients | Owned by CTIP-17; settings below |
 | Personal data encrypted at rest | Supabase encrypts the whole database and Storage at rest (AES-256), including `profiles` and `audit_logs` | Provided by Supabase; nothing to build |
-| Mobile SQLite encrypted | `expo-sqlite` with SQLCipher, key in `expo-secure-store` | To do when the offline database is added; settings below |
+| Mobile SQLite encrypted | `expo-sqlite` with SQLCipher, key in `expo-secure-store` | Done for the draft store (CTIP-107); settings below |
 | Secrets in env vars, never in the repo | `.env` is git-ignored; only `.env.example` files with placeholders are committed | Done; git history scanned on 26 Oct 2026, no keys found |
 
 ## 1. In transit
@@ -94,34 +94,23 @@ the publishable key only in clients, and the API's field whitelists (CTIP-89).
 
 ### Mobile SQLite (offline records)
 
-The mobile app does not have its SQLite database yet (it runs on sample data).
-When the offline story adds it, use SQLCipher, which `expo-sqlite` (SDK 57)
-includes:
+The draft store (`apps/mobile/draftStore.js`, CTIP-57) is the app's SQLite
+database. It is encrypted with SQLCipher, which `expo-sqlite` (SDK 57) includes
+(CTIP-107):
 
-1. `npx expo install expo-sqlite expo-secure-store expo-crypto`
+1. `npx expo install expo-secure-store expo-crypto` (`expo-sqlite` was already
+   installed).
 2. `app.json`: `"plugins": [["expo-sqlite", { "useSQLCipher": true }]]`.
-   SQLCipher needs a development build (`npx expo run:android`); Expo Go does
-   not include it.
-3. Open the database with a random key kept in the phone's secure storage
-   (Android Keystore / iOS Keychain), never in code. This sketch has not been run
-   yet, because the app has no SQLite database to try it on:
+   SQLCipher needs a development or EAS build; Expo Go does not include it, and
+   the app logs a warning there because the file is not encrypted.
+3. The first time the database is opened, the app makes a random 32-byte key
+   with `expo-crypto` and keeps it in `expo-secure-store` (Android Keystore),
+   never in code. Every open runs `PRAGMA key = "x'<key>'"` first.
+4. The file is `daun_drafts_secure.db`. Drafts saved by older builds in the plain
+   `daun_drafts.db` are copied into it once, and the plain file is deleted.
 
-```js
-import * as SQLite from 'expo-sqlite';
-import * as SecureStore from 'expo-secure-store';
-import * as Crypto from 'expo-crypto';
-
-export async function openEncryptedDb() {
-  let key = await SecureStore.getItemAsync('db_key');
-  if (!key) {
-    key = Array.from(Crypto.getRandomBytes(32), (b) => b.toString(16).padStart(2, '0')).join('');
-    await SecureStore.setItemAsync('db_key', key);
-  }
-  const db = await SQLite.openDatabaseAsync('ctip.db');
-  await db.execAsync(`PRAGMA key = "x'${key}'"`); // must be the first statement
-  return db;
-}
-```
+Any new SQLite database (for example the CTIP-44 local store) must open the same
+way: reuse the key from `draftStore.js` rather than making a second one.
 
 The Supabase session on the phone (CTIP-42) should also be kept with
 `expo-secure-store` rather than plain AsyncStorage, because it contains the
@@ -156,5 +145,5 @@ bucket.
 | Start the API with `REQUIRE_HTTPS=true` and `SUPABASE_URL=http://...` | Refuses to start |
 | `mosquitto_sub -h <broker> -p 1883 -t '#'` | Connection refused |
 | `mosquitto_sub -h <broker> -p 8883 --cafile ca.crt -t '#'` without a password | Not authorised |
-| Pull `ctip.db` off a test phone and open it with `sqlite3` | "file is not a database" |
+| Pull `daun_drafts_secure.db` off a test phone and open it with `sqlite3` | "file is not a database" |
 | `git log --all -p \| grep -E "sb_secret_\|BEGIN PRIVATE KEY"` | No output |

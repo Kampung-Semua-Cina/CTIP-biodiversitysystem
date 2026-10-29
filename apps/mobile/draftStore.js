@@ -1,29 +1,83 @@
 // apps/mobile/draftStore.js
 // Crash-safe local draft persistence for in-progress plant observations (CTIP-57).
 // Uses expo-sqlite on native devices, with graceful fallback to AsyncStorage / memory.
+// The SQLite file is encrypted with SQLCipher (CTIP-107, docs/security/encryption.md
+// "Mobile SQLite"): useSQLCipher is on in app.json, and the key is 32 random bytes
+// made on the phone and kept in expo-secure-store, never in code.
 
-let sqliteDb = null;
+const DB_NAME = 'daun_drafts_secure.db';
+// Drafts saved before CTIP-107 live in this plain file; they are copied into the
+// encrypted one on first open and the plain file is deleted.
+const OLD_DB_NAME = 'daun_drafts.db';
+const KEY_NAME = 'daun_drafts_db_key';
+
+let dbPromise = null;
 const memoryStore = new Map();
 
-async function getDb() {
-  if (sqliteDb) return sqliteDb;
+async function getDbKey() {
+  const SecureStore = await import('expo-secure-store');
+  let key = await SecureStore.getItemAsync(KEY_NAME);
+  if (!key || !/^[0-9a-f]{64}$/.test(key)) {
+    const { getRandomBytes } = await import('expo-crypto');
+    key = Array.from(getRandomBytes(32), (b) => b.toString(16).padStart(2, '0')).join('');
+    await SecureStore.setItemAsync(KEY_NAME, key, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  }
+  return key;
+}
+
+function moveOldDrafts(SQLite, db) {
+  try {
+    const old = SQLite.openDatabaseSync(OLD_DB_NAME);
+    const hasTable = old.getFirstSync(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'drafts';"
+    );
+    const rows = hasTable ? old.getAllSync('SELECT qr_id, data, updated_at FROM drafts;') : [];
+    old.closeSync();
+    for (const r of rows) {
+      db.runSync(
+        'INSERT OR IGNORE INTO drafts (qr_id, data, updated_at) VALUES (?, ?, ?);',
+        [r.qr_id, r.data, r.updated_at]
+      );
+    }
+    SQLite.deleteDatabaseSync(OLD_DB_NAME);
+  } catch {
+    // No old file, or it could not be read: nothing to move.
+  }
+}
+
+async function openDb() {
   try {
     const SQLite = await import('expo-sqlite');
     if (SQLite && typeof SQLite.openDatabaseSync === 'function') {
-      sqliteDb = SQLite.openDatabaseSync('daun_drafts.db');
-      sqliteDb.execSync(`
+      const key = await getDbKey();
+      const db = SQLite.openDatabaseSync(DB_NAME);
+      // Raw 256-bit key (x'..'), so SQLCipher skips its slow password derivation.
+      db.execSync(`PRAGMA key = "x'${key}'";`);
+      db.execSync(`
         CREATE TABLE IF NOT EXISTS drafts (
           qr_id TEXT PRIMARY KEY,
           data TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
       `);
-      return sqliteDb;
+      if (!db.getFirstSync('PRAGMA cipher_version;')) {
+        // Expo Go has no SQLCipher, so the file there is not encrypted.
+        console.warn('[DraftStore] SQLCipher is not active; drafts are not encrypted in this build');
+      }
+      moveOldDrafts(SQLite, db);
+      return db;
     }
   } catch {
     // Native SQLite not available in this environment (e.g. Node test runner, Web)
   }
   return null;
+}
+
+function getDb() {
+  dbPromise ??= openDb();
+  return dbPromise;
 }
 
 async function getAsyncStorage() {

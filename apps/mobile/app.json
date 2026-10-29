@@ -18,6 +18,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },
+    "plugins": [
+      ["expo-sqlite", { "useSQLCipher": true }]
+    ],
     "extra": {
       "eas": {
         "projectId": "38d8304d-e84b-4068-a6a1-6a86c1e6657b"
