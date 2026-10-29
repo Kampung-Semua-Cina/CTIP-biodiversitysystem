@@ -21,7 +21,7 @@ export default defineConfig({
     cors: true, // Allow cross-origin requests for local network & Firefox
     proxy: {
       '/v1': {
-        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        target: process.env.VITE_API_URL || 'https://ctip-biodiversitysystem.onrender.com',
         changeOrigin: true,
       },
     },

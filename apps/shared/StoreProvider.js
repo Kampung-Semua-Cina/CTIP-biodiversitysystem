@@ -66,14 +66,10 @@ import {
 export const ROLE_SWITCH_ENABLED =
   (typeof __DEV__ !== "undefined" && __DEV__ === true) ||
   (typeof import.meta !== "undefined" && import.meta.env?.DEV === true);
-const DEMO_SIGN_IN_PASSWORD = !ROLE_SWITCH_ENABLED
-  ? null
-  : (typeof import.meta !== "undefined" && import.meta.env?.VITE_DEMO_PASSWORD) ||
-    (typeof process !== "undefined" && process.env.EXPO_PUBLIC_DEMO_PASSWORD) ||
-    null;
+const DEMO_SIGN_IN_PASSWORD = null;
 
 // Shown wherever a page needs the Express API and cannot reach it.
-export const API_DOWN = "Cannot reach the API server. Start it with npm run api (needs services/api/.env).";
+export const API_DOWN = "Cannot reach the API server (Render). Please check your network connection.";
 const API_CHECK_MS = 30000;
 
 // The token to send: renewed through the API when it is about to expire.
@@ -443,7 +439,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
     const targetEmail = DEMO_EMAILS[key];
     const password = DEMO_SIGN_IN_PASSWORD;
-    if (!password) notify("Set VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD (mobile) in your local .env to sign in as a demo role");
 
     // Optimistically set prototype role so screen transitions are immediate
     setPrototypeRole(key);

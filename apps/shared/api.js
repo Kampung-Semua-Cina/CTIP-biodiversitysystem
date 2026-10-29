@@ -142,7 +142,7 @@ export function getApiBaseUrl() {
   // Expo inlines EXPO_PUBLIC_ variables only when written out in full like this.
   if (typeof navigator !== "undefined" && navigator.product === "ReactNative") {
     const fromEnv = typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL : undefined;
-    return fromEnv ? fromEnv.replace(/\/+$/, "") + "/v1" : "http://localhost:8000/v1";
+    return fromEnv ? fromEnv.replace(/\/+$/, "") + "/v1" : "https://ctip-biodiversitysystem.onrender.com/v1";
   }
   // Browser environment: use Vite proxy path or environment variable
   if (typeof window !== "undefined") {
@@ -154,11 +154,11 @@ export function getApiBaseUrl() {
     } catch {
       // ignore
     }
-    // Default to /v1 in web browser (proxied by Vite to http://localhost:8000/v1)
+    // Default to /v1 in web browser (proxied by Vite to https://ctip-biodiversitysystem.onrender.com/v1)
     return "/v1";
   }
-  // Default to localhost:8000/v1 for node / mobile
-  return "http://localhost:8000/v1";
+  // Default to Render API for node / mobile
+  return "https://ctip-biodiversitysystem.onrender.com/v1";
 }
 
 /**
