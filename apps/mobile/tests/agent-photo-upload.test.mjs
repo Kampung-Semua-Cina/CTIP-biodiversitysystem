@@ -23,7 +23,7 @@ test('UUID Generator & Validator (RFC 4122 v4)', async (t) => {
     assert.equal(isValidUuid('1730123456789abc'), false);
     assert.equal(isValidUuid('photo_12345.jpg'), false);
     assert.equal(isValidUuid('file:///data/user/0/cache/photo.jpg'), false);
-    assert.equal(isValidUuid('cgtvoirktzqjqaosslfh'), false);
+    assert.equal(isValidUuid('invalid-dummy-ref-string'), false);
   });
 
   await t.test('uid alias returns valid RFC 4122 v4 UUID', () => {

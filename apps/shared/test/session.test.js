@@ -29,7 +29,7 @@ test("sign-in stores the session the API returns and sends no old token", async 
   answer([200, session]);
   const res = await signInApi("x@y.z", "pw");
   assert.equal(res.ok, true);
-  assert.equal(calls[0].url, "http://localhost:8000/v1/auth/sign-in");
+  assert.equal(calls[0].url, "https://ctip-biodiversitysystem.onrender.com/v1/auth/sign-in");
   assert.equal(calls[0].auth, undefined);
   assert.deepEqual(getSession(), session);
 });
@@ -89,7 +89,7 @@ test("sign-out forgets the session straight away and tells the API", async () =>
   answer([204]);
   await signOutApi();
   assert.equal(getAuthToken(), null);
-  assert.equal(calls[0].url, "http://localhost:8000/v1/auth/sign-out");
+  assert.equal(calls[0].url, "https://ctip-biodiversitysystem.onrender.com/v1/auth/sign-out");
   assert.equal(calls[0].auth, "Bearer a1");
 });
 
