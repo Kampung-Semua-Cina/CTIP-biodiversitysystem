@@ -1,7 +1,7 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, DEMO_USER, DEMO_EMAILS, initialProfiles } from "./data.js";
+import { seed } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
@@ -11,7 +11,6 @@ import {
   getSession,
   freshAuthToken,
   restoreSession,
-  tokenClaims,
   onSessionEnded,
   takeSessionFromUrl,
   signInApi,
@@ -59,17 +58,6 @@ import {
   markAllReadApi,
 } from "./api.js";
 
-// The prototype role switch (CTIP-113) signs in to the real demo accounts, so it
-// only exists in local development builds: `npm run dev` on the web
-// (import.meta.env.DEV) and Expo Go / dev clients on mobile (__DEV__). A
-// production website or APK has no switch and no password. The password comes
-// from a gitignored .env: VITE_DEMO_PASSWORD (web) or EXPO_PUBLIC_DEMO_PASSWORD
-// (mobile). Never set either on a hosting service or in eas.json.
-export const ROLE_SWITCH_ENABLED =
-  (typeof __DEV__ !== "undefined" && __DEV__ === true) ||
-  (typeof import.meta !== "undefined" && import.meta.env?.DEV === true);
-const DEMO_SIGN_IN_PASSWORD = null;
-
 // Shown wherever a page needs the Express API and cannot reach it.
 export const API_DOWN = "Cannot reach the API server (Render). Please check your network connection.";
 const API_CHECK_MS = 30000;
@@ -94,53 +82,14 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [backendSpeciesCount, setBackendSpeciesCount] = useState(0);
   const timer = useRef(null);
 
-  const [prototypeRole, setPrototypeRole] = useState(null);
-
-  const claims = useMemo(() => tokenClaims(authToken || getAuthToken()), [authToken]);
-  const tokenRole = claims?.user_role || claims?.role || null;
-
-  const effectiveRole = prototypeRole !== null
-    ? prototypeRole
-    : (userId ? (db.profiles.find((p) => p.id === userId)?.role || tokenRole || "visitor") : "visitor");
-
-  const me = useMemo(() => {
-    if (effectiveRole === "visitor") return null;
-    const byId = userId ? db.profiles.find((p) => p.id === userId) : null;
-    if (byId) return byId;
-
-    if (prototypeRole) {
-      const targetEmail = DEMO_EMAILS[prototypeRole];
-      const found =
-        db.profiles.find((p) => p.email === targetEmail) ||
-        db.profiles.find((p) => p.role === prototypeRole && p.is_active) ||
-        db.profiles.find((p) => p.role === prototypeRole) ||
-        initialProfiles.find((p) => p.email === targetEmail || p.role === prototypeRole);
-      if (found) return found;
-      return {
-        id: DEMO_USER[prototypeRole] || `demo-${prototypeRole}`,
-        full_name: `${prototypeRole.charAt(0).toUpperCase() + prototypeRole.slice(1)} (Demo)`,
-        role: prototypeRole,
-        email: DEMO_EMAILS[prototypeRole] || `${prototypeRole}@demo.local`,
-        is_active: true,
-      };
-    }
-
-    if (userId) {
-      const email = getSession()?.user?.email || claims?.email || "";
-      const roleName = tokenRole || "botanist";
-      return {
-        id: userId,
-        full_name: email ? email.split("@")[0] : "Signed in",
-        role: roleName,
-        email,
-        is_active: true,
-      };
-    }
-
-    return null;
-  }, [effectiveRole, prototypeRole, db.profiles, userId, claims, tokenRole]);
-
-  const role = effectiveRole;
+  // The role always comes from the signed-in user's profile (loaded through the
+  // API); nobody signed in is a visitor. The prototype role switch that could
+  // fake a role on the device was removed (CTIP-113, #36).
+  const me = useMemo(
+    () => (userId ? db.profiles.find((p) => p.id === userId) || null : null),
+    [db.profiles, userId],
+  );
+  const role = me?.role || "visitor";
 
   const notify = useCallback((message) => {
     clearTimeout(timer.current);
@@ -260,7 +209,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     }));
 
     setDb((prevDb) => {
-      let mergedProfiles = prevDb.profiles || initialProfiles;
+      let mergedProfiles = prevDb.profiles || [];
       if (w.profiles.length > 0) {
         const pMap = new Map(mergedProfiles.map((p) => [p.id, p]));
         for (const pr of w.profiles) pMap.set(pr.id, { ...(pMap.get(pr.id) || {}), ...pr });
@@ -358,7 +307,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       if (!mounted) return;
       setUserId(null);
       setAuthTokenState(null);
-      setPrototypeRole(null);
       notify("Your session has ended. Please sign in again.");
       loadFromApi(true);
     });
@@ -408,7 +356,13 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   // One API call with the fresh token. A call that could not reach the API
   // marks it down; `message` is always something to show the user.
   const callApi = async (fn, ...args) => {
-    const res = noteOffline(await fn(...args, { token: await sessionToken() }));
+    let res = noteOffline(await fn(...args, { token: await sessionToken() }));
+    // The token expired anyway (an earlier refresh could not reach the API, or the
+    // laptop slept): renew it now and try once more.
+    if (res.code === "TOKEN_EXPIRED") {
+      const token = await freshAuthToken({ force: true });
+      if (token) res = noteOffline(await fn(...args, { token }));
+    }
     if (res.ok) return res;
     const fields = res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
     const detail = res.message || res.code;
@@ -449,54 +403,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   }, [userId, refreshNotifications]);
 
   /* ---------- session & authentication ---------- */
-  const setRole = async (key) => {
-    // Public builds: no role switching at all (CTIP-113).
-    if (!ROLE_SWITCH_ENABLED) {
-      notify("Switching roles is only available in local development. Please sign in.");
-      return;
-    }
-    if (key === "visitor") {
-      setPrototypeRole("visitor");
-      setAuthTokenState(null);
-      setUserId(null);
-      await signOutApi();
-      await loadFromApi(true);
-      notify("Viewing as Visitor");
-      return;
-    }
-
-    const targetEmail = DEMO_EMAILS[key];
-    const password = DEMO_SIGN_IN_PASSWORD;
-
-    // Optimistically set prototype role so screen transitions are immediate
-    setPrototypeRole(key);
-
-    if (targetEmail && password) {
-      const res = await signInApi(targetEmail, password);
-      if (res.ok) {
-        setAuthTokenState(res.data.access_token);
-        if (res.data.user?.id) setUserId(res.data.user.id);
-        setPrototypeRole(null);
-        await loadFromApi(true);
-        notify(`Signed in as ${targetEmail} (${key})`);
-        return;
-      }
-      console.warn("setRole sign-in:", res.message || res.code);
-    }
-
-    // Offline / fallback resolution
-    const match =
-      db.profiles.find((p) => p.email === targetEmail || (p.role === key && p.is_active)) ||
-      db.profiles.find((p) => p.role === key) ||
-      initialProfiles.find((p) => p.email === targetEmail || p.role === key);
-    if (match) {
-      setUserId(match.id);
-    }
-    notify(`Viewing as ${key.charAt(0).toUpperCase() + key.slice(1)}`);
-  };
-
   const logout = async () => {
-    setPrototypeRole("visitor");
     setAuthTokenState(null);
     setUserId(null);
     await signOutApi();
@@ -527,7 +434,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
         };
       });
       setUserId(profile.id);
-      setPrototypeRole(null);
       setApiStatus("connected");
       notify(`Signed in as ${profile.full_name || profile.email} (${profile.role})`);
       return { ok: true, profile };
@@ -580,7 +486,6 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const id = res.data.user?.id;
     setAuthTokenState(res.data.access_token);
     setUserId(id);
-    setPrototypeRole(null);
     await loadFromApi(true);
     return { ok: true, id, first: false };
   };
@@ -1174,7 +1079,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
   const value = {
     db, me, role, toast, notify,
-    setRole, logout, login, signIn, changePassword, updateProfile, changeMyPassword,
+    logout, login, signIn, changePassword, updateProfile, changeMyPassword,
     setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
     syncObservation, resubmit, reviewObservation, addComment,
     saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,

@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { generateMapHtml } from '../../shared/mapHtml.js';
 import { visiblePlants, shownCoords, plantView, lookupTag, extractTag } from '../../shared/selectors.js';
 import { canAccess } from '../navigation/routeMeta.js';
-import { seed, initialProfiles } from '../../shared/data.js';
+import { seed } from '../../shared/data.js';
+import { initialProfiles } from './helpers/demoProfiles.mjs';
 
 test('Mobile Feature 1: Map Clustering (CTIP-70)', async (t) => {
   await t.test('generateMapHtml embeds Leaflet.markercluster library and CSS', () => {

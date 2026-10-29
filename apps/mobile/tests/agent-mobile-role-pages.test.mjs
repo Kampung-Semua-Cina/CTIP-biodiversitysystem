@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { ROUTE_NAMES, canAccess, isFullScreen } from "../navigation/routeMeta.js";
 import { TABS, getRoleTabs, getRoleDefaultTab, badgeCounts } from "../navigation/tabs.js";
 import { ROLES, can } from "../../shared/permissions.js";
-import { initialProfiles, DEMO_USER, DEMO_EMAILS, seed } from "../../shared/data.js";
+import { seed } from "../../shared/data.js";
+import { initialProfiles, DEMO_USER, DEMO_EMAILS } from "./helpers/demoProfiles.mjs";
 import * as sharedData from "../../shared/data.js";
 import { visiblePlants, speciesCatalogue, extractTag, lookupTag } from "../../shared/selectors.js";
 

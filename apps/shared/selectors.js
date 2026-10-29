@@ -4,6 +4,7 @@
 import { can } from "./permissions.js";
 import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
 import { THREATENED } from "./data.js";
+import { PUBLIC_SITE_URL } from "./site.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -105,10 +106,14 @@ export function nextTagIds(tags = [], count = 1) {
   return Array.from({ length: count }, (_, i) => `NIAH-${String(start + i).padStart(4, "0")}`);
 }
 
+// The link a QR tag holds: the plant's page on the website, which visitors and
+// staff can both open (#/tag/, CTIP-33). The phone has no browser address, so
+// it uses the live site. Tags printed earlier hold #/dashboard/<tag>, which
+// opens the same page.
 export const tagUrl = (qr) =>
-  typeof window !== "undefined" && window.location
-    ? `${window.location.origin}${window.location.pathname}#/dashboard/${qr}`
-    : `https://daunsense.example/#/dashboard/${qr}`;
+  typeof window !== "undefined" && window.location?.origin
+    ? `${window.location.origin}${window.location.pathname}#/tag/${qr}`
+    : `${PUBLIC_SITE_URL}/#/tag/${qr}`;
 
 export function staffCounts(db, me) {
   return {

@@ -187,9 +187,12 @@ export function TaggedPlant({ nav, params }) {
   return (
     <Page hero={<Hero photos={p.photos} height={220} onBack={nav.back} />}>
       <View style={{ gap: 6 }}>
-        <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: c.bg }}>
-          <Icon name="qr" size={16} color={c.ink} />
-          <Mono size={13}>{p.qr_id}</Mono>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: c.bg }}>
+            <Icon name="qr" size={16} color={c.ink} />
+            <Mono size={13}>{p.qr_id}</Mono>
+          </View>
+          {staff ? <TextLink label="Show QR code" size={14} onPress={() => nav.go('tagQr', { qr: p.qr_id })} /> : null}
         </View>
         <Text accessibilityRole="header" style={{ fontFamily: font('display', 700), fontSize: 28, lineHeight: 34, color: c.ink }}>{p.name}</Text>
         {p.scientific ? <Sci size={16}>{p.scientific}{p.species?.family ? ` · ${p.species.family}` : ''}</Sci> : null}

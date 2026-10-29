@@ -1,21 +1,23 @@
 // apps/mobile/pages/AddPlant.js
 // New plant record after scanning an unused tag, the "Sent for review" screen,
 // and a revisit to a plant that is already tagged.
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { scanFromURLAsync } from 'expo-camera';
 
 import { useStore } from '../../shared/store.js';
-import { plantView } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Header, IconButton, TextLink, Txt, Mono, Sci, Section, Field, Area, Button, DotLabel, Thumb, Empty,
+  Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
+import SpeciesPicker from '../components/SpeciesPicker.js';
+import { TagQrView } from './TagQr.js';
+import { prefillFromSpecies } from '../../shared/speciesSearch.js';
 import { uid } from '../../shared/utils.js';
 import { extractTag } from '../../shared/selectors.js';
 
@@ -200,40 +202,14 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
   );
 }
 
-// Species picker: type a name, pick from the species list (CTIP-26) and pre-fill (CTIP-63).
-function SpeciesField({ value, onChange, onPick, species, error }) {
-  const { c } = useTheme();
-  const needle = value.trim().toLowerCase();
-  const exact = species.find((s) => s.scientific_name.toLowerCase() === needle);
-  const matches = needle.length > 1 && !exact
-    ? species.filter((s) => `${s.common_name} ${s.scientific_name}`.toLowerCase().includes(needle)).slice(0, 4)
-    : [];
-  return (
-    <View style={{ gap: 6 }}>
-      <Field label="Species (required)" value={value} onChangeText={onChange} placeholder="Start typing a name" italic error={error}
-        hint={exact ? `${exact.common_name} · ${exact.family}. Details pre-filled from the species list.` : 'Select or enter the species before submitting for review.'} />
-      {matches.map((s) => (
-        <Pressable key={s.id} accessibilityRole="button" onPress={() => onPick(s)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.bg }}>
-          <Icon name="leaf" size={18} color={c.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: c.ink }}>{s.common_name}</Text>
-            <Sci size={14}>{s.scientific_name}</Sci>
-          </View>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 export function AddPlant({ nav, params = {} }) {
   const { db, addPlant, generateTags } = useStore();
   const { c } = useTheme();
   const [qr, setQr] = useState(params.qr || '');
-  const species = db.species.filter((s) => !s.is_deleted);
   const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
   const [photos, setPhotos] = useState([]);
   const [sp, setSp] = useState('');
+  const [picked, setPicked] = useState(null); // species chosen from search (CTIP-63)
   const [height, setHeight] = useState('');
   const [looks, setLooks] = useState('');
   const [notes, setNotes] = useState('');
@@ -243,6 +219,7 @@ export function AddPlant({ nav, params = {} }) {
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [showQr, setShowQr] = useState(false); // the tag's QR, shown over the form (CTIP-27)
   const [tried, setTried] = useState(false);
 
   useEffect(() => {
@@ -257,7 +234,11 @@ export function AddPlant({ nav, params = {} }) {
       const ids = await generateTags(1, 'field');
       if (ids && ids.length > 0) {
         setQr(ids[0]);
-        Alert.alert('Tag Generated', `Created new QR tag: ${ids[0]}`);
+        // Next step: print the code and fix it to the plant (CTIP-27).
+        Alert.alert('New tag ready', `${ids[0]} is now this plant's tag. Show its QR code to print or share it.`, [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Show QR', onPress: () => setShowQr(true) },
+        ]);
       }
     } catch (err) {
       Alert.alert('Tag Generation Failed', err?.message || 'Could not generate QR tag.');
@@ -343,6 +324,7 @@ export function AddPlant({ nav, params = {} }) {
       getDraft(qr).then((d) => {
         if (d) {
           if (d.proposed_species) setSp(d.proposed_species);
+          if (d.picked_species) setPicked(d.picked_species);
           if (d.height_cm) setHeight(String(d.height_cm));
           if (d.morphology) setLooks(d.morphology);
           if (d.notes) setNotes(d.notes);
@@ -358,29 +340,37 @@ export function AddPlant({ nav, params = {} }) {
   useEffect(() => {
     if (!qr) return;
     if (sp || looks || height || notes || photos.length > 0) {
-      saveDraft(qr, { proposed_species: sp, height_cm: height, morphology: looks, notes, photos, gps });
+      saveDraft(qr, { proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
     }
-  }, [qr, sp, looks, height, notes, photos, gps]);
+  }, [qr, sp, picked, looks, height, notes, photos, gps]);
+
+  if (showQr && qr) {
+    return <TagQrView qr={qr} onBack={() => setShowQr(false)} />;
+  }
 
   if (!qr) {
     return (
       <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />} gap={20}>
         <View style={{ gap: 6 }}>
-          <Txt v="title1">Add Plant</Txt>
+          <Txt v="title1">{params.make ? 'New tag' : 'Add plant'}</Txt>
           <Txt v="body" color={c.ink2}>
-            Every plant record starts from a QR tag. Choose how you want to tag this plant:
+            {params.make
+              ? 'Make a tag for this plant. You can then print its QR code and fix it to the plant.'
+              : 'Every plant record starts from a QR tag. Choose how you want to tag this plant:'}
           </Txt>
         </View>
 
+        {/* Coming from "No tag? Make a new one" on Scan, making a tag is the main action (CTIP-27). */}
         <View style={{ gap: 12 }}>
-          <Button label="Scan tag with camera" icon="camera" onPress={() => nav.replace('scan')} />
+          {params.make ? null : <Button label="Scan tag with camera" icon="camera" onPress={() => nav.replace('scan')} />}
           <Button
             label={generating ? "Generating QR tag..." : "Generate new QR tag"}
             icon="qr"
-            kind="secondary"
+            kind={params.make ? 'primary' : 'secondary'}
             disabled={generating}
             onPress={generateNewTag}
           />
+          {params.make ? <Button label="Scan tag with camera" icon="camera" kind="secondary" onPress={() => nav.replace('scan')} /> : null}
           <Button label="Choose QR from gallery" icon="plus" kind="secondary" onPress={pickQrFromGallery} />
         </View>
 
@@ -412,9 +402,12 @@ export function AddPlant({ nav, params = {} }) {
     );
   }
 
+  // Picking a search result fills the name, and the appearance only if it is empty (CTIP-63).
   const pick = (s) => {
-    setSp(s.scientific_name);
-    if (!looks) setLooks(s.description || '');
+    const filled = prefillFromSpecies(s, { proposed_species: sp, morphology: looks });
+    setSp(filled.proposed_species);
+    setLooks(filled.morphology);
+    setPicked(filled.picked);
   };
 
   const addPhotoItems = (items) => {
@@ -492,15 +485,20 @@ export function AddPlant({ nav, params = {} }) {
     >
       <View style={{ gap: 6 }}>
         <Txt v="title1">New plant</Txt>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Icon name="qr" size={18} color={c.ink2} />
           <Txt v="body" color={c.ink2} style={{ fontSize: 15 }}>Tag</Txt>
           <Mono size={15}>{qr}</Mono>
-          <View style={{ flexDirection: 'row', gap: 12, marginLeft: 'auto' }}>
-            <TextLink label="Rescan" onPress={() => nav.replace('scan')} />
-            <TextLink label="Generate" onPress={generateNewTag} />
-            <TextLink label="Gallery" onPress={pickQrFromGallery} />
+          <View style={{ marginLeft: 'auto' }}>
+            <TextLink label="Show QR" onPress={() => setShowQr(true)} />
           </View>
+        </View>
+        {/* Changing the tag is rare once a record is started, so these stay small. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <Txt v="caption" color={c.ink2}>Wrong tag?</Txt>
+          <TextLink label="Scan" size={14} onPress={() => nav.replace('scan')} />
+          <TextLink label={generating ? 'Making…' : 'New tag'} size={14} onPress={generating ? undefined : generateNewTag} />
+          <TextLink label="Gallery" size={14} onPress={pickQrFromGallery} />
         </View>
         {restoredDraft && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, padding: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.accentSoft }}>
@@ -524,11 +522,11 @@ export function AddPlant({ nav, params = {} }) {
       </Section>
 
       <Section title="Details" gap={16}>
-        <SpeciesField
+        <SpeciesPicker
           value={sp}
           onChange={setSp}
           onPick={pick}
-          species={species}
+          picked={picked}
           error={tried && problems.species ? 'Species is required before submitting for review' : undefined}
         />
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" width={140} />

@@ -13,11 +13,21 @@ const verify = async (role) => ({ sub: crypto.randomUUID(), user_role: role });
 const app = createApp({ verify });
 const as = (role) => ({ Authorization: `Bearer ${role}` });
 
-const species = (scientific_name, common_name, family, conservation_status, created_at, is_published = true) =>
-  ({ id: crypto.randomUUID(), scientific_name, common_name, family, conservation_status, created_at, is_published, is_deleted: false });
+const species = (scientific_name, common_name, family, conservation_status, created_at, is_published = true) => ({
+  id: crypto.randomUUID(), scientific_name, common_name, family, conservation_status, created_at, is_published,
+  is_deleted: false, genus: scientific_name.split(' ')[0], description: null, species_media: [],
+});
+
+// Nepenthes rajah has two photos; the second is the chosen cover.
+const rajah = species('Nepenthes rajah', 'Giant pitcher plant', 'Nepenthaceae', 'Endangered', '2026-10-01T03:00:00Z');
+rajah.description = 'Largest pitcher plant.';
+rajah.species_media = [
+  { s3_bucket: 'species-media', s3_key: `${rajah.id}/m1.jpg`, is_primary: false, sort_order: 0 },
+  { s3_bucket: 'species-media', s3_key: `${rajah.id}/m2.jpg`, is_primary: true, sort_order: 1 },
+];
 
 const rows = [
-  species('Nepenthes rajah', 'Giant pitcher plant', 'Nepenthaceae', 'Endangered', '2026-10-01T03:00:00Z'),
+  rajah,
   species('Nepenthes ampullaria', 'Flask-shaped pitcher plant', 'Nepenthaceae', 'Least Concern', '2026-10-05T03:00:00Z'),
   species('Rafflesia keithii', 'Keith\'s rafflesia', 'Rafflesiaceae', 'Endangered', '2026-10-10T03:00:00Z'),
   species('Shorea macrophylla', 'Engkabang', 'Dipterocarpaceae', 'Vulnerable', '2026-10-12T03:00:00Z', false),
@@ -108,4 +118,43 @@ test('public search only returns published species', async () => {
   assert.equal(res.status, 200);
   assert.deepEqual(res.body.data, []);
   assert.equal((await request(app).get('/v1/public/species?q=%25')).status, 422);
+});
+
+// CTIP-26: the botanist's search results need a photo, taxonomy and a short
+// description, and the phone loads them a page at a time.
+test('public list has genus, description and one cover URL, never the media array', async () => {
+  const res = await request(app).get('/v1/public/species?q=rajah');
+  assert.equal(res.status, 200);
+  const [s] = res.body.data;
+  assert.deepEqual(Object.keys(s).sort(), ['common_name', 'conservation_status', 'description', 'family',
+    'genus', 'id', 'primary_image_url', 'scientific_name']);
+  assert.equal(s.genus, 'Nepenthes');
+  assert.equal(s.description, 'Largest pitcher plant.');
+  assert.match(s.primary_image_url, /\/storage\/v1\/object\/public\/species-media\/.+\/m2\.jpg$/);
+  for (const banned of ['lat', 'lng', 'created_by', 'is_published']) {
+    assert.ok(!new RegExp(`\\b${banned}\\b`).test(lastUrl.searchParams.get('select')), `must not select ${banned}`);
+  }
+});
+
+test('a species with no photo has primary_image_url null', async () => {
+  const res = await request(app).get('/v1/public/species?q=ampullaria');
+  assert.equal(res.body.data[0].primary_image_url, null);
+});
+
+test('without page or limit the public list returns every match (web catalogue)', async () => {
+  const res = await request(app).get('/v1/public/species');
+  assert.equal(lastUrl.searchParams.get('offset'), null);
+  assert.equal(res.body.data.length, 3);
+  assert.deepEqual(res.body.meta, { page: 1, limit: 3, total: 3 });
+});
+
+test('page and limit page the public list', async () => {
+  const res = await request(app).get('/v1/public/species?page=2&limit=5');
+  assert.equal(lastUrl.searchParams.get('offset'), '5');
+  assert.equal(lastUrl.searchParams.get('limit'), '5');
+  assert.deepEqual(res.body.meta, { page: 2, limit: 5, total: 3 });
+});
+
+test('public list rejects limit over 100', async () => {
+  assert.equal((await request(app).get('/v1/public/species?limit=101')).status, 422);
 });

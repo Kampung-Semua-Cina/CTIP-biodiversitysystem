@@ -1,31 +1,15 @@
 // apps/web/src/components/RoleSwitch.jsx
-import { ROLES } from "../../../shared/permissions.js";
 import { useStore } from "../../../shared/store.js";
 import Icon from "./Icon.jsx";
 
-// Demo bar at the very top of the page: switch role in prototype mode or view live backend status.
-export default function RoleSwitch({ role, setRole }) {
+// Local development bar at the very top of the page: live API status and a refresh.
+// The role switch that used to sit here was removed: it no longer signed in, so
+// it showed staff pages the API then refused. Use Staff sign in instead.
+export default function RoleSwitch() {
   const { apiStatus, apiError, isSyncing, refreshFromBackend, authToken } = useStore();
 
   return (
     <div className="protobar">
-      <div className="protobar-left">
-        <span>Prototype · view the site as</span>
-        <div className="roleswitch" role="radiogroup" aria-label="View the site as">
-          {ROLES.map((r) => (
-            <button
-              key={r.key}
-              role="radio"
-              aria-checked={role === r.key}
-              className={role === r.key ? "on" : ""}
-              onClick={() => setRole(r.key)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="protobar-right">
         {authToken && (
           <span className="api-badge session" title="Signed in with verified Bearer token via /v1/me">

@@ -238,6 +238,31 @@ paths:
               schema: { $ref: '#/components/schemas/PublicSpecies' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /public/tags/{qrId}:
+    get:
+      tags: [Public]
+      operationId: getPublicPlantByTag
+      summary: The plant on a scanned QR tag (visitor QR page, CTIP-33)
+      description: >
+        One plant that is approved on a published species, with that species'
+        visitor fields. Unknown, unused, unapproved and deleted tags all answer
+        the same 404. **Endangered locations (threat T13):** the coordinates are
+        snapped to the centre of a 0.01 degree grid square and
+        `location_reduced` is true; a plant with no GPS fix has null
+        coordinates. Limited to 30 lookups a minute per caller address (429
+        with `Retry-After`).
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/QrId'
+      responses:
+        '200':
+          description: The plant and its species
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicPlant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyAttempts' }
+
   # ---------------------------------------------------------------- Profiles
   /public/workspace:
     get:
@@ -1956,6 +1981,16 @@ components:
         media:
           type: array
           items: { $ref: '#/components/schemas/SpeciesMedia' }
+
+    PublicPlant:
+      type: object
+      description: Visitor view of one tagged plant — no internal fields
+      properties:
+        qr_id: { type: string }
+        lat: { type: [number, 'null'] }
+        lng: { type: [number, 'null'] }
+        location_reduced: { type: boolean, description: True for an endangered plant; the point is a 0.01 degree grid centre }
+        species: { $ref: '#/components/schemas/PublicSpecies' }
 
     SpeciesMedia:
       type: object

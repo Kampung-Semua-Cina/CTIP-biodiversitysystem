@@ -3,10 +3,10 @@
 // 24px grid, 1.75 stroke. No emoji anywhere in the interface.
 import React from 'react';
 import {
-  Activity, ArrowRight, Bell, Camera, ChartColumn, Check, ChevronDown, ChevronLeft, ChevronRight,
+  Activity, ArrowRight, ArrowUpDown, Bell, Camera, ChartColumn, Check, ChevronDown, ChevronLeft, ChevronRight,
   ClipboardCheck, Droplet, Ellipsis, Eye, EyeOff, FileText, Flashlight, House, Info, Keyboard, Leaf,
   Lock, LogOut, Mail, Map, MapPin, MessageSquare, Plus, QrCode, RefreshCw, ScanLine, Search, Send,
-  Shield, Thermometer, Undo2, Users, X, Compass, Layers, Locate,
+  Share2, Shield, Thermometer, Undo2, Users, X, Compass, Layers, Locate,
 } from 'lucide-react-native';
 
 const ICONS = {
@@ -15,7 +15,7 @@ const ICONS = {
   more: Ellipsis, eye: Eye, eyeOff: EyeOff, file: FileText, torch: Flashlight, home: House, info: Info,
   keyboard: Keyboard, leaf: Leaf, lock: Lock, logout: LogOut, mail: Mail, map: Map, pin: MapPin,
   chat: MessageSquare, plus: Plus, qr: QrCode, refresh: RefreshCw, scan: ScanLine, search: Search,
-  send: Send, shield: Shield, thermo: Thermometer, undo: Undo2, users: Users, x: X,
+  send: Send, share: Share2, shield: Shield, sort: ArrowUpDown, thermo: Thermometer, undo: Undo2, users: Users, x: X,
   compass: Compass, layers: Layers, locate: Locate,
 };
 
