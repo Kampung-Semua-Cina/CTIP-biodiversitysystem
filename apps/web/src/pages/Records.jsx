@@ -122,7 +122,7 @@ function RecordRow({ obs }) {
       )}
 
       {obs.status === "rejected" && lastReturn?.comment && <p className="mute">Reason: {lastReturn.comment}</p>}
-      {obs.status === "synced" && <p className="mute">Waiting for an officer to review it.</p>}
+      {obs.status === "synced" && <p className="mute"><Icon name="lock" size={14} /> Waiting for an officer to review it. Record edits are locked until a decision is returned.</p>}
       {obs.status === "approved" && <p className="mute">Published to the plant library.</p>}
     </article>
   );

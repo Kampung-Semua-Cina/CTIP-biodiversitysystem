@@ -10,12 +10,14 @@ import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import { Screen, Bar, Row, Thumb, Mono, Txt, DotLabel, Avatar, Empty } from '../components/Bits.js';
 import { dateTime, shortDate } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 export default function Discussion({ nav, params = {} }) {
   return params.id ? <Thread nav={nav} id={params.id} /> : <Threads nav={nav} />;
 }
 
 function Threads({ nav }) {
+  usePolling(5000);
   const { db } = useStore();
   const { c } = useTheme();
   const ids = [...new Set(db.comments.map((m) => m.observation_id))];
@@ -41,6 +43,7 @@ function Threads({ nav }) {
 }
 
 function Thread({ nav, id }) {
+  usePolling(5000);
   const { db, me, addComment } = useStore();
   const { c } = useTheme();
   const [text, setText] = useState('');

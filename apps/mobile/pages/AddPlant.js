@@ -601,6 +601,16 @@ export function Revisit({ nav, params = {} }) {
       </Screen>
     );
   }
+  const pendingObs = db.observations.some((o) => o.specimen_id === plant.id && o.status === 'synced');
+  if (pendingObs) {
+    return (
+      <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />}>
+        <Empty icon="lock">This plant has an observation waiting for officer review. Edits and revisits are locked until a decision is returned.</Empty>
+      </Screen>
+    );
+      </Screen>
+    );
+  }
   const last = db.observations.filter((o) => o.specimen_id === plant.id).sort((a, b) => b.observed_at.localeCompare(a.observed_at))[0];
   const ok = photos.length > 0 || changes.trim() || height;
 

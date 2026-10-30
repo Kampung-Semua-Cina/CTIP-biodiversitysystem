@@ -21,6 +21,7 @@ export const NEEDS = {
   alerts: "bell",
   discussion: "discuss",
   staffMore: "pending",
+  account: "pending",
   tagQr: "pending", // any signed-in role: a tag's QR code to share or print (CTIP-27)
 };
 
@@ -35,7 +36,7 @@ export const ROUTE_NAMES = [
   "records", "record", "alerts", "discussion",
   "review", "reviewItem", "monitor", "alert",
   "staffMore", "speciesAdmin", "tags", "tagQr", "reports",
-  "users", "audit",
+  "users", "audit", "account",
 ];
 
 export function canAccess(role, routeName) {

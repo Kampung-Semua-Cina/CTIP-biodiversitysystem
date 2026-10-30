@@ -10,6 +10,7 @@ import {
   Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 const FILTERS = [
   { key: 'synced', label: 'Needs review' },
@@ -26,6 +27,7 @@ const SORT_REVIEW = [
 ];
 
 export function ReviewQueue({ nav }) {
+  usePolling(5000);
   const { db } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('synced');
@@ -94,6 +96,7 @@ function Photos({ photos }) {
 }
 
 export function ReviewRecord({ nav, params = {} }) {
+  usePolling(5000);
   const { db, reviewObservation, setPlantSpecies, notify } = useStore();
   const { c } = useTheme();
   const o = db.observations.find((x) => x.id === params.id);

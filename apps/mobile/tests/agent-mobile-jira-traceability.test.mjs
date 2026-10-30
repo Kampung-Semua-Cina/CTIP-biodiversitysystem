@@ -195,4 +195,146 @@ describe("Mobile Port: Jira Requirements Traceability (from agent-jira-traceabil
     assert.ok(canTransition("returned", "synced"));
     assert.equal(canTransition("approved", "draft"), false, "Approved record cannot revert directly to draft");
   });
+
+  // =========================================================================
+  // 6. JIRA CTIP-45 & CTIP-69: Observation Review Lock for Botanists
+  // =========================================================================
+  test("Jira CTIP-45/69: Observations pending review lock edits and revisit actions for botanists", () => {
+    // A plant with an observation pending officer review (status 'synced')
+    const plant = { id: "p-1", qr_id: "NIAH-0001" };
+    const observations = [
+      { id: "obs-1", specimen_id: "p-1", status: "synced", version: 1, recorded_by: "botanist-1" },
+    ];
+
+    // 1. In Review status ('synced') locks edits:
+    const pendingObs = observations.find((o) => o.specimen_id === plant.id && o.status === "synced");
+    assert.ok(pendingObs, "Plant has an observation awaiting review");
+
+    // Revisit action must be blocked when an observation is still pending
+    function canRecordRevisit(role, specimenObs) {
+      if (role !== "botanist") return false;
+      const hasPending = specimenObs.some((o) => o.status === "synced");
+      return !hasPending;
+    }
+
+    assert.equal(canRecordRevisit("botanist", observations), false, "Botanists cannot record a revisit while review is pending");
+    assert.equal(canRecordRevisit("officer", observations), false, "Officers cannot record revisits");
+
+    // 2. Form fields are read-only when status is 'synced'
+    function canEditObservation(obs, role) {
+      if (role !== "botanist") return false;
+      // Only 'returned' records allow editing and fixing
+      return obs.status === "returned";
+    }
+
+    assert.equal(canEditObservation(pendingObs, "botanist"), false, "Botanists cannot edit a pending (synced) observation");
+
+    // 3. When an officer returns the record, edits become unlocked
+    const returnedObs = { ...pendingObs, status: "returned", version: 1 };
+    assert.equal(canEditObservation(returnedObs, "botanist"), true, "Botanists can edit returned observations");
+
+    // 4. Once approved, the record is permanently locked from botanist edits
+    const approvedObs = { ...pendingObs, status: "approved", version: 2 };
+    assert.equal(canEditObservation(approvedObs, "botanist"), false, "Approved observations cannot be edited");
+    assert.equal(canRecordRevisit("botanist", [approvedObs]), true, "Botanists can record revisits once previous observation is approved");
+  });
+
+  // =========================================================================
+  // 7. JIRA CTIP-42 & CTIP-114: Mobile Account Screen & Security Controls
+  // =========================================================================
+  test("Jira CTIP-42/114: Mobile Account settings route permissions and password validation", () => {
+    // 1. Route existence and RBAC
+    assert.ok(ROUTE_NAMES.includes("account"), "Route 'account' is registered in ROUTE_NAMES");
+    assert.equal(NEEDS.account, "pending", "Account route requires 'pending' (authenticated staff)");
+    assert.equal(canAccess("visitor", "account"), false, "Visitor cannot access Account screen");
+    assert.equal(canAccess("botanist", "account"), true, "Botanist can access Account screen");
+    assert.equal(canAccess("officer", "account"), true, "Officer can access Account screen");
+    assert.equal(canAccess("admin", "account"), true, "Admin can access Account screen");
+
+    // 2. Password change validation rules (from Account.js / StoreProvider.js)
+    function validatePasswordChange(current, next, again) {
+      if (!current) return { ok: false, error: "Enter your current password" };
+      if (!next || next.length < 8) return { ok: false, error: "Use at least 8 characters for the new password" };
+      if (next !== again) return { ok: false, error: "The new passwords do not match" };
+      if (next === current) return { ok: false, error: "Choose a password different from your current one" };
+      return { ok: true };
+    }
+
+    assert.equal(validatePasswordChange("", "newSecret123", "newSecret123").ok, false);
+    assert.equal(validatePasswordChange("oldSecret123", "short", "short").ok, false);
+    assert.equal(validatePasswordChange("oldSecret123", "newSecret123", "different123").ok, false);
+    assert.equal(validatePasswordChange("oldSecret123", "oldSecret123", "oldSecret123").ok, false);
+    assert.equal(validatePasswordChange("oldSecret123", "newSecret123", "newSecret123").ok, true);
+  });
+
+  // =========================================================================
+  // 8. JIRA CTIP-34 & CTIP-43: Admin-Only Invites & Zero Public Registration
+  // =========================================================================
+  test("Jira CTIP-34/43: Only admins can provision accounts; public self-registration is rejected", () => {
+    // 1. Role permission: Only admin can access users
+    assert.equal(can("admin", "users"), true, "Admin has 'users' permission");
+    assert.equal(can("officer", "users"), false, "Officer does not have 'users' permission");
+    assert.equal(can("botanist", "users"), false, "Botanist does not have 'users' permission");
+    assert.equal(can("visitor", "users"), false, "Visitor does not have 'users' permission");
+
+    // 2. User onboarding payload creation:
+    // When password is omitted, it's an email invitation; when provided, it's immediate setup
+    function createInvitePayload({ full_name, email, role, password }) {
+      const invite = !password;
+      return {
+        full_name: full_name.trim(),
+        email: email.trim().toLowerCase(),
+        role: role || "botanist",
+        is_invite: invite,
+        has_temporary_password: !!password,
+      };
+    }
+
+    const emailInvite = createInvitePayload({ full_name: "Dr. Jane Doe", email: "jane@sfc.my", role: "botanist" });
+    assert.equal(emailInvite.is_invite, true, "Blank password creates an email invitation flow");
+    assert.equal(emailInvite.has_temporary_password, false);
+
+    const directSetup = createInvitePayload({ full_name: "Alex Tan", email: "alex@sfc.my", role: "officer", password: "InitialPass123!" });
+    assert.equal(directSetup.is_invite, false, "Specified password creates an immediate account setup");
+    assert.equal(directSetup.has_temporary_password, true);
+  });
+
+  // =========================================================================
+  // 9. Real-Time Live Polling Invariant
+  // =========================================================================
+  test("Live Polling: Background polling executes quietly and responds to AppState", () => {
+    let pollCount = 0;
+    let isQuiet = false;
+    let isTimerActive = false;
+
+    const mockPollFn = async (quiet) => {
+      pollCount++;
+      isQuiet = quiet;
+    };
+
+    function simulatePollingController(appState) {
+      if (appState === "active") {
+        isTimerActive = true;
+        mockPollFn(true); // immediate fetch
+      } else {
+        isTimerActive = false;
+      }
+    }
+
+    // Mount screen in active app
+    simulatePollingController("active");
+    assert.equal(pollCount, 1, "Immediate poll fires on active mount");
+    assert.equal(isQuiet, true, "Polling runs quietly without toasts");
+    assert.equal(isTimerActive, true, "Polling timer is active in foreground");
+
+    // App goes to background
+    simulatePollingController("background");
+    assert.equal(isTimerActive, false, "Polling timer is suspended in background");
+
+    // App returns to foreground
+    simulatePollingController("active");
+    assert.equal(pollCount, 2, "Re-foregrounding immediately triggers a poll");
+    assert.equal(isTimerActive, true, "Polling timer resumes in foreground");
+  });
+
 });

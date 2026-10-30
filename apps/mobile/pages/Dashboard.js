@@ -18,6 +18,7 @@ import { shortDate } from '../components/format.js';
 import { useSpeciesSearch } from '../hooks/useSpeciesSearch.js';
 import { cleanTerm, isTagSearch } from '../../shared/speciesSearch.js';
 import { can } from '../../shared/permissions.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 const PAGE_SIZE = 20; // same as the API's default `limit`
 const ROW_HEIGHT = 77; // fixed row height lets the list jump straight to a letter
@@ -65,6 +66,7 @@ export function TaggedPlants({ nav, params = {} }) {
 }
 
 function PlantsTab({ nav, params, route, start }) {
+  usePolling(5000);
   const view = params.view || start;
   const onView = (v) => nav.replace(route, { ...params, view: v });
   return view === 'species'

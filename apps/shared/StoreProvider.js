@@ -1087,6 +1087,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,
     apiStatus, apiError, authToken, isSyncing, backendSpeciesCount,
+    loadFromApi,
+    pollFromBackend: () => loadFromApi(true),
     refreshFromBackend: () => syncWithBackend(false),
     loginWithToken,
     getBackendSpeciesById,

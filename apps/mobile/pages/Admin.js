@@ -1,7 +1,7 @@
 // apps/mobile/pages/Admin.js
 // Staff "More" tab (profile, tools, appearance, sign out), and the admin's Users and Audit log.
 import React, { useState } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
@@ -18,6 +18,7 @@ export function StaffMore({ nav }) {
   const { me, role, logout } = useStore();
   const { c } = useTheme();
   const tools = [
+    { icon: 'user', label: 'Account settings', go: 'account' },
     can(role, 'monitor') && { icon: 'activity', label: 'Monitoring', go: 'monitor' },
     can(role, 'species') && { icon: 'leaf', label: 'Species', go: 'speciesAdmin' },
     can(role, 'tags') && { icon: 'qr', label: 'QR tags', go: 'tags' },
@@ -31,13 +32,27 @@ export function StaffMore({ nav }) {
   return (
     <Screen gap={18}>
       <TitleBlock title="More" />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 14, backgroundColor: c.bg }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open account settings"
+        onPress={() => nav.go('account')}
+        style={({ pressed }) => [{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 14,
+          padding: 14,
+          borderRadius: 14,
+          backgroundColor: c.bg,
+          opacity: pressed ? 0.75 : 1,
+        }]}
+      >
         <Avatar name={me?.full_name} size={48} />
         <View style={{ flex: 1, gap: 2 }}>
           <Txt v="label" style={{ fontSize: 17 }}>{me?.full_name}</Txt>
           <Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{ROLE_LABEL[role]} · {me?.email}</Txt>
         </View>
-      </View>
+        <Txt v="caption" color={c.accent} style={{ fontFamily: font('text', 600) }}>Edit</Txt>
+      </Pressable>
       <Section title="Tools" gap={0}>
         {tools.map((t, i) => <MenuRow key={t.label} icon={t.icon} label={t.label} onPress={() => nav.go(t.go)} last={i === tools.length - 1} />)}
       </Section>
