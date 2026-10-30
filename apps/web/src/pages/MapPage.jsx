@@ -8,6 +8,7 @@ import Icon from "../components/Icon.jsx";
 import { Mono, Sci } from "../components/Bits.jsx";
 import LeafletMap from "../components/LeafletMap.jsx";
 import { useStore } from "../../../shared/store.js";
+import { fuzzyMatch } from '../../../shared/fuzzy.js';
 import { can } from "../../../shared/permissions.js";
 import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../shared/selectors.js";
 import { MAP_BOUNDS } from "../../../shared/mapConfig.js";
@@ -72,7 +73,7 @@ export default function MapPage({ arg }) {
   const { onMap, hidden } = useMemo(() => {
     const s = plants
       .filter((p) => !only || familyOf(p) === only)
-      .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].join(" ").toLowerCase().includes(needle))
+      .filter((p) => !needle || fuzzyMatch([p.name, p.scientific, p.qr_id, familyOf(p)].join(' '), needle))
       .map((p) => {
         if (apiDistribution) {
           return { p, c: (p.lat != null && p.lng != null) ? { lat: p.lat, lng: p.lng } : null };

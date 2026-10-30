@@ -4,6 +4,7 @@ import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
+import { fuzzyMatch } from "../../../shared/fuzzy.js";
 import { ROLE_LABEL } from "../../../shared/permissions.js";
 import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
 
@@ -18,8 +19,7 @@ export function Users() {
   const [sort, setSort] = useState("active");
 
   const filtered = (db.profiles || []).filter((u) => {
-    const text = `${u.full_name || ""} ${u.email || ""} ${u.role || ""}`.toLowerCase();
-    return text.includes(q.trim().toLowerCase());
+    return fuzzyMatch(`${u.full_name || ""} ${u.email || ""} ${u.role || ""}`, q);
   });
 
   const sortedUsers = [...filtered].sort((a, b) => {

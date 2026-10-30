@@ -3,6 +3,7 @@ import { useState } from "react";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import PlantCard from "../components/PlantCard.jsx";
+import { fuzzyMatch } from '../../../shared/fuzzy.js';
 import { useStore } from "../../../shared/store.js";
 import { visiblePlants, speciesCatalogue } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
@@ -50,7 +51,7 @@ export function Home() {
     if (!t) return go("/plants");
     const tag = plants.find((p) => p && p.qr_id && p.qr_id.toLowerCase() === t);
     if (tag) return go("/tag/" + tag.qr_id);
-    const hit = plants.find((p) => p.species && `${p.name} ${p.scientific} ${p.species.family}`.toLowerCase().includes(t));
+    const hit = plants.find((p) => p.species && fuzzyMatch(`${p.name} ${p.scientific} ${p.species.family}`, t));
     if (hit) go("/plants/" + hit.species.id);
     else notify(`No published plant matches "${q.trim()}"`);
   };

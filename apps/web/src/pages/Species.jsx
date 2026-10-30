@@ -5,6 +5,7 @@ import Icon from "../components/Icon.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
 import { Chip, Empty, Modal } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
+import { fuzzyMatch } from "../../../shared/fuzzy.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
 import { speciesMedia, speciesObservationPhotos } from "../../../shared/selectors.js";
@@ -32,7 +33,7 @@ export default function Species() {
 
   const list = db.species
     .filter((s) => !s.is_deleted)
-    .filter((s) => `${s.scientific_name} ${s.common_name} ${s.family}`.toLowerCase().includes(q.toLowerCase()));
+    .filter((s) => fuzzyMatch(`${s.scientific_name} ${s.common_name} ${s.family}`, q));
 
   const sortedList = [...list].sort((a, b) => {
     if (sort === "scientific") return (a.scientific_name || "").localeCompare(b.scientific_name || "");

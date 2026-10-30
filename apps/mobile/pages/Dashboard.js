@@ -18,6 +18,7 @@ import { shortDate } from '../components/format.js';
 import { useSpeciesSearch } from '../hooks/useSpeciesSearch.js';
 import { cleanTerm, isTagSearch } from '../../shared/speciesSearch.js';
 import { can } from '../../shared/permissions.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { usePolling } from '../hooks/usePolling.js';
 
 const PAGE_SIZE = 20; // same as the API's default `limit`
@@ -124,7 +125,7 @@ function SpeciesCatalogue({ nav, params, onView }) {
     .filter((s) => {
       if (!needle) return true;
       const tags = plants.filter((p) => p.species_id === s.id && p.qr_id).map((p) => String(p.qr_id).toLowerCase());
-      return [s.common_name, s.scientific_name, s.family].filter(Boolean).join(' ').toLowerCase().includes(needle) || tags.some((t) => t.includes(needle));
+      const text = [s.common_name, s.scientific_name, s.family].filter(Boolean).join(' '); return fuzzyMatch(text, needle) || tags.some((t) => fuzzyMatch(t, needle));
     });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -318,7 +319,7 @@ function TaggedList({ nav, onView }) {
   const needle = q.trim().toLowerCase();
   const filtered = all
     .filter((p) => (filter === 'all' ? true : filter === 'mine' ? p.registered_by === me?.id : filter === 'endangered' ? p.endangered : p.status === filter))
-    .filter((p) => !needle || [p.qr_id, p.name, p.scientific, p.by].filter(Boolean).join(' ').toLowerCase().includes(needle));
+    .filter((p) => !needle || fuzzyMatch([p.qr_id, p.name, p.scientific, p.by].filter(Boolean).join(' '), needle));
 
   const sorted = [...filtered].sort((a, b) => {
     if (sort === 'name') return (a.name || '').localeCompare(b.name || '');

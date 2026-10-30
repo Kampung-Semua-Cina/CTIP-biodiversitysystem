@@ -91,7 +91,7 @@ export function Users({ nav }) {
   const needle = q.trim().toLowerCase();
   const rows = db.profiles
     .filter((p) => (filter === 'all' ? true : filter === 'off' ? !p.is_active : p.role === filter && p.is_active))
-    .filter((p) => !needle || `${p.full_name} ${p.email}`.toLowerCase().includes(needle))
+    .filter((p) => !needle || fuzzyMatch(`${p.full_name} ${p.email} ${p.role}`, needle))
     ;
   const sorted = [...rows].sort((a, b) => {
     if (sort === 'name') return a.full_name.localeCompare(b.full_name);

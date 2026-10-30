@@ -5,6 +5,7 @@ import { View, Linking } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, speciesCatalogue } from '../../shared/selectors.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { getAboutContent, getContactContent, getHomeContent } from '../../shared/publicContent.js';
 import { SITE, PARK } from '../../shared/site.js';
 import { useTheme } from '../components/Theme.js';
