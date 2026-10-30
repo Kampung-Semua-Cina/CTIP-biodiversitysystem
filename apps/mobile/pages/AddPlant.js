@@ -143,7 +143,7 @@ function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd 
           </Pressable>
         ))}
         {photos.length < MAX_PHOTOS ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Add photo" onPress={promptChoice}
+          <Pressable accessibilityRole="button" accessibilityLabel="Add photo" onPress={onAddCamera}
             style={{ width: 76, height: 76, marginTop: 2, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: highlightAdd ? 'transparent' : c.bg, borderWidth: highlightAdd ? 2 : 0, borderStyle: 'dashed', borderColor: c.warning }}>
             <Icon name={photos.length ? 'plus' : 'camera'} size={24} color={highlightAdd ? c.warning : c.accent} />
             {!photos.length ? <Text style={{ fontFamily: font('text', 800), fontSize: 12, color: c.accent }}>Add</Text> : null}
@@ -598,6 +598,14 @@ export function Revisit({ nav, params = {} }) {
     return (
       <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />}>
         <Empty icon="qr">This tag is not on a plant yet.</Empty>
+      </Screen>
+    );
+  }
+  const pendingObs = db.observations.some((o) => o.specimen_id === plant.id && o.status === 'synced');
+  if (pendingObs) {
+    return (
+      <Screen header={<Header left={<IconButton name="x" label="Close" onPress={nav.back} />} />}>
+        <Empty icon="lock">This plant has an observation waiting for officer review. Edits and revisits are locked until a decision is returned.</Empty>
       </Screen>
     );
   }

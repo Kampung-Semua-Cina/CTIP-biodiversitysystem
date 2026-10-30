@@ -11,22 +11,15 @@ import { PasswordInput } from "../components/Bits.jsx";
 // person chooses a new password. #/login?expired=1: the link was used or too old.
 // After a first sign-in with the default password, staff are asked to choose a new one.
 export default function Login() {
-  const { login, signIn, changePassword, notify, loginWithToken, apiStatus, addUser } = useStore();
+  const { login, signIn, changePassword, notify, loginWithToken, apiStatus } = useStore();
   const { query } = useRoute();
   const [tokenInput, setTokenInput] = useState("");
   const [isTokenBusy, setIsTokenBusy] = useState(false);
-  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token | register
+  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pending, setPending] = useState(null); // user id waiting to choose a new password
-
-  // Register form state
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regPw, setRegPw] = useState("");
-  const [regRole, setRegRole] = useState("botanist");
-  const [isRegistering, setIsRegistering] = useState(false);
 
   const switchTo = (next) => {
     setMode(next);
@@ -44,26 +37,6 @@ export default function Login() {
     }
     signIn(res.id);
     go("/dashboard");
-  };
-
-  const submitRegister = async (e) => {
-    e.preventDefault();
-    if (regPw.length < 8) return notify("Use at least 8 characters for the password");
-    setIsRegistering(true);
-    const res = await addUser({
-      full_name: regName.trim(),
-      email: regEmail.trim(),
-      role: regRole,
-      password: regPw,
-    });
-    setIsRegistering(false);
-    if (!res || res.ok === false) {
-      return notify(res?.message || "Failed to create account");
-    }
-    notify(`Account created for ${regEmail}! You can now sign in.`);
-    setEmail(regEmail);
-    setPw(regPw);
-    switchTo("signin");
   };
 
   // The reset-link form and the first sign-in prompt: set the new password.
@@ -115,47 +88,19 @@ export default function Login() {
         <form onSubmit={submit}>
           <h1>Staff sign in</h1>
           <p className="mute">
-            For botanists, conservation officers and admins. Sign in with the email your admin registered for you, or your username.
+            For botanists, conservation officers and admins. Accounts are created by administrator invitation only. Sign in with your registered email or username.
           </p>
           <label>Email or username<input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
           <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
           <div className="row wrap gap-top">
             <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("register")}><Icon name="plus" size={18} /> Create account</button>
+
             <button className="btn ghost" type="button" onClick={() => switchTo("token")}><Icon name="shield" size={18} /> Sign in with API token</button>
             <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Forgot password</button>
           </div>
           <p className="mute small" style={{ marginTop: 12 }}>
             Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
           </p>
-        </form>
-      )}
-
-      {mode === "register" && (
-        <form onSubmit={submitRegister}>
-          <h1>Create staff account</h1>
-          <p className="mute">
-            Add a botanist, conservation officer, or administrator account.
-          </p>
-          <label>Full name<input value={regName} onChange={(e) => setRegName(e.target.value)} placeholder="Dr. Jane Doe" required /></label>
-          <label>Email<input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="email" required /></label>
-          <label>Password<PasswordInput value={regPw} onChange={(e) => setRegPw(e.target.value)} autoComplete="new-password" minLength={8} required /></label>
-          <p className="mute small">At least 8 characters.</p>
-          <label>Role
-            <select value={regRole} onChange={(e) => setRegRole(e.target.value)}>
-              <option value="botanist">Botanist</option>
-              <option value="officer">Conservation Officer</option>
-              <option value="admin">Administrator</option>
-            </select>
-          </label>
-          <div className="row wrap gap-top">
-            <button className="btn" type="submit" disabled={isRegistering}>
-              <Icon name="plus" size={18} /> {isRegistering ? "Creating account..." : "Create account"}
-            </button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>
-              <Icon name="chevL" size={18} /> Back to sign in
-            </button>
-          </div>
         </form>
       )}
 

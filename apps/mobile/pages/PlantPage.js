@@ -13,9 +13,10 @@ import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import LeafletMap from '../components/LeafletMap.js';
 import {
-  Txt, Sci, Mono, Chip, Section, TextLink, Row, Thumb, MiniMap, KV, Button, Empty, Header, IconButton, Screen,
+  Txt, Sci, Mono, Chip, Section, TextLink, Row, Thumb, MiniMap, KV, Button, Empty, Header, IconButton, Screen, Notice,
 } from '../components/Bits.js';
 import { longDate, coords } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 // Where a plant sits on the little map (0..1 inside the park bounds).
 export const mapPoint = ({ lat, lng }) => ({
@@ -166,6 +167,7 @@ export function SpeciesProfile({ nav, params }) {
 }
 
 export function TaggedPlant({ nav, params }) {
+  usePolling(5000);
   const { db, role } = useStore();
   const { c } = useTheme();
   const raw = db.plants.find((p) => p.qr_id === params?.qr && !p.is_deleted);
@@ -258,7 +260,13 @@ export function TaggedPlant({ nav, params }) {
         </Section>
       ) : null}
       <View style={{ gap: 8 }}>
-        {role === 'botanist' ? <Button label="Record a revisit" icon="plus" onPress={() => nav.go('revisit', { qr: p.qr_id })} /> : null}
+        {role === 'botanist' ? (
+          obs.some((o) => o.status === 'synced') ? (
+            <Notice tone="info" icon="lock" title="Review in progress" body="An observation of this plant is waiting for an officer's decision. Record editing and revisits are locked until review is complete." />
+          ) : (
+            <Button label="Record a revisit" icon="plus" onPress={() => nav.go('revisit', { qr: p.qr_id })} />
+          )
+        ) : null}
         {role === 'officer' && (obs.find((o) => o.status === 'synced') || lastObs) ? (
           <Button
             label={obs.find((o) => o.status === 'synced') ? "Review record (Action needed)" : "Review decisions"}

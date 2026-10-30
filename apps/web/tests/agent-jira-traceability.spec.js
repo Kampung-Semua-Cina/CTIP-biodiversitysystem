@@ -425,4 +425,60 @@ test.describe("Jira Backlog Requirements Traceability Suite", () => {
 
     watchdog.assertClean("Jira CTIP-30 Search & Catalogue Views");
   });
+
+  // =========================================================================
+  // JIRA CTIP-45 & CTIP-69: Web: Observation Review Lock for Botanists
+  // =========================================================================
+  test("Jira CTIP-45/69: Web: Observation review lock prevents botanists from editing pending records and photos", async ({ page }) => {
+    const watchdog = attachBugWatchdog(page);
+    await page.goto("#/records");
+    await switchRole(page, "Botanist");
+
+    // Check my records page
+    const recordsHeader = page.locator("h2, h1").first();
+    await expect(recordsHeader).toBeVisible();
+
+    // Verify pending review lock note is displayed for synced records without edit controls
+    const syncedNotices = page.locator("article:has(.chip:has-text('Needs review')), article:has(.chip:has-text('synced'))");
+    const count = await syncedNotices.count();
+    if (count > 0) {
+      const firstSynced = syncedNotices.first();
+      await expect(firstSynced).toContainText(/Waiting for an officer to review it|locked until a decision is returned/i);
+      // Ensure no appearance/height input forms are rendered for pending records
+      await expect(firstSynced.locator("textarea, input[type='number']")).toHaveCount(0);
+    }
+
+    watchdog.assertClean("Jira CTIP-45/69 Web Observation Review Lock");
+  });
+
+  // =========================================================================
+  // JIRA CTIP-34 & CTIP-43: Web: Sign-In Requires Admin Invite; Public Registration Disabled
+  // =========================================================================
+  test("Jira CTIP-34/43: Web: Sign-in requires administrator invitation and disables public self-registration", async ({ page }) => {
+    const watchdog = attachBugWatchdog(page);
+    await page.goto("#/login");
+
+    // 1. Verify sign in header and prompt
+    const heading = page.locator("h1");
+    await expect(heading).toContainText("Staff sign in");
+    const mutePrompt = page.locator("p.mute").first();
+    await expect(mutePrompt).toContainText("Accounts are created by administrator invitation only");
+
+    // 2. Ensure NO public "Create account" button exists on the sign-in screen
+    const createAccountBtn = page.locator('button:has-text("Create account")');
+    await expect(createAccountBtn).toHaveCount(0);
+
+    // 3. Verify Admin member invitation interface
+    await page.goto("#/users");
+    await switchRole(page, "Admin");
+    const inviteSection = page.locator("form.addform");
+    if (await inviteSection.isVisible()) {
+      await expect(inviteSection.locator("h3")).toContainText("Invite member");
+      await expect(inviteSection.locator('button[type="submit"]')).toContainText("Invite member");
+      await expect(inviteSection.locator("p.mute")).toContainText(/Leave temporary password blank to send an email invitation/i);
+    }
+
+    watchdog.assertClean("Jira CTIP-34/43 Web Admin Invite Enforcement");
+  });
+
 });

@@ -127,10 +127,57 @@ export const staffHandlers = {
     }
   },
 
-  // Visitors: published species and their photos only (RLS "public read").
+  // Visitors: published species, their photos, and published plants (CTIP-33 / visitor catalogue).
   'get /public/workspace': async (req, res) => {
     try {
-      res.json(await loadWorkspace(supabaseAnon(), ['species', 'species_media']));
+      const db = supabaseAnon();
+      const out = await loadWorkspace(db, ['species', 'species_media']);
+      const { data: pubPlants } = await db.rpc('public_plants');
+      const { data: pubPhotos } = await db.rpc('public_observation_photos');
+      if (pubPlants?.length) {
+        const specimenMap = new Map();
+        const obsList = [];
+        for (const row of pubPlants) {
+          if (!specimenMap.has(row.id)) {
+            specimenMap.set(row.id, {
+              id: row.id,
+              qr_id: row.qr_id,
+              species_id: row.species_id,
+              lat: row.lat,
+              lng: row.lng,
+              gps_accuracy_m: row.gps_accuracy_m,
+              endangered_override: row.endangered_override,
+              is_deleted: row.is_deleted,
+            });
+          }
+          if (row.observation_id) {
+            obsList.push({
+              id: row.observation_id,
+              specimen_id: row.id,
+              status: 'approved',
+              height_cm: row.height_cm,
+              morphology: row.morphology,
+              observed_at: row.observed_at,
+              is_deleted: false,
+            });
+          }
+        }
+        out.specimens = Array.from(specimenMap.values());
+        out.observations = obsList;
+      }
+      if (pubPhotos?.length) {
+        out.observation_photos = pubPhotos.map((p) => ({
+          id: p.id,
+          observation_id: p.observation_id,
+          s3_key: p.s3_key,
+          s3_bucket: p.s3_bucket,
+          created_at: p.created_at,
+          url: p.s3_key && !p.s3_key.startsWith('http')
+            ? `${process.env.SUPABASE_URL}/storage/v1/object/public/${p.s3_bucket || 'observation-photos'}/${p.s3_key}`
+            : p.s3_key,
+        }));
+      }
+      res.json(out);
     } catch (error) {
       dbError(res, error);
     }

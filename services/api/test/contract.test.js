@@ -8,7 +8,7 @@ import { routes } from '../src/permissions.js';
 // cannot slip in without its contract change and its two approvals.
 // The YAML is read as text: each path is a 2-space key under `paths:`, and
 // each method a 4-space key inside it.
-const yaml = readFileSync(new URL('../../../packages/api-contract/openapi.yaml', import.meta.url), 'utf8');
+const yaml = readFileSync(new URL('../../../packages/api-contract/openapi.yaml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 function methodsOf(path) {
   const start = yaml.indexOf(`\n  ${path}:\n`);

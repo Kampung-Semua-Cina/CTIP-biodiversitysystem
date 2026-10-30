@@ -12,6 +12,7 @@ import {
   Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 const GROUPS = [
   { key: 'fix', title: 'Needs you', statuses: ['returned', 'draft'] },
@@ -28,6 +29,7 @@ const SORT_RECORDS = [
 ];
 
 export function MyRecords({ nav }) {
+  usePolling(5000);
   const { db, me } = useStore();
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
@@ -89,6 +91,7 @@ export function MyRecords({ nav }) {
 const lastReview = (db, obsId) => db.reviews.filter((r) => r.observation_id === obsId).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
 
 export function RecordDetail({ nav, params = {} }) {
+  usePolling(5000);
   const { db, me, resubmit, syncObservation } = useStore();
   const { c } = useTheme();
   const [message, setMessage] = useState('');
@@ -142,7 +145,7 @@ export function RecordDetail({ nav, params = {} }) {
       {returned && review ? (
         <Notice tone="warning" icon="undo" title={`Returned by ${nameOf(db, review.reviewer_id)}`} body={review.comment || 'No note was added.'} meta={dateTime(review.created_at)} />
       ) : null}
-      {o.status === 'synced' ? <Notice tone="info" icon="clipboard" title="Waiting for an officer" body="You'll get an alert when it is approved or returned." /> : null}
+      {o.status === 'synced' ? <Notice tone="info" icon="lock" title="Waiting for an officer" body="Observation review is in progress. Edits are locked until an officer decides on this record." /> : null}
 
       {comments.length ? (
         <View style={{ gap: 12 }}>

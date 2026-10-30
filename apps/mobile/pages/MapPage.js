@@ -9,6 +9,7 @@ import * as Location from 'expo-location';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, shownCoords, familyColors, familyOf } from '../../shared/selectors.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { MAP_BOUNDS } from '../../shared/mapConfig.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
@@ -37,7 +38,7 @@ export default function MapPage({ nav, params = {} }) {
   const needle = q.trim().toLowerCase();
   const shown = plants
     .filter((p) => family === 'all' || p.species?.family === family)
-    .filter((p) => !needle || [p.name, p.scientific, p.qr_id, familyOf(p)].filter(Boolean).join(' ').toLowerCase().includes(needle))
+    .filter((p) => !needle || fuzzyMatch([p.name, p.scientific, p.qr_id, familyOf(p)].filter(Boolean).join(' '), needle))
     .map((p) => ({ p, where: shownCoords(p, role) }));
 
   const onMap = shown.filter((s) => s.where);

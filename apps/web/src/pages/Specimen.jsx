@@ -42,6 +42,7 @@ export default function Specimen({ qr }) {
   const visits = plantVisits(db, plant.id, role);
   const plantObs = db.observations.filter((o) => o.specimen_id === plant.id).sort((a, b) => (b.observed_at || "").localeCompare(a.observed_at || ""));
   const pendingObs = plantObs.find((o) => o.status === "synced");
+  const canEditPhotos = can(role, "editPhotos") && (role !== "botanist" || !pendingObs);
   const activeObsForReview = pendingObs || (showReviewPanel ? plantObs[0] : null);
   const speciesList = db.species.filter((s) => !s.is_deleted);
 
@@ -137,7 +138,12 @@ export default function Specimen({ qr }) {
         <section id="tabpanel" role="tabpanel" aria-labelledby={"tab-" + active} className="tabpanel">
           {active === "overview" && (
             <div className="glass pad">
-              <PhotoGallery key={plant.id} photos={plant.photos} canEdit={can(role, "editPhotos")} onEdit={() => setEditing(true)} />
+              <PhotoGallery key={plant.id} photos={plant.photos} canEdit={canEditPhotos} onEdit={() => setEditing(true)} />
+              {role === "botanist" && pendingObs && (
+                <p className="mute small" style={{ marginTop: 8 }}>
+                  <Icon name="lock" size={14} /> Observation is pending an officer's review. Record and photo editing are locked until a decision is returned.
+                </p>
+              )}
               {plant.species?.description && <p className="gap-top-s">{plant.species.description}</p>}
               <dl className="gap-top-s">
                 <dt>Family</dt><dd>{plant.species ? `${plant.species.family} · ${plant.species.genus}` : "Not confirmed yet"}</dd>

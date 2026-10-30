@@ -1,7 +1,7 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed } from "./data.js";
+import { seed, initialPublicPlants } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
@@ -97,6 +97,41 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     timer.current = setTimeout(() => setToast(""), 2600);
   }, []);
 
+
+// Stable URL cache to avoid re-rendering images every polling cycle
+const photoUrlCache = new Map();
+function stablePhotoUrl(key, freshUrl) {
+  if (!key) return freshUrl;
+  if (!freshUrl) return photoUrlCache.get(key) || null;
+  if (photoUrlCache.has(key)) {
+    return photoUrlCache.get(key);
+  }
+  photoUrlCache.set(key, freshUrl);
+  return freshUrl;
+}
+
+// Compare two lists shallowly by checking lengths and item JSON representations
+function collectionMatches(a = [], b = []) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const itemA = a[i];
+    const itemB = b[i];
+    if (itemA === itemB) continue;
+    if (!itemA || !itemB) return false;
+    if (itemA.id && itemB.id && itemA.id === itemB.id) {
+      if (itemA.status !== itemB.status || itemA.is_read !== itemB.is_read || itemA.observed_at !== itemB.observed_at) {
+        return false;
+      }
+    }
+    if (JSON.stringify(itemA) !== JSON.stringify(itemB)) {
+      return false;
+    }
+  }
+  return true;
+}
+
   // Load everything the pages show from the API (GET /v1/workspace, or
   // /v1/public/workspace for visitors) and shape it for the store.
   const loadFromApi = useCallback(async (quiet = true) => {
@@ -116,7 +151,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
       list.push({
         id: ph.id,
         observation_id: ph.observation_id,
-        url: ph.url || ph.s3_key,
+        url: stablePhotoUrl(ph.id || ph.s3_key, ph.url || ph.s3_key),
         s3_bucket: ph.s3_bucket || "observation-photos",
         s3_key: ph.s3_key,
         created_at: ph.created_at,
@@ -169,7 +204,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     const species_media = w.species_media.map((m) => ({
       id: m.id,
       species_id: m.species_id,
-      url: m.url || m.s3_key,
+      url: stablePhotoUrl(m.id || m.s3_key, m.url || m.s3_key),
       s3_bucket: m.s3_bucket,
       s3_key: m.s3_key,
       caption: m.caption || "",
@@ -210,26 +245,60 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
     setDb((prevDb) => {
       let mergedProfiles = prevDb.profiles || [];
-      if (w.profiles.length > 0) {
+      if (w.profiles && w.profiles.length > 0) {
         const pMap = new Map(mergedProfiles.map((p) => [p.id, p]));
         for (const pr of w.profiles) pMap.set(pr.id, { ...(pMap.get(pr.id) || {}), ...pr });
         mergedProfiles = Array.from(pMap.values());
       }
+
+      // If visitor and incoming plants are empty, preserve existing published plants or initialPublicPlants
+      const finalPlants = (!token && plants.length === 0 && prevDb.plants?.length > 0)
+        ? prevDb.plants
+        : (plants.length > 0 ? plants : (!token ? (prevDb.plants?.length > 0 ? prevDb.plants : initialPublicPlants) : []));
+
+      const finalObs = (!token && (!w.observations || w.observations.length === 0) && prevDb.observations?.length > 0)
+        ? prevDb.observations
+        : (w.observations || []);
+
+      // Check if anything actually changed
+      const spEqual = collectionMatches(prevDb.species, w.species);
+      const mediaEqual = collectionMatches(prevDb.species_media, species_media);
+      const plEqual = collectionMatches(prevDb.plants, finalPlants);
+      const obsEqual = collectionMatches(prevDb.observations, finalObs);
+      const tagsEqual = collectionMatches(prevDb.tags, tags);
+      const revEqual = collectionMatches(prevDb.reviews, reviews);
+      const comEqual = collectionMatches(prevDb.comments, w.observation_comments);
+      const altEqual = collectionMatches(prevDb.alerts, w.alerts);
+      const notesEqual = collectionMatches(prevDb.alertNotes, alertNotes);
+      const nodesEqual = collectionMatches(prevDb.nodes, nodes);
+      const notifsEqual = collectionMatches(prevDb.notifications, w.notifications);
+      const auditEqual = collectionMatches(prevDb.audit, audit);
+      const profEqual = collectionMatches(prevDb.profiles, mergedProfiles);
+
+      const hasChanges = !spEqual || !mediaEqual || !plEqual || !obsEqual || !tagsEqual ||
+        !revEqual || !comEqual || !altEqual || !notesEqual || !nodesEqual ||
+        !notifsEqual || !auditEqual || !profEqual;
+
+      // Only change stuff if there's stuff to be changed (prevents image reloads / UI flickering)
+      if (!hasChanges) {
+        return prevDb;
+      }
+
       return {
         ...prevDb,
-        species: w.species,
-        species_media,
-        plants,
-        observations: w.observations,
-        tags,
-        reviews,
-        comments: w.observation_comments,
-        alerts: w.alerts,
-        alertNotes,
-        nodes,
-        notifications: w.notifications,
-        audit,
-        profiles: mergedProfiles,
+        species: spEqual ? prevDb.species : w.species,
+        species_media: mediaEqual ? prevDb.species_media : species_media,
+        plants: plEqual ? prevDb.plants : finalPlants,
+        observations: obsEqual ? prevDb.observations : finalObs,
+        tags: tagsEqual ? prevDb.tags : tags,
+        reviews: revEqual ? prevDb.reviews : reviews,
+        comments: comEqual ? prevDb.comments : w.observation_comments,
+        alerts: altEqual ? prevDb.alerts : w.alerts,
+        alertNotes: notesEqual ? prevDb.alertNotes : alertNotes,
+        nodes: nodesEqual ? prevDb.nodes : nodes,
+        notifications: notifsEqual ? prevDb.notifications : w.notifications,
+        audit: auditEqual ? prevDb.audit : audit,
+        profiles: profEqual ? prevDb.profiles : mergedProfiles,
       };
     });
 
@@ -1087,6 +1156,8 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,
     apiStatus, apiError, authToken, isSyncing, backendSpeciesCount,
+    loadFromApi,
+    pollFromBackend: () => loadFromApi(true),
     refreshFromBackend: () => syncWithBackend(false),
     loginWithToken,
     getBackendSpeciesById,

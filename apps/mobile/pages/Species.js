@@ -25,7 +25,7 @@ export default function SpeciesAdmin({ nav }) {
   const plants = visiblePlants(db, role);
   const all = db.species.filter((s) => !s.is_deleted);
   const needle = q.trim().toLowerCase();
-  const rows = all.filter((s) => !needle || [s.common_name, s.scientific_name, s.family].join(' ').toLowerCase().includes(needle));
+  const rows = all.filter((s) => !needle || fuzzyMatch([s.common_name, s.scientific_name, s.family].join(' '), needle));
   const sorted = [...rows].sort((a, b) => {
     if (sort === 'scientific') return (a.scientific_name || '').localeCompare(b.scientific_name || '');
     if (sort === 'family') return (a.family || '').localeCompare(b.family || '') || (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);

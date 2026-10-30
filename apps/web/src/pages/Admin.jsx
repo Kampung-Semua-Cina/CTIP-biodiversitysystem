@@ -4,6 +4,7 @@ import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
+import { fuzzyMatch } from "../../../shared/fuzzy.js";
 import { ROLE_LABEL } from "../../../shared/permissions.js";
 import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
 
@@ -18,8 +19,7 @@ export function Users() {
   const [sort, setSort] = useState("active");
 
   const filtered = (db.profiles || []).filter((u) => {
-    const text = `${u.full_name || ""} ${u.email || ""} ${u.role || ""}`.toLowerCase();
-    return text.includes(q.trim().toLowerCase());
+    return fuzzyMatch(`${u.full_name || ""} ${u.email || ""} ${u.role || ""}`, q);
   });
 
   const sortedUsers = [...filtered].sort((a, b) => {
@@ -48,7 +48,7 @@ export function Users() {
       <h2>Users</h2>
 
       <form className="addform" onSubmit={add}>
-        <h3><Icon name="users" size={18} /> Add botanist or officer</h3>
+        <h3><Icon name="users" size={18} /> Invite member</h3>
         <div className="row wrap">
           <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
@@ -58,9 +58,9 @@ export function Users() {
               {Object.entries(ROLE_LABEL).map(([r, text]) => <option key={r} value={r}>{text}</option>)}
             </select>
           </label>
-          <button className="btn" type="submit"><Icon name="plus" size={18} /> Add account</button>
+          <button className="btn" type="submit"><Icon name="plus" size={18} /> Invite member</button>
         </div>
-        <p className="mute small">Staff sign in with this email and password, and can reset their password from the sign-in page.</p>
+        <p className="mute small">Leave temporary password blank to send an email invitation, or specify one for immediate first-time sign in.</p>
       </form>
 
       <div className="toolbar" style={{ display: "flex", gap: 12, alignItems: "center", margin: "20px 0 14px", flexWrap: "wrap" }}>

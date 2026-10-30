@@ -12,6 +12,7 @@ import {
   Screen, Bar, TitleBlock, Section, Row, Thumb, Mono, Txt, DotLabel, Chip, Spark, Button, Area, Empty, Pills,
 } from '../components/Bits.js';
 import { dateTime } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 const latest = (readings = []) => readings[readings.length - 1];
 
@@ -38,6 +39,7 @@ function AlertCard({ a, node, onPress }) {
 }
 
 export function Monitor({ nav }) {
+  usePolling(5000);
   const { db } = useStore();
   const { c } = useTheme();
   const [nodeId, setNodeId] = useState(db.nodes.find((n) => n.status === 'active')?.id || db.nodes[0]?.id);
@@ -94,6 +96,7 @@ export function Monitor({ nav }) {
 }
 
 export function AlertDetail({ nav, params = {} }) {
+  usePolling(5000);
   const { db, ackAlert, resolveAlert, addAlertNote, notify } = useStore();
   const { c } = useTheme();
   const [note, setNote] = useState('');

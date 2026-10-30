@@ -7,6 +7,7 @@ import { useStore } from '../../shared/store.js';
 import { useTheme, font } from '../components/Theme.js';
 import { Screen, TitleBlock, Section, IconTile, TextLink, Empty, Txt } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
+import { usePolling } from '../hooks/usePolling.js';
 
 // Icon and tone for each notification type.
 const LOOK = {
@@ -20,6 +21,7 @@ const LOOK = {
 };
 
 export default function Alerts({ nav }) {
+  usePolling(5000);
   const { db, me, role, markRead, markAllRead } = useStore();
   const { c } = useTheme();
   const mine = db.notifications.filter((n) => n.user_id === me?.id).sort((a, b) => b.created_at.localeCompare(a.created_at));

@@ -17,6 +17,7 @@ import Tags from '../pages/Tags.js';
 import TagQr from '../pages/TagQr.js';
 import Reports from '../pages/Reports.js';
 import { StaffMore, Users, Audit } from '../pages/Admin.js';
+import Account from '../pages/Account.js';
 
 // Every screen, by route name. Each screen receives { nav, params }.
 export const SCREENS = {
@@ -26,7 +27,7 @@ export const SCREENS = {
   records: MyRecords, record: RecordDetail, alerts: Alerts, discussion: Discussion,
   review: ReviewQueue, reviewItem: ReviewRecord, monitor: Monitor, alert: AlertDetail,
   staffMore: StaffMore, speciesAdmin: SpeciesAdmin, tags: Tags, tagQr: TagQr, reports: Reports,
-  users: Users, audit: Audit,
+  users: Users, audit: Audit, account: Account,
 };
 
 // Pure route metadata and permission checks

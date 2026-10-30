@@ -4,6 +4,7 @@ import { Chip, Empty, Pills } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { speciesCatalogue } from "../../../shared/selectors.js";
+import { fuzzyMatch } from "../../../shared/fuzzy.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
 import { setQuery, useRoute } from "../useRoute.js";
@@ -34,7 +35,7 @@ export default function Catalogue() {
   const all = speciesCatalogue(db, role);
   const tagged = all.reduce((n, s) => n + s.plants.length, 0);
   const text = (s) => `${s.name} ${s.scientific_name} ${s.family} ${s.genus}`.toLowerCase();
-  const searched = all.filter((s) => text(s).includes(q.trim().toLowerCase()));
+  const searched = all.filter((s) => fuzzyMatch(text(s), q));
   const shown = searched
     .filter((s) => family === "all" || s.family === family)
     .filter((s) => genus === "all" || s.genus === genus)
