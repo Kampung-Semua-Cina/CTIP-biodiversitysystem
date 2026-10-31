@@ -97,7 +97,7 @@ beforeEach((t) => {
   db = {
     qr_tags: [], specimens: [], observations: [], observation_photos: [], observation_comments: [],
     observation_reviews: [], species: [], species_media: [], alerts: [], alert_notes: [], sensor_nodes: [],
-    notifications: [], audit_logs: [], profiles: [],
+    notifications: [], audit_logs: [], profiles: [], zones: [],
   };
   failing = [];
   stored = [];
@@ -321,6 +321,21 @@ test("workspace: another botanist's endangered plant comes back reduced", async 
   assert.ok(onGrid(p.lat) && onGrid(p.lng), 'snapped to the grid used by /distribution');
   assert.equal(p.gps_accuracy_m, 1100);
   assert.equal(p.location_reduced, true);
+});
+
+// CTIP-109: the filter is only safe while a zone is the square of the reduced point.
+test("workspace: a reduced plant's zone names the square of its reduced point, nothing finer", async () => {
+  plant({ species_id: species('endangered').id, zone_id: 'N3.81-E113.78' });
+  const p = await workspacePlant('botanist');
+  assert.equal(p.location_reduced, true);
+  const corner = (v) => (Math.floor(v / 0.01) * 0.01).toFixed(2);
+  assert.equal(p.zone_id, `N${corner(p.lat)}-E${corner(p.lng)}`);
+});
+
+test('visitor workspace never holds zones', async () => {
+  db.zones.push({ id: 'N3.81-E113.78', name: 'N3.81 E113.78' });
+  const res = await request(app).get('/v1/public/workspace');
+  assert.deepEqual(res.body.zones, []);
 });
 
 test('workspace: officer sees exact', async () => {
