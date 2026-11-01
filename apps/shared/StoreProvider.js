@@ -176,6 +176,7 @@ function collectionMatches(a = [], b = []) {
       lat: s.lat,
       lng: s.lng,
       gps_accuracy_m: s.gps_accuracy_m,
+      zone_id: s.zone_id ?? null,
       endangered_override: s.endangered_override,
       is_deleted: s.is_deleted,
       photos: (obsBySpecimen.get(s.id) || []).flatMap((o) => photosByObs.get(o.id) || []),
@@ -274,10 +275,12 @@ function collectionMatches(a = [], b = []) {
       const notifsEqual = collectionMatches(prevDb.notifications, w.notifications);
       const auditEqual = collectionMatches(prevDb.audit, audit);
       const profEqual = collectionMatches(prevDb.profiles, mergedProfiles);
+      const zones = w.zones || []; // an API not yet redeployed sends none
+      const zonesEqual = collectionMatches(prevDb.zones, zones);
 
       const hasChanges = !spEqual || !mediaEqual || !plEqual || !obsEqual || !tagsEqual ||
         !revEqual || !comEqual || !altEqual || !notesEqual || !nodesEqual ||
-        !notifsEqual || !auditEqual || !profEqual;
+        !notifsEqual || !auditEqual || !profEqual || !zonesEqual;
 
       // Only change stuff if there's stuff to be changed (prevents image reloads / UI flickering)
       if (!hasChanges) {
@@ -299,6 +302,7 @@ function collectionMatches(a = [], b = []) {
         notifications: notifsEqual ? prevDb.notifications : w.notifications,
         audit: auditEqual ? prevDb.audit : audit,
         profiles: profEqual ? prevDb.profiles : mergedProfiles,
+        zones: zonesEqual ? prevDb.zones : zones,
       };
     });
 

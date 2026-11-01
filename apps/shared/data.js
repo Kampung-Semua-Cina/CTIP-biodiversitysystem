@@ -107,6 +107,7 @@ export const seed = {
   profiles: [],
   species: [],
   species_media: [],
+  zones: [],
   plants: initialPublicPlants,
   observations: initialPublicObservations,
   reviews: [],

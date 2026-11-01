@@ -301,7 +301,7 @@ paths:
         species, species_media, qr_tags, specimens, observations,
         observation_photos (with signed links), observation_reviews,
         observation_comments, alerts, alert_notes, sensor_nodes, notifications,
-        audit_logs and profiles. If qr_tags, specimens or observations cannot
+        audit_logs, profiles and zones (officer and admin only). If qr_tags, specimens or observations cannot
         be read the request fails with 500; any other list that fails comes
         back empty and is named in `unavailable`.
 
@@ -2055,6 +2055,12 @@ components:
         lat: { type: [number, 'null'], description: Null when no GPS fix was captured }
         lng: { type: [number, 'null'] }
         gps_accuracy_m: { type: [number, 'null'] }
+        zone_id:
+          type: [string, 'null']
+          description: >
+            The 0.01 degree grid square the plant is in, set by the database
+            from its GPS (GET /workspace only). Null with no GPS fix. It is the
+            same square as a reduced location, so it reveals nothing more.
         endangered_override: { type: boolean }
         location_reduced:
           type: boolean

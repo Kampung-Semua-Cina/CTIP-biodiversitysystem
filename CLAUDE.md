@@ -142,6 +142,13 @@ rather than silently building something different.
   Visitors get the plant from `GET /public/tags/:qrId`: approved plants on
   published species only, endangered spots reduced, 30 lookups a minute per
   caller address.
+- **A zone is one square of the 0.01° grid** (CTIP-109), the same grid endangered
+  plants are reduced to, so a plant's zone never says more than its reduced
+  location. `specimens.zone_id` is generated from `lat`/`lng`, so nobody enters or
+  can change it. Trails and drawn areas were not used because no boundary data
+  exists and a narrow area could pin down an endangered plant; sensor areas were
+  not used because sensors sit next to endangered plants. Squares can be renamed
+  (`zones.name`) once the park gives place names.
 - **One app version for web and mobile:** `1.0.<commit count>` from
   `scripts/version.mjs` (MAJOR.MINOR from the root `package.json`). Shown in
   the web footer and stamped into APK builds.

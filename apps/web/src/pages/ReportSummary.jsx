@@ -11,8 +11,9 @@ import { setQuery, useRoute } from "../useRoute.js";
 
 const PAGE = 25;
 const RECORD_STATUSES = ["approved", "synced", "returned", "rejected", "draft", "queued"];
+const NO_ZONE = "none"; // plants saved without a GPS fix have no zone
 const SORTS = {
-  tag: { label: "Tag", by: (a, b) => a.qr_id.localeCompare(b.qr_id) },
+  tag: { label: "Tag", by: (a, b) => (a.qr_id || "").localeCompare(b.qr_id || "") }, // a plant may have no tag
   name: { label: "Name A–Z", by: (a, b) => a.name.localeCompare(b.name) },
   recent: { label: "Last recorded, newest", by: (a, b) => (b.lastSeen || "").localeCompare(a.lastSeen || "") },
   height: { label: "Tallest", by: (a, b) => (b.height_cm ?? -1) - (a.height_cm ?? -1) },
@@ -41,29 +42,34 @@ export default function ReportSummary() {
     if (!lastSeen[o.specimen_id] || o.observed_at > lastSeen[o.specimen_id]) lastSeen[o.specimen_id] = o.observed_at;
   }
   const all = visiblePlants(db, role).map((p) => ({ ...p, lastSeen: lastSeen[p.id] || null }));
+  // Zones are squares of the 0.01° grid, set from each plant's GPS by the database (CTIP-109).
+  // Only squares holding a plant are listed. An address with an unknown zone filters nothing.
+  const zoneNames = Object.fromEntries((db.zones || []).filter((z) => all.some((p) => p.zone_id === z.id)).map((z) => [z.id, z.name]));
+  const zone = query.zone === NO_ZONE || zoneNames[query.zone] ? query.zone : "all";
   const day = (iso) => (iso ? iso.slice(0, 10) : "");
-  const text = (p) => `${p.qr_id} ${p.name} ${p.scientific} ${p.proposed_species || ""} ${p.species?.family || ""} ${p.species?.genus || ""}`.toLowerCase();
+  const text = (p) => `${p.qr_id || ""} ${p.name} ${p.scientific} ${p.proposed_species || ""} ${p.species?.family || ""} ${p.species?.genus || ""}`.toLowerCase();
   const rows = all
     .filter((p) => !q || text(p).includes(q))
     .filter((p) => family === "all" || p.species?.family === family)
     .filter((p) => genus === "all" || p.species?.genus === genus)
+    .filter((p) => zone === "all" || (zone === NO_ZONE ? !p.zone_id : p.zone_id === zone))
     .filter((p) => conservation === "all" || p.conservation === conservation)
     .filter((p) => status === "all" || p.status === status)
     .filter((p) => !from || (p.lastSeen && day(p.lastSeen) >= from))
     .filter((p) => !to || (p.lastSeen && day(p.lastSeen) <= to))
-    .sort((a, b) => SORTS[sort].by(a, b) || a.qr_id.localeCompare(b.qr_id));
+    .sort((a, b) => SORTS[sort].by(a, b) || SORTS.tag.by(a, b));
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const cur = Math.min(page, pages);
   const slice = rows.slice((cur - 1) * PAGE, cur * PAGE);
   const families = [...new Set(all.map((p) => p.species?.family).filter(Boolean))].sort();
   const genera = [...new Set(all.filter((p) => family === "all" || p.species?.family === family).map((p) => p.species?.genus).filter(Boolean))].sort();
-  const filtered = q || family !== "all" || genus !== "all" || conservation !== "all" || status !== "all" || from || to;
+  const filtered = q || family !== "all" || genus !== "all" || zone !== "all" || conservation !== "all" || status !== "all" || from || to;
   const count = (fn) => all.filter(fn).length;
   const max = Math.max(1, ...CONSERVATION.map((c) => count((p) => p.conservation === c)));
 
   const exportCsv = () => {
-    const head = ["Tag", "Name", "Scientific name", "Family", "Genus", "Conservation status", "Record status", "Last recorded", "Height (cm)", "Latitude", "Longitude", "GPS accuracy (m)"];
-    const body = rows.map((p) => [p.qr_id, p.name, p.scientific, p.species?.family, p.species?.genus, p.conservation, p.status, day(p.lastSeen), p.height_cm, p.lat, p.lng, p.gps_accuracy_m]);
+    const head = ["Tag", "Name", "Scientific name", "Family", "Genus", "Conservation status", "Record status", "Last recorded", "Height (cm)", "Zone", "Latitude", "Longitude", "GPS accuracy (m)"];
+    const body = rows.map((p) => [p.qr_id, p.name, p.scientific, p.species?.family, p.species?.genus, p.conservation, p.status, day(p.lastSeen), p.height_cm, zoneNames[p.zone_id], p.lat, p.lng, p.gps_accuracy_m]);
     download("daun-sense-plants.csv", toCsv([head, ...body]));
   };
 
@@ -124,13 +130,20 @@ export default function ReportSummary() {
             {genera.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </label>
+        <label className="inline" title="Each zone is a square about 1 km across, named after its south-west corner">Zone
+          <select value={zone} onChange={(e) => filter("zone")(e.target.value)}>
+            <option value="all">All zones</option>
+            {Object.entries(zoneNames).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            <option value={NO_ZONE}>No GPS location</option>
+          </select>
+        </label>
         <label className="inline">Last recorded from
           <input type="date" value={from} max={to || undefined} onChange={(e) => setQuery({ from: e.target.value, page: null })} />
         </label>
         <label className="inline">to
           <input type="date" value={to} min={from || undefined} onChange={(e) => setQuery({ to: e.target.value, page: null })} />
         </label>
-        {filtered && <button className="btn ghost small-btn" onClick={() => setQuery({ q: null, family: null, genus: null, conservation: null, status: null, from: null, to: null, page: null })}>Clear filters</button>}
+        {filtered && <button className="btn ghost small-btn" onClick={() => setQuery({ q: null, family: null, genus: null, zone: null, conservation: null, status: null, from: null, to: null, page: null })}>Clear filters</button>}
       </div>
 
       <div className="filters gap-top">
@@ -156,17 +169,18 @@ export default function ReportSummary() {
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>Tag</th><th>Plant and family</th><th>Conservation</th><th>Record</th><th>Last recorded</th><th>Height</th><th>Location</th></tr>
+              <tr><th>Tag</th><th>Plant and family</th><th>Conservation</th><th>Record</th><th>Last recorded</th><th>Height</th><th>Zone</th><th>Location</th></tr>
             </thead>
             <tbody>
               {slice.map((p) => (
                 <tr key={p.id}>
-                  <td className="nowrap"><Mono>{p.qr_id}</Mono></td>
-                  <td><a href={"#/tag/" + p.qr_id}>{p.name}</a><small className="mute block">{p.scientific && <i className="sci">{p.scientific}</i>}{p.species?.family ? `${p.scientific ? " · " : ""}${p.species.family}` : ""}</small></td>
+                  <td className="nowrap">{p.qr_id ? <Mono>{p.qr_id}</Mono> : "No tag"}</td>
+                  <td>{p.qr_id ? <a href={"#/tag/" + p.qr_id}>{p.name}</a> : p.name}<small className="mute block">{p.scientific && <i className="sci">{p.scientific}</i>}{p.species?.family ? `${p.scientific ? " · " : ""}${p.species.family}` : ""}</small></td>
                   <td>{p.species ? <Chip value={p.conservation} /> : "-"}</td>
                   <td><Chip value={p.status} /></td>
                   <td className="nowrap">{p.lastSeen ? fmtDate(p.lastSeen) : "-"}</td>
                   <td className="nowrap">{p.height_cm != null ? `${p.height_cm} cm` : "-"}</td>
+                  <td className="nowrap">{zoneNames[p.zone_id] || "-"}</td>
                   <td className="nowrap">{p.lat != null ? <Mono>{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</Mono> : "Not captured"}</td>
                 </tr>
               ))}

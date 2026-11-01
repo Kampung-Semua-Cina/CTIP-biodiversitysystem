@@ -173,3 +173,6 @@ Thumbs.db
 
 # JetBrains / Android Studio project files
 .idea/
+
+# Graphify
+graphify-out/

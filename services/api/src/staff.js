@@ -34,6 +34,7 @@ const WORKSPACE = {
   notifications: (db) => db.from('notifications').select('*').order('created_at', { ascending: false }),
   audit_logs: (db) => db.from('audit_logs').select('*').order('changed_at', { ascending: false }),
   profiles: (db) => db.from('profiles').select('*'),
+  zones: (db) => db.from('zones').select('*').order('id'),
 };
 const CORE = ['qr_tags', 'specimens', 'observations'];
 
