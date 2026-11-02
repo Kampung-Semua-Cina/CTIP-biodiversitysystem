@@ -1,6 +1,7 @@
 // apps/web/src/components/MiniMap.jsx
 import LeafletMap from "./LeafletMap.jsx";
 import { MAP_BOUNDS } from "../../../shared/site.js";
+import { isExactProtected } from "../../../shared/mapConfig.js";
 
 // Miniature plant map powered by Leaflet & OpenStreetMap.
 // `points` is a list of { p, c } where c = { lat, lng }.
@@ -16,6 +17,7 @@ export default function MiniMap({ points = [], label, height = 240, highlight })
       color: "var(--acc, #10b981)",
       lat: c.lat,
       lng: c.lng,
+      protect: isExactProtected(p),
     }));
 
   return (

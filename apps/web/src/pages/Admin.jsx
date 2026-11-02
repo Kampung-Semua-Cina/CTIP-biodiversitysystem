@@ -40,7 +40,6 @@ export function Users() {
     setName("");
     setEmail("");
     setPassword("");
-    notify("Account added");
   };
 
   return (

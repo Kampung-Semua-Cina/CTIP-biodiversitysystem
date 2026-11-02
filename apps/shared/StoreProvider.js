@@ -17,6 +17,7 @@ import {
   signOutApi,
   passwordResetApi,
   changePasswordApi,
+  tokenClaims,
   fetchPublicSpecies,
   fetchPublicSpeciesById,
   fetchMe,
@@ -65,6 +66,11 @@ const API_CHECK_MS = 30000;
 // The token to send: renewed through the API when it is about to expire.
 const sessionToken = () => freshAuthToken();
 
+const staffStart = { ...seed, plants: [], observations: [] };
+
+// Who the saved session belongs to, known before anything has loaded.
+const savedUserId = () => getSession()?.user?.id || tokenClaims(getAuthToken())?.sub || null;
+
 // App state, loaded from and saved through the Express API (services/api).
 // The apps never talk to Supabase directly (CTIP-114): signing in, sessions and
 // passwords go through /v1/auth and /v1/me/password, and every table and file
@@ -72,8 +78,10 @@ const sessionToken = () => freshAuthToken();
 // user so RLS applies too. The one exception is loading photos, from the
 // short-lived Storage links the API hands out.
 export default function StoreProvider({ children, deviceId = "mobile" }) {
-  const [db, setDb] = useState(seed);
-  const [userId, setUserId] = useState(null);
+  // The sample plants are for visitors. Staff are recognised straight away, so
+  // they would see them (no species, far from real data) until their own load.
+  const [db, setDb] = useState(() => (savedUserId() ? staffStart : seed));
+  const [userId, setUserId] = useState(savedUserId);
   const [toast, setToast] = useState("");
   const [apiStatus, setApiStatus] = useState("checking");
   const [apiError, setApiError] = useState(null);
@@ -81,14 +89,25 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [backendSpeciesCount, setBackendSpeciesCount] = useState(0);
   const timer = useRef(null);
+  const loadsStarted = useRef(0);
+  const newestLoadShown = useRef(0);
 
   // The role always comes from the signed-in user's profile (loaded through the
   // API); nobody signed in is a visitor. The prototype role switch that could
   // fake a role on the device was removed (CTIP-113, #36).
-  const me = useMemo(
-    () => (userId ? db.profiles.find((p) => p.id === userId) || null : null),
-    [db.profiles, userId],
-  );
+  // Until the profile arrives (Render can take 30 s to wake up) the access token
+  // says who this is, so a page refresh never looks like being signed out. This
+  // only chooses what to show: the API still checks every request.
+  const me = useMemo(() => {
+    if (!userId) return null;
+    const loaded = db.profiles.find((p) => p.id === userId);
+    if (loaded) return loaded;
+    const session = getSession();
+    const claims = tokenClaims(session?.access_token);
+    if (!claims?.user_role) return null;
+    const email = session?.user?.email || claims.email || "";
+    return { id: userId, email, full_name: email, role: claims.user_role, is_active: true, loading: true };
+  }, [db.profiles, userId]);
   const role = me?.role || "visitor";
 
   const notify = useCallback((message) => {
@@ -135,8 +154,13 @@ function collectionMatches(a = [], b = []) {
   // Load everything the pages show from the API (GET /v1/workspace, or
   // /v1/public/workspace for visitors) and shape it for the store.
   const loadFromApi = useCallback(async (quiet = true) => {
+    const started = ++loadsStarted.current;
     const token = await sessionToken();
     const res = await fetchWorkspace({ token });
+    // A later load has already answered: this one is out of date, so drop it.
+    // Otherwise a slow poll could undo a decision saved a moment ago.
+    if (started < newestLoadShown.current) return { ok: true };
+    newestLoadShown.current = started;
     // Not loaded: keep what we had. An empty plant list would show every tag as unused.
     if (!res.ok) {
       if (res.offline) { setApiStatus("offline"); setApiError(API_DOWN); }
@@ -156,6 +180,8 @@ function collectionMatches(a = [], b = []) {
         s3_key: ph.s3_key,
         created_at: ph.created_at,
         is_primary: false,
+        caption: ph.caption || "",
+        traits: ph.traits || [],
       });
       photosByObs.set(ph.observation_id, list);
     }
@@ -176,6 +202,8 @@ function collectionMatches(a = [], b = []) {
       lat: s.lat,
       lng: s.lng,
       gps_accuracy_m: s.gps_accuracy_m,
+      location_reduced: !!s.location_reduced,
+      updated_at: s.updated_at ?? null,
       zone_id: s.zone_id ?? null,
       endangered_override: s.endangered_override,
       is_deleted: s.is_deleted,
@@ -390,8 +418,11 @@ function collectionMatches(a = [], b = []) {
       if (!mounted) return;
       if (token) {
         setAuthTokenState(token);
-        const id = getSession()?.user?.id;
-        if (id) setUserId(id);
+        const id = savedUserId();
+        if (id) {
+          setDb((d) => (d === seed ? staffStart : d)); // the phone only finds its session here
+          setUserId(id);
+        }
       }
       await loadFromApi(true);
     })();
@@ -763,6 +794,19 @@ function collectionMatches(a = [], b = []) {
     await loadFromApi(true);
   };
 
+  // Hide this plant's exact spot from visitors and other botanists, whatever its
+  // species' status: the API and database treat the flag like an endangered species.
+  const setPlantLocationHidden = async (plantId, endangered_override) => {
+    const res = await callApi(updateSpecimenApi, plantId, { endangered_override });
+    if (!res.ok) {
+      notify(`Failed to update the location setting: ${res.message}`);
+      return false;
+    }
+    notify(endangered_override ? "Exact location hidden from the public" : "Location no longer hidden");
+    await loadFromApi(true);
+    return true;
+  };
+
   /* ---------- observations and review ---------- */
   // Send a draft or a record waiting for a signal: POST /v1/observations/:id/submit.
   // Returns { ok, message }.
@@ -947,13 +991,19 @@ function collectionMatches(a = [], b = []) {
   }, [authToken]);
 
   // Publish for visitors or move back to drafts: POST /v1/species/:id/publish.
-  const togglePublish = async (id) => {
-    const sp = db.species.find((s) => s.id === id);
-    if (!sp) return;
-    const res = await callApi(publishSpeciesApi, id, !sp.is_published);
-    if (!res.ok) return notify(`Failed to change publishing: ${res.message}`);
+  const setSpeciesPublished = async (id, is_published) => {
+    const res = await callApi(publishSpeciesApi, id, is_published);
+    if (!res.ok) {
+      notify(`Failed to change publishing: ${res.message}`);
+      return false;
+    }
     mergeSpecies([res.data]);
     notify(res.data.is_published ? "Published species" : "Moved species to drafts");
+    return true;
+  };
+  const togglePublish = async (id) => {
+    const sp = db.species.find((s) => s.id === id);
+    if (sp) await setSpeciesPublished(id, !sp.is_published);
   };
 
   // Soft delete (DELETE /v1/species/:id) or undo it (POST /v1/species/:id/restore).
@@ -1153,9 +1203,9 @@ function collectionMatches(a = [], b = []) {
   const value = {
     db, me, role, toast, notify,
     logout, login, signIn, changePassword, updateProfile, changeMyPassword,
-    setPlantPhotos, addPlant, addRevisit, setPlantSpecies,
+    setPlantPhotos, addPlant, addRevisit, setPlantSpecies, setPlantLocationHidden,
     syncObservation, resubmit, reviewObservation, addComment,
-    saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, deleteSpecies, restoreSpecies, setSpeciesMedia,
+    saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, setSpeciesPublished, deleteSpecies, restoreSpecies, setSpeciesMedia,
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,

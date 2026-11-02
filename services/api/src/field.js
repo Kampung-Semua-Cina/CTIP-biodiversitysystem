@@ -18,7 +18,7 @@ const SPECIMEN_COLUMNS = `id, qr_id, species_id, proposed_species_name, register
   gps_accuracy_m, endangered_override, is_deleted, created_at, updated_at`;
 const OBS_COLUMNS = `id, specimen_id, recorded_by, observed_at, height_cm, morphology, notes, lat, lng,
   gps_accuracy_m, status, version, device_id, last_synced_at, created_at, updated_at`;
-const PHOTO_COLUMNS = 'id, observation_id, s3_bucket, s3_key, content_type, size_bytes, upload_status, created_at';
+const PHOTO_COLUMNS = 'id, observation_id, s3_bucket, s3_key, content_type, size_bytes, upload_status, caption, traits, created_at';
 const COMMENT_COLUMNS = 'id, observation_id, author_id, body, created_at';
 
 const PHOTO_BUCKET = 'observation-photos';
@@ -60,6 +60,11 @@ const ObservationCreate = z.strictObject({
 // the botanist's fixes and an optional reply to the officer.
 const Submit = z.strictObject({ ...measure, comment: text(2000) });
 const CommentCreate = z.strictObject({ body: z.string().trim().min(1).max(2000) });
+// Same list as PHOTO_TRAITS in apps/shared/data.js.
+const PhotoNotes = z.strictObject({
+  caption: text(200),
+  traits: z.array(z.enum(['Whole plant', 'Tree trunk', 'Bark', 'Leaf', 'Flower', 'Fruit', 'Seed', 'Root'])).max(8),
+});
 
 const fail = (res, status, code, message) => res.status(status).json({ code, message });
 const dbError = (res, error) => fail(res, 500, 'DB_ERROR', error.message);
@@ -157,6 +162,15 @@ export const fieldHandlers = {
     const body = parseBody(ObservationCreate, req, res);
     if (!body) return;
     const db = supabaseAs(req.user);
+    // A botanist cannot add to a plant while an officer is still deciding on it. A retry
+    // of the record that is waiting carries on below and gets that record back.
+    if (req.user.role === 'botanist') {
+      let waiting = db.from('observations').select('id').eq('specimen_id', body.specimen_id).eq('status', 'synced').eq('is_deleted', false);
+      if (body.id) waiting = waiting.neq('id', body.id);
+      const { data: open, error: openError } = await waiting.limit(1);
+      if (openError) return dbError(res, openError);
+      if (open.length) return fail(res, 409, 'REVIEW_IN_PROGRESS', 'This plant has a record waiting for an officer. You can add to it once a decision is returned.');
+    }
     const now = new Date().toISOString();
     const { data, error } = await db
       .from('observations')
@@ -231,7 +245,8 @@ export const fieldHandlers = {
     res.json(await withSignedUrls(db, data));
   },
 
-  // multipart/form-data: file (the image) and an optional id for the photo.
+  // multipart/form-data: file (the image), an optional id for the photo, an optional
+  // caption, and traits (repeat the field for each part of the plant it shows).
   // The contract describes a signed-upload-URL flow; uploading through the API
   // instead lets it check the real file type and size, like species photos
   // (CTIP-85). Path convention: observation-photos/{observation_id}/{photo_id}.ext
@@ -248,6 +263,8 @@ export const fieldHandlers = {
     if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG, WebP or HEIC');
     const photoId = req.body?.id ?? crypto.randomUUID();
     if (!UUID.test(photoId)) return fail(res, 422, 'VALIDATION_ERROR', 'id must be a UUID');
+    const notes = PhotoNotes.safeParse({ caption: req.body?.caption, traits: [req.body?.traits ?? []].flat() });
+    if (!notes.success) return fail(res, 422, 'VALIDATION_ERROR', 'caption can be at most 200 characters, and traits must come from the list');
 
     const db = supabaseAs(req.user);
     const obs = await findObservation(db, req);
@@ -268,6 +285,7 @@ export const fieldHandlers = {
       .insert({
         id: photoId, observation_id: obs.data.id, s3_bucket: PHOTO_BUCKET, s3_key: key,
         content_type: type, size_bytes: req.file.size, upload_status: 'uploaded',
+        caption: notes.data.caption ?? null, traits: notes.data.traits,
       })
       .select(PHOTO_COLUMNS)
       .single();

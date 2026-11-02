@@ -133,6 +133,12 @@ export function plantVisits(db, plantId, role) {
 // Date of the newest visit, or null.
 export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0]?.observed_at || null;
 
+// When this plant's information last changed: the plant itself or any visit this role can see.
+export function lastUpdated(db, plant, role) {
+  const times = [plant?.updated_at, ...plantVisits(db, plant?.id, role).map((o) => o.updated_at || o.observed_at)];
+  return times.filter(Boolean).sort().at(-1) || null;
+}
+
 // Captioned catalogue photos of one species, cover photo first.
 export const speciesMedia = (db, speciesId) =>
   db.species_media.filter((m) => m.species_id === speciesId).sort((a, b) => a.sort_order - b.sort_order);

@@ -1,7 +1,7 @@
 // apps/mobile/pages/AddPlant.js
 // New plant record after scanning an unused tag, the "Sent for review" screen,
 // and a revisit to a plant that is already tagged.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -13,6 +13,8 @@ import Icon from '../components/Icon.js';
 import {
   Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
+import LeafletMap from '../components/LeafletMap.js';
+import { PHOTO_TRAITS, PHOTO_CAPTION_MAX } from '../../shared/data.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
@@ -122,7 +124,34 @@ async function requestHardwareLocation() {
   };
 }
 
-function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd }) {
+// Caption and trait tags for one photo.
+function PhotoDetails({ photo, index, onChange }) {
+  const { c } = useTheme();
+  const traits = photo.traits || [];
+  const toggle = (t) => onChange({ traits: traits.includes(t) ? traits.filter((x) => x !== t) : [...traits, t] });
+  return (
+    <View style={{ flexDirection: 'row', gap: 12 }}>
+      <Image source={{ uri: photo.url }} style={{ width: 52, height: 52, borderRadius: 8, backgroundColor: c.accentSoft }} />
+      <View style={{ flex: 1, gap: 8 }}>
+        <Field label={`Photo ${index + 1} caption`} optional value={photo.caption || ''} placeholder="What does it show?"
+          onChangeText={(t) => onChange({ caption: t.slice(0, PHOTO_CAPTION_MAX) })} />
+        <View accessibilityLabel={`Photo ${index + 1} traits`} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {PHOTO_TRAITS.map((t) => {
+            const on = traits.includes(t);
+            return (
+              <Pressable key={t} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={t} hitSlop={4} onPress={() => toggle(t)}
+                style={{ height: 36, paddingHorizontal: 12, borderRadius: 999, justifyContent: 'center', backgroundColor: on ? c.accent : c.bg }}>
+                <Text style={{ fontFamily: font('text', 600), fontSize: 13, color: on ? c.onAccent : c.ink }}>{t}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, onEdit, highlightAdd }) {
   const { c } = useTheme();
 
   const promptChoice = () => {
@@ -173,6 +202,10 @@ function PhotoStrip({ photos, onAddCamera, onAddGallery, onRemove, highlightAdd 
           />
         </View>
       )}
+
+      {photos.map((p, i) => (
+        <PhotoDetails key={p.id || i} photo={p} index={i} onChange={(patch) => onEdit(i, patch)} />
+      ))}
     </View>
   );
 }
@@ -188,6 +221,7 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
           <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>
             {loading ? 'Acquiring GPS fix…'
               : !hasFix(gps) ? 'Location not captured. The officer will be told.'
+              : gps.acc == null ? 'Set by hand, so there is no GPS accuracy'
               : `GPS ±${gps.acc} m · ${gps.acc <= 10 ? 'good fix' : 'weak fix, try again in the open'}`}
           </Txt>
         </View>
@@ -198,6 +232,27 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
           <Txt v="caption" color={c.warning} style={{ fontFamily: font('text', 600) }}>{error}</Txt>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// A location set by hand: type it, or tap the spot on the map.
+function SetByHand({ typed, gps, qr, onChange }) {
+  const { c } = useTheme();
+  return (
+    <View style={{ gap: 12 }}>
+      <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>Tap the spot on the map, or type its latitude and longitude.</Txt>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}><Field label="Latitude" value={typed.lat} keyboardType="numbers-and-punctuation" onChangeText={(v) => onChange({ ...typed, lat: v })} /></View>
+        <View style={{ flex: 1 }}><Field label="Longitude" value={typed.lng} keyboardType="numbers-and-punctuation" onChangeText={(v) => onChange({ ...typed, lng: v })} /></View>
+      </View>
+      <LeafletMap
+        height={280}
+        rounded
+        fitKey="spot"
+        points={hasFix(gps) ? [{ id: 'spot', qr_id: qr, name: 'This plant', lat: gps.lat, lng: gps.lng }] : []}
+        onMapClick={(lat, lng) => onChange({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}
+      />
     </View>
   );
 }
@@ -216,6 +271,8 @@ export function AddPlant({ nav, params = {} }) {
   const [gps, setGps] = useState(NO_GPS);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState('');
+  const [typed, setTyped] = useState(null); // { lat, lng } as text while setting the location by hand, else null
+  const typedRef = useRef(false); // a slow GPS reading must not replace a spot set by hand
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -312,9 +369,21 @@ export function AddPlant({ nav, params = {} }) {
     setGpsLoading(true);
     setGpsError('');
     const res = await requestHardwareLocation();
+    setGpsLoading(false);
+    if (typedRef.current) return;
     setGps(res.gps);
     setGpsError(res.error || '');
-    setGpsLoading(false);
+  };
+
+  // Half-typed or out-of-range numbers count as no location.
+  const typeSpot = (next) => {
+    typedRef.current = true;
+    setTyped(next);
+    setGpsError('');
+    const lat = Number(next.lat);
+    const lng = Number(next.lng);
+    const valid = next.lat !== '' && next.lng !== '' && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    setGps(valid ? { lat, lng, acc: null } : NO_GPS);
   };
 
   useEffect(() => {
@@ -453,7 +522,7 @@ export function AddPlant({ nav, params = {} }) {
       // addPlant reports failure instead of throwing. Keep the draft so nothing is lost.
       if (!res?.ok) throw new Error(res?.message || 'Failed to submit observation.');
       await clearDraft(qr); // Clean up crash draft after successful submit (CTIP-57)
-      nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, acc: gps.acc, cover: photos[0]?.url });
+      nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, located: hasFix(gps), acc: gps.acc, cover: photos[0]?.url });
     } catch (err) {
       Alert.alert('Submission Error', err?.message || 'Failed to submit observation. Draft has been saved safely.');
     } finally {
@@ -518,6 +587,7 @@ export function AddPlant({ nav, params = {} }) {
           onAddCamera={async () => { const p = await takePhoto(); addPhotoItems(p); }}
           onAddGallery={async () => { const p = await pickFromGallery(); addPhotoItems(p); }}
           onRemove={(i) => setPhotos((list) => list.filter((_, j) => j !== i))}
+          onEdit={(i, patch) => setPhotos((list) => list.map((p, j) => (j === i ? { ...p, ...patch } : p)))}
         />
       </Section>
 
@@ -537,7 +607,12 @@ export function AddPlant({ nav, params = {} }) {
         <Area label="Field notes" optional value={notes} onChangeText={setNotes} placeholder="Habitat, nearby trail, anything unusual" rows={2} />
       </Section>
 
-      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={fetchGps} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={() => { typedRef.current = false; setTyped(null); fetchGps(); }} />
+      <TextLink
+        label={typed ? 'Close map' : 'Set it by hand'}
+        onPress={() => (typed ? setTyped(null) : typeSpot({ lat: hasFix(gps) ? String(gps.lat) : '', lng: hasFix(gps) ? String(gps.lng) : '' }))}
+      />
+      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} onChange={typeSpot} /> : null}
     </Screen>
   );
 }
@@ -559,7 +634,7 @@ export function Submitted({ nav, params = {} }) {
         <Thumb uri={params.cover} size={56} />
         <View style={{ flex: 1, gap: 2 }}>
           <Txt v="label">{params.name || 'Plant record'}</Txt>
-          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{params.photos || 1} photo · {params.acc != null ? `GPS ±${params.acc} m` : 'location not captured'}</Txt>
+          <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{params.photos || 1} photo · {!params.located ? 'location not captured' : params.acc != null ? `GPS ±${params.acc} m` : 'location set by hand'}</Txt>
         </View>
       </View>
       <View style={{ gap: 10, marginTop: 'auto' }}>
@@ -662,6 +737,7 @@ export function Revisit({ nav, params = {} }) {
           onAddCamera={async () => { const p = await takePhoto(); addPhotoItems(p); }}
           onAddGallery={async () => { const p = await pickFromGallery(); addPhotoItems(p); }}
           onRemove={(i) => setPhotos((l) => l.filter((_, j) => j !== i))}
+          onEdit={(i, patch) => setPhotos((l) => l.map((p, j) => (j === i ? { ...p, ...patch } : p)))}
         />
       </Section>
       <Section title="What has changed" gap={16}>

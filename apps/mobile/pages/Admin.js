@@ -5,6 +5,7 @@ import { View, Text, Pressable } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
 import { AppearanceSection, VersionLine } from '../components/Chrome.js';
@@ -80,13 +81,13 @@ const SORT_USERS = [
 ];
 
 export function Users({ nav }) {
-  const { db, addUser, notify } = useStore();
+  const { db, addUser } = useStore();
   const { c } = useTheme();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('active');
   const [inviting, setInviting] = useState(false);
-  const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist' });
+  const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist', password: '' });
   const [error, setError] = useState('');
   const needle = q.trim().toLowerCase();
   const rows = db.profiles
@@ -104,27 +105,29 @@ export function Users({ nav }) {
 
   const invite = async () => {
     if (!form.full_name.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Enter a name and a valid email.');
-    const res = await addUser({ ...form, full_name: form.full_name.trim() });
+    if (form.password && form.password.length < 8) return setError('A temporary password needs at least 8 characters.');
+    const res = await addUser({ ...form, full_name: form.full_name.trim(), password: form.password || undefined }); // says what happened itself
     if (!res?.ok) return setError(res?.message || 'Someone already uses this email.');
-    notify(res.invited ? `Invitation sent to ${form.email.trim()}` : `${form.full_name.trim()} can now sign in`);
     setInviting(false);
-    setForm({ full_name: '', email: '', role: 'botanist' });
+    setForm({ full_name: '', email: '', role: 'botanist', password: '' });
     setError('');
   };
 
   return (
     <Screen gap={14}>
       <TitleBlock title="Users" sub={`${db.profiles.length} accounts · ${off} deactivated`}
-        right={!inviting ? <Button label="Invite" icon="plus" height={44} size={15} onPress={() => setInviting(true)} /> : null} />
+        right={!inviting ? <Button label="Create account" icon="plus" height={44} size={15} onPress={() => setInviting(true)} /> : null} />
       {inviting ? (
         <View style={{ gap: 14, padding: 16, borderRadius: 14, backgroundColor: c.bg }}>
-          <Txt v="title3">Invite someone</Txt>
+          <Txt v="title3">Create an account</Txt>
           <Field label="Full name" value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} />
           <Field label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} keyboardType="email-address" error={error || undefined} />
           <Segmented value={form.role} onChange={(v) => setForm({ ...form, role: v })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
+          <Field label="Temporary password" optional secure value={form.password} onChangeText={(v) => setForm({ ...form, password: v })}
+            hint="Leave blank to send an email invitation, or set one so they can sign in straight away." />
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button label="Cancel" kind="secondary" flex={1} onPress={() => { setInviting(false); setError(''); }} />
-            <Button label="Send invite" flex={1.4} onPress={invite} />
+            <Button label={form.password ? 'Create account' : 'Send invite'} flex={1.4} onPress={invite} />
           </View>
         </View>
       ) : null}

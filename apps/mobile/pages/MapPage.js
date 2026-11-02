@@ -10,11 +10,43 @@ import * as Location from 'expo-location';
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, shownCoords, familyColors, familyOf } from '../../shared/selectors.js';
 import { fuzzyMatch } from '../../shared/fuzzy.js';
-import { MAP_BOUNDS } from '../../shared/mapConfig.js';
+import { MAP_BOUNDS, isExactProtected } from '../../shared/mapConfig.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
-import { Thumb, Sci, Mono, Txt, IconButton } from '../components/Bits.js';
+import { Txt, IconButton } from '../components/Bits.js';
 import LeafletMap from '../components/LeafletMap.js';
+import PlantWindow from '../components/PlantWindow.js';
+
+// One round button in the row of map tools.
+function Tool({ icon, label, a11y, on, onPress }) {
+  const { c } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        height: 36,
+        paddingHorizontal: 14,
+        borderRadius: 999,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: on ? c.accent : c.surface,
+        borderWidth: on ? 0 : 1,
+        borderColor: c.line,
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        elevation: 3,
+        transform: [{ scale: pressed ? 0.96 : 1 }],
+      })}
+    >
+      <Icon name={icon} size={15} color={on ? c.onAccent : c.ink} />
+      <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: on ? c.onAccent : c.ink }}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function MapPage({ nav, params = {} }) {
   const { db, role } = useStore();
@@ -42,11 +74,13 @@ export default function MapPage({ nav, params = {} }) {
     .map((p) => ({ p, where: shownCoords(p, role) }));
 
   const onMap = shown.filter((s) => s.where);
-  const hidden = shown.length - onMap.length;
+  const hidden = shown.filter((s) => !s.where && s.p.endangered).length;
   const firstForSpecies = params.species ? onMap.find((s) => s.p.species_id === params.species)?.p.id : null;
-  const [selectedId, setSelectedId] = useState(firstForSpecies || onMap[0]?.p.id || null);
-  const selected = plants.find((p) => p.id === selectedId);
-  const selectedCoords = selected ? shownCoords(selected, role) : null;
+  const [picked, setPicked] = useState(null);
+  const [spotIds, setSpotIds] = useState(null); // the plants the open window lists
+  const [cardHeight, setCardHeight] = useState(0);
+  const selectedId = picked || firstForSpecies || null;
+  const spotPlants = spotIds ? onMap.filter((s) => spotIds.includes(s.p.id)) : [];
 
   const count = (f) => onMap.filter((s) => familyOf(s.p) === f).length;
 
@@ -60,6 +94,7 @@ export default function MapPage({ nav, params = {} }) {
       color: colorMap[familyOf(s.p)] || c.accent,
       lat: s.where.lat,
       lng: s.where.lng,
+      protect: isExactProtected(s.p),
     }));
   }, [onMap, colorMap, c.accent]);
 
@@ -79,11 +114,13 @@ export default function MapPage({ nav, params = {} }) {
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (loc && loc.coords) {
-        setUserLoc({
+        const here = {
           lat: loc.coords.latitude,
           lng: loc.coords.longitude,
           accuracy: loc.coords.accuracy,
-        });
+        };
+        setUserLoc(here);
+        mapRef.current?.panToUser(here);
       }
       setLocating(false);
     } catch (e) {
@@ -130,11 +167,16 @@ export default function MapPage({ nav, params = {} }) {
           ref={mapRef}
           points={mapPoints}
           selectedId={selectedId}
-          onSelect={(id) => setSelectedId(id)}
+          onSelect={(id, qr, ids) => {
+            setPicked(id);
+            setSpotIds(ids || [id]);
+          }}
+          fitKey={`${family}|${needle}`}
           bounds={MAP_BOUNDS}
           showControls={false}
           layer={layer}
           userLocation={userLoc}
+          bottomInset={cardHeight}
         />
       </View>
 
@@ -239,128 +281,41 @@ export default function MapPage({ nav, params = {} }) {
           })}
         </ScrollView>
 
-        {/* Floating Map Tools (Locate, Satellite, Park) positioned cleanly below the filter chips */}
+        {/* Floating Map Tools, positioned cleanly below the filter chips */}
         <View
           pointerEvents="box-none"
           style={{
             flexDirection: 'row',
+            flexWrap: 'wrap',
             justifyContent: 'flex-end',
             gap: 8,
             marginTop: 2,
           }}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Show my location"
-            onPress={handleLocateMe}
-            style={({ pressed }) => ({
-              height: 36,
-              paddingHorizontal: 14,
-              borderRadius: 999,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: userLoc ? c.accent : c.surface,
-              borderWidth: userLoc ? 0 : 1,
-              borderColor: c.line,
-              shadowColor: '#000',
-              shadowOpacity: 0.12,
-              shadowRadius: 6,
-              elevation: 3,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            })}
-          >
-            <Icon name="locate" size={15} color={userLoc ? c.onAccent : c.ink} />
-            <Text
-              style={{
-                fontFamily: font('text', 700),
-                fontSize: 13,
-                color: userLoc ? c.onAccent : c.ink,
-              }}
-            >
-              {locating ? 'Locating...' : 'Locate'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle satellite view"
+          <Tool icon="locate" label={locating ? 'Locating...' : 'Locate'} a11y="Show my location" on={!!userLoc} onPress={handleLocateMe} />
+          <Tool
+            icon="layers"
+            label={layer === 'osm' ? 'Satellite' : 'Map'}
+            a11y="Toggle satellite view"
+            on={layer === 'satellite'}
             onPress={() => setLayer((l) => (l === 'osm' ? 'satellite' : 'osm'))}
-            style={({ pressed }) => ({
-              height: 36,
-              paddingHorizontal: 14,
-              borderRadius: 999,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: layer === 'satellite' ? c.accent : c.surface,
-              borderWidth: layer === 'satellite' ? 0 : 1,
-              borderColor: c.line,
-              shadowColor: '#000',
-              shadowOpacity: 0.12,
-              shadowRadius: 6,
-              elevation: 3,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            })}
-          >
-            <Icon name="layers" size={15} color={layer === 'satellite' ? c.onAccent : c.ink} />
-            <Text
-              style={{
-                fontFamily: font('text', 700),
-                fontSize: 13,
-                color: layer === 'satellite' ? c.onAccent : c.ink,
-              }}
-            >
-              {layer === 'osm' ? 'Satellite' : 'Map'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Fit to park bounds"
-            onPress={handleRecenter}
-            style={({ pressed }) => ({
-              height: 36,
-              paddingHorizontal: 14,
-              borderRadius: 999,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: c.surface,
-              borderWidth: 1,
-              borderColor: c.line,
-              shadowColor: '#000',
-              shadowOpacity: 0.12,
-              shadowRadius: 6,
-              elevation: 3,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            })}
-          >
-            <Icon name="compass" size={15} color={c.ink} />
-            <Text
-              style={{
-                fontFamily: font('text', 700),
-                fontSize: 13,
-                color: c.ink,
-              }}
-            >
-              Park
-            </Text>
-          </Pressable>
+          />
+          <Tool icon="refresh" label="Reset zoom" a11y="Reset zoom to show every plant" onPress={() => mapRef.current?.fitPoints()} />
+          <Tool icon="compass" label="Park" a11y="Fit to park bounds" onPress={handleRecenter} />
         </View>
       </View>
 
       <View style={{ flex: 1 }} pointerEvents="none" />
 
-      {/* Floating Selected Plant Detail Card (consistent with Web design) */}
+      {/* How to use the map, and what it is not showing */}
       <View
+        onLayout={(e) => setCardHeight(Math.round(e.nativeEvent.layout.height) + 12 + 12 + insets.bottom)}
         style={{
           margin: 12,
           marginBottom: 12 + insets.bottom,
-          gap: 12,
-          padding: 16,
-          paddingVertical: 14,
-          borderRadius: 20,
+          gap: 8,
+          padding: 14,
+          borderRadius: 16,
           backgroundColor: c.surface,
           borderWidth: 1,
           borderColor: c.line,
@@ -371,67 +326,11 @@ export default function MapPage({ nav, params = {} }) {
           zIndex: 10,
         }}
       >
-        {selected ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => nav.go('tag', { qr: selected.qr_id })}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}
-          >
-            <Thumb uri={selected.photos[0]?.url} size={60} />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={{ fontFamily: font('display', 600), fontSize: 17, color: c.ink }}>
-                {selected.name}
-              </Text>
-              {selected.scientific ? <Sci size={14}>{selected.scientific}</Sci> : null}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: colorMap[familyOf(selected)] || c.accent,
-                  }}
-                />
-                <Text style={{ fontFamily: font('text', 600), fontSize: 13, color: c.ink2 }}>
-                  {familyOf(selected)}
-                </Text>
-                {selectedCoords ? (
-                  <>
-                    <Text style={{ color: c.ink3 }}>·</Text>
-                    <Mono size={12} color={c.ink2}>
-                      {selectedCoords.lat.toFixed(5)}, {selectedCoords.lng.toFixed(5)}
-                    </Mono>
-                  </>
-                ) : (
-                  <>
-                    <Text style={{ color: c.ink3 }}>·</Text>
-                    <Mono size={12} color={c.ink2}>{selected.qr_id}</Mono>
-                  </>
-                )}
-              </View>
-            </View>
-            <View
-              style={{
-                height: 36,
-                paddingHorizontal: 12,
-                borderRadius: 999,
-                backgroundColor: c.raised,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.accent }}>
-                View
-              </Text>
-              <Icon name="arrowRight" size={14} color={c.accent} />
-            </View>
-          </Pressable>
-        ) : (
-          <Txt v="body" color={c.ink2}>
-            No plants match. Try another family or name.
-          </Txt>
-        )}
+        <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 600) }}>
+          {onMap.length
+            ? 'Tap a pin to see the plant, with its photos and details. A number is a group of plants: tap it to zoom in.'
+            : 'No plants match. Try another family or name.'}
+        </Txt>
         {hidden > 0 ? (
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Icon name="lock" size={16} color={c.ink2} />
@@ -442,6 +341,17 @@ export default function MapPage({ nav, params = {} }) {
           </View>
         ) : null}
       </View>
+
+      {spotPlants.length ? (
+        <PlantWindow
+          entries={spotPlants}
+          onClose={() => setSpotIds(null)}
+          onOpen={(p) => {
+            setSpotIds(null);
+            nav.go('tag', { qr: p.qr_id });
+          }}
+        />
+      ) : null}
     </View>
   );
 }

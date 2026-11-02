@@ -5,6 +5,7 @@ import Icon from "../components/Icon.jsx";
 import Shell from "../components/Shell.jsx";
 import { Mono, Sci } from "../components/Bits.jsx";
 import TagPrint from "../components/TagPrint.jsx";
+import LeafletMap from "../components/LeafletMap.jsx";
 import { useStore } from "../../../shared/store.js";
 import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
 import { can } from "../../../shared/permissions.js";
@@ -27,6 +28,7 @@ export default function AddPlant() {
   // No made-up default: without a real fix the record is sent with no location and the officer is told.
   const [spot, setSpot] = useState(saved?.lat != null ? { lat: saved.lat, lng: saved.lng, acc: saved.gps_accuracy_m ?? null } : { lat: null, lng: null, acc: null });
   const hasSpot = spot.lat != null && spot.lng != null;
+  const [typed, setTyped] = useState(null); // { lat, lng } as text while setting the location by hand, else null
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
@@ -127,9 +129,21 @@ export default function AddPlant() {
   const locate = () => {
     if (!navigator.geolocation) return notify("This device cannot share its location");
     navigator.geolocation.getCurrentPosition(
-      (pos) => setSpot({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy) }),
+      (pos) => {
+        setSpot({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy) });
+        setTyped(null);
+      },
       () => notify(hasSpot ? "Location is turned off. Keeping the spot captured earlier." : "Location is turned off. The record will be sent without a location."),
     );
+  };
+
+  // A location set by hand has no GPS accuracy. Half-typed or out-of-range numbers count as no location.
+  const typeSpot = (next) => {
+    setTyped(next);
+    const lat = Number(next.lat);
+    const lng = Number(next.lng);
+    const valid = next.lat !== "" && next.lng !== "" && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    setSpot(valid ? { lat, lng, acc: null } : { lat: null, lng: null, acc: null });
   };
 
   const onPhotos = (e) => {
@@ -288,13 +302,32 @@ export default function AddPlant() {
         <label>Location</label>
         <div className="row wrap">
           <button type="button" className="btn ghost" onClick={locate}><Icon name="pin" size={18} /> Use my location</button>
+          <button type="button" className="btn ghost" aria-expanded={!!typed}
+            onClick={() => setTyped(typed ? null : { lat: hasSpot ? String(spot.lat) : "", lng: hasSpot ? String(spot.lng) : "" })}>
+            <Icon name="map" size={18} /> {typed ? "Close map" : "Set it by hand"}
+          </button>
           {hasSpot
             ? <span className="mute"><Mono>{spot.lat.toFixed(5)}, {spot.lng.toFixed(5)}</Mono>{spot.acc ? ` ±${spot.acc} m` : ""}</span>
             : <span className="mute">Not captured yet</span>}
         </div>
+        {typed && (
+          <div className="gap-top-s">
+            <p className="mute small">Select the spot on the map, or type its latitude and longitude.</p>
+            <div className="two gap-bottom-s">
+              <label>Latitude<input type="number" step="any" min="-90" max="90" value={typed.lat} onChange={(e) => typeSpot({ ...typed, lat: e.target.value })} /></label>
+              <label>Longitude<input type="number" step="any" min="-180" max="180" value={typed.lng} onChange={(e) => typeSpot({ ...typed, lng: e.target.value })} /></label>
+            </div>
+            <LeafletMap
+              height={280}
+              showControls={false}
+              points={hasSpot ? [{ id: "spot", qr_id: qr, name: "This plant", lat: spot.lat, lng: spot.lng }] : []}
+              onMapClick={(lat, lng) => typeSpot({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}
+            />
+          </div>
+        )}
         {!hasSpot && (
           <div className="callout gap-top-s" role="status">
-            <p><b>No location.</b> Press "Use my location" next to the plant. If you send without it, the record is saved with "location not captured", it stays off the map, and the officer is told.</p>
+            <p><b>No location.</b> Press "Use my location" next to the plant, or set it by hand. If you send without it, the record is saved with "location not captured", it stays off the map, and the officer is told.</p>
           </div>
         )}
 

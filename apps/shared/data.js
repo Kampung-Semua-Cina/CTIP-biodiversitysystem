@@ -9,8 +9,35 @@ export const CONSERVATION = [
   "least concern", "near threatened", "vulnerable", "endangered", "critically endangered",
   "extinct in the wild", "extinct", "data deficient", "not evaluated",
 ];
+// A new species, before anything is typed into the form.
+export const BLANK_SPECIES = {
+  scientific_name: "", common_name: "", family: "", genus: "", description: "",
+  conservation_status: "least concern", cultural_significance: "",
+};
+
 // Statuses whose exact locations are hidden from visitors. Matches the API (distribution.js).
 export const THREATENED = ["endangered", "critically endangered"];
+
+// One rule and one wording for hiding a plant's exact location, on the website and
+// in the app. The GPS reading is always kept for officers; only the public view
+// changes, and the plant's details and photos stay visible.
+// Endangered: always on. Vulnerable: on by default. Anything else: the officer's choice.
+// `choice` is what the officer ticked on this screen (null until they change it).
+export const HIDE_LOCATION_LABEL = "Hide the exact location from the public";
+export function hideLocationRule(status, override, choice = null) {
+  const locked = THREATENED.includes(status);
+  const byDefault = status === "vulnerable";
+  const first = locked ? "Always on for endangered species. " : byDefault ? "On by default for vulnerable species. " : "";
+  return {
+    locked,
+    on: locked || (choice ?? (!!override || byDefault)),
+    hint: `${first}Plant details and photos stay visible.`,
+  };
+}
+
+// What a field photo can be tagged as showing. The API accepts only these.
+export const PHOTO_TRAITS = ["Whole plant", "Tree trunk", "Bark", "Leaf", "Flower", "Fruit", "Seed", "Root"];
+export const PHOTO_CAPTION_MAX = 200;
 export const OBS_STATUS = ["draft", "queued", "synced", "returned", "approved", "rejected"];
 
 export const initialPublicPlants = [

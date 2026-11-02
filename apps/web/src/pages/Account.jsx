@@ -12,6 +12,7 @@ const MAX_PHOTO = 2 * 1024 * 1024; // 2 MB
 // Email and role are set by an admin, so they are shown but not editable.
 export default function Account() {
   const { me } = useStore();
+  if (me.loading) return <div className="glass pad"><p className="mute">Loading your account…</p></div>;
   return (
     <>
       <div className="pagehead">
@@ -41,7 +42,10 @@ function PhotoCard({ me }) {
     if (file.size > MAX_PHOTO) return notify("Photo must be 2 MB or smaller");
     // Supabase: upload to Storage and save its public URL. Here the image is kept as a data URL.
     const reader = new FileReader();
-    reader.onload = () => notify(updateProfile({ avatar_url: reader.result }).ok ? "Photo updated" : "Could not update photo");
+    reader.onload = async () => {
+      const res = await updateProfile({ avatar_url: reader.result });
+      notify(res.ok ? "Photo updated" : res.message || "Could not update photo");
+    };
     reader.readAsDataURL(file);
   };
 
@@ -57,7 +61,7 @@ function PhotoCard({ me }) {
               <input type="file" accept={PHOTO_TYPES.join(",")} onChange={pick} hidden />
             </label>
             {me.avatar_url && (
-              <button className="btn ghost" onClick={() => { updateProfile({ avatar_url: null }); notify("Photo removed"); }}>
+              <button className="btn ghost" onClick={() => updateProfile({ avatar_url: null })}>
                 <Icon name="trash" size={16} /> Remove
               </button>
             )}
@@ -75,11 +79,10 @@ function ProfileCard({ me }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const dirty = form.full_name !== me.full_name || form.username !== (me.username || "") || form.phone !== (me.phone || "");
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault();
-    const res = updateProfile(form);
+    const res = await updateProfile(form);
     if (!res.ok) return notify(res.message);
-    notify(res.unchanged ? "Nothing to save" : "Profile saved");
     setForm({ full_name: form.full_name.trim().replace(/\s+/g, " "), username: form.username.trim().toLowerCase(), phone: form.phone.trim() });
   };
 

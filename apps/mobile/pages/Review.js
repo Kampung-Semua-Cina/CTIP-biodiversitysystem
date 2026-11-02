@@ -5,10 +5,13 @@ import { View, Text, ScrollView, Image, Pressable, useWindowDimensions } from 'r
 
 import { useStore } from '../../shared/store.js';
 import { plantView, nameOf } from '../../shared/selectors.js';
+import { HIDE_LOCATION_LABEL, hideLocationRule } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice,
+  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice, Check, TextLink,
 } from '../components/Bits.js';
+import PhotoNote from '../components/PhotoNote.js';
+import SpeciesForm from '../components/SpeciesForm.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
 
@@ -84,20 +87,21 @@ function Photos({ photos }) {
   return (
     <View style={{ marginHorizontal: -20, marginTop: -20 }}>
       <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
-        {photos.map((p, i) => <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height: 220, backgroundColor: c.accentSoft }} />)}
+        {photos.map((p, i) => <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={p.caption || `Photo ${i + 1} of ${photos.length}`} style={{ width, height: 220, backgroundColor: c.accentSoft }} />)}
       </ScrollView>
       {photos.length > 1 ? (
-        <View style={{ position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>
+        <View style={{ position: 'absolute', right: 12, top: 188, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>
           <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink }}>{index + 1} / {photos.length}</Text>
         </View>
       ) : null}
+      <PhotoNote photo={photos[Math.min(index, photos.length - 1)]} style={{ paddingHorizontal: 20, paddingTop: 10 }} />
     </View>
   );
 }
 
 export function ReviewRecord({ nav, params = {} }) {
   usePolling(5000);
-  const { db, reviewObservation, setPlantSpecies, notify } = useStore();
+  const { db, reviewObservation, setPlantSpecies, setPlantLocationHidden, setSpeciesPublished, notify } = useStore();
   const { c } = useTheme();
   const o = db.observations.find((x) => x.id === params.id);
   const plant = o ? plantView(db, db.plants.find((p) => p.id === o.specimen_id)) : null;
@@ -105,12 +109,15 @@ export function ReviewRecord({ nav, params = {} }) {
   const [note, setNote] = useState('');
   const [needNote, setNeedNote] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [hideChoice, setHideChoice] = useState(null); // null until the officer changes it
+  const [addingSpecies, setAddingSpecies] = useState(false);
   if (!o || !plant) return <Screen header={<Bar title="Review" onBack={nav.back} />}><Empty>This record no longer exists.</Empty></Screen>;
 
   const species = db.species.filter((s) => !s.is_deleted);
   const match = species.find((s) => s.scientific_name.toLowerCase() === spText.trim().toLowerCase());
   const suggestions = !match && spText.trim().length > 1 ? species.filter((s) => `${s.common_name} ${s.scientific_name}`.toLowerCase().includes(spText.trim().toLowerCase())).slice(0, 3) : [];
   const open = o.status === 'synced';
+  const hideRule = hideLocationRule((match || plant.species)?.conservation_status, plant.endangered_override, hideChoice);
 
   // Waits for the API: the species must be saved before approving (the API checks it),
   // and the screen only closes when the decision was really saved.
@@ -119,6 +126,9 @@ export function ReviewRecord({ nav, params = {} }) {
     if (busy) return;
     setBusy(true);
     if (decision === 'approve' && match && match.id !== plant.species_id) await setPlantSpecies(plant.id, match.id);
+    if (decision === 'approve' && plant.lat != null && !hideRule.locked && hideRule.on !== !!plant.endangered_override) {
+      if (!(await setPlantLocationHidden(plant.id, hideRule.on))) return setBusy(false);
+    }
     const r = await reviewObservation(o.id, decision, note.trim()); // shows its own message when it fails
     setBusy(false);
     if (!r?.ok) return;
@@ -161,12 +171,38 @@ export function ReviewRecord({ nav, params = {} }) {
                 <Sci size={14}>{s.scientific_name}</Sci>
               </Pressable>
             ))}
+            {!match ? <TextLink label="Not in the list? Create a new species" size={14} onPress={() => setAddingSpecies(true)} /> : null}
           </View>
+          {match && !match.is_published ? (
+            <View style={{ gap: 8 }}>
+              <Notice tone="warning" icon="info" title="This species is not published" body="Visitors will not see this plant until it is, even after you approve it." />
+              <Button label="Publish species" kind="secondary" height={44} size={15} onPress={() => setSpeciesPublished(match.id, true)} />
+            </View>
+          ) : null}
+          {plant.lat != null ? (
+            <Check
+              label={HIDE_LOCATION_LABEL}
+              hint={`${hideRule.locked ? '' : 'Saved when you approve. '}${hideRule.hint}`}
+              value={hideRule.on}
+              disabled={hideRule.locked}
+              onChange={setHideChoice}
+            />
+          ) : null}
           <View style={{ gap: 6 }}>
             <Area label="Note to the botanist" value={note} onChangeText={(t) => { setNote(t); setNeedNote(false); }} placeholder="Needed to return or reject" />
             {needNote ? <Txt v="caption" color={c.danger}>Add a note so the botanist knows what to change.</Txt> : null}
           </View>
         </>
+      ) : null}
+      {addingSpecies ? (
+        <SpeciesForm
+          guess={spText}
+          onClose={() => setAddingSpecies(false)}
+          onSaved={(created) => {
+            setAddingSpecies(false);
+            setSpText(created.scientific_name);
+          }}
+        />
       ) : null}
     </Screen>
   );

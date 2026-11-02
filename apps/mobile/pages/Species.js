@@ -1,11 +1,13 @@
 // apps/mobile/pages/Species.js
-// Officer's species list with publish state. Creating and editing species is done on
-// the website (CTIP-28); here officers look things up in the field.
+// Officer's species list with publish state. Editing species is done on the website
+// (CTIP-28), and a new one can be created while reviewing a record; here officers look
+// things up in the field.
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants } from '../../shared/selectors.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { useTheme } from '../components/Theme.js';
 import { Screen, Header, IconButton, TitleBlock, SearchField, SortBar, Row, Thumb, Sci, DotLabel, Notice, Empty } from '../components/Bits.js';
 
@@ -64,7 +66,7 @@ export default function SpeciesAdmin({ nav }) {
           />
         ))}
       </View>
-      <Notice tone="info" title="Adding or editing a species?" body="Use the Species page on the website." />
+      <Notice tone="info" title="Adding or editing a species?" body="Use the Species page on the website. You can also create a species while reviewing a record." />
     </Screen>
   );
 }

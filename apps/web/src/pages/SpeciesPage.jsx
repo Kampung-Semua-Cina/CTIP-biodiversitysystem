@@ -76,6 +76,7 @@ export default function SpeciesPage({ id }) {
             <dt>Genus</dt><dd>{s.genus}</dd>
             <dt>Tagged in Niah</dt><dd>{s.plants.length} {s.plants.length === 1 ? "plant" : "plants"}</dd>
             {s.cultural_significance && <><dt>Cultural note</dt><dd>{s.cultural_significance}</dd></>}
+            {s.updated_at && <><dt>Last updated</dt><dd>{fmtDate(s.updated_at)}</dd></>}
           </dl>
           {role === "officer" && <a className="btn ghost gap-top-s" href="#/species"><Icon name="pencil" size={18} /> Edit species</a>}
         </div>

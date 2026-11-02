@@ -1,7 +1,10 @@
 // apps/shared/mapHtml.js
 // Generates self-contained HTML for Leaflet + OpenStreetMap maps with project-aligned typography,
 // Lucide line icons (no emojis), and live user location tracking.
-import { MAP_BOUNDS, MAP_CENTER, DEFAULT_ZOOM, TILE_LAYERS, getLeafletBounds } from "./mapConfig.js";
+import {
+  MAP_BOUNDS, MAP_CENTER, DEFAULT_ZOOM, TILE_LAYERS, MAX_ZOOM, LIST_ZOOM, PLANT_ZOOM, SELECTED_ZOOM, PROTECTED_TILE_ZOOM, PROTECTED_REACH_M,
+  HD_SCREEN_RATIO, tileServerZoom, getLeafletBounds,
+} from "./mapConfig.js";
 
 export function generateMapHtml({
   points = [],
@@ -16,7 +19,9 @@ export function generateMapHtml({
   const selectedIdJson = JSON.stringify(selectedId);
   const boundsArray = getLeafletBounds(bounds);
   const boundsJson = JSON.stringify(boundsArray);
-  const layersJson = JSON.stringify(TILE_LAYERS);
+  const layersJson = JSON.stringify(Object.fromEntries(
+    Object.entries(TILE_LAYERS).map(([id, info]) => [id, { ...info, serverZoom: tileServerZoom(info) }]),
+  ));
   const centerJson = JSON.stringify([MAP_CENTER.lat, MAP_CENTER.lng]);
   const userLocJson = JSON.stringify(userLocation);
 
@@ -279,6 +284,7 @@ export function generateMapHtml({
       var userLoc = ${userLocJson};
 
       var map = L.map('map', {
+        maxZoom: ${MAX_ZOOM},
         zoomControl: false,
         attributionControl: interactive,
         dragging: interactive,
@@ -293,14 +299,50 @@ export function generateMapHtml({
         L.control.zoom({ position: 'bottomright' }).addTo(map);
       }
 
+      function hasCoords(pt) { return pt.lat != null && pt.lng != null; }
+      function protectedSpots() {
+        return points.filter(function(pt) { return pt.protect && hasCoords(pt); });
+      }
+
+      // Same class as DetailTiles in the website's LeafletMap.jsx: a view near a protected
+      // plant never asks for a close-up (see the note on threat T19 in mapConfig.js).
+      var DetailTiles = L.TileLayer.extend({
+        _deepest: function(center, zoom) {
+          var opts = this.options;
+          var mid = map.project(center, zoom);
+          // From the middle to a corner, plus one tile: a tile on the screen's edge sticks out past it.
+          var corner = mid.add(map.getSize().divideBy(2)).add([256, 256]);
+          var screen = map.distance(map.unproject(mid, zoom), map.unproject(corner, zoom));
+          var near = protectedSpots().some(function(pt) {
+            return map.distance(center, [pt.lat, pt.lng]) < ${PROTECTED_REACH_M} + screen;
+          });
+          return (near ? Math.min(opts.serverZoom, ${PROTECTED_TILE_ZOOM}) : opts.serverZoom) - opts.zoomOffset;
+        },
+        _setView: function(center, zoom, noPrune, noUpdate) {
+          this.options.maxNativeZoom = this._deepest(center, zoom);
+          L.TileLayer.prototype._setView.call(this, center, zoom, noPrune, noUpdate);
+        },
+        _update: function(center) {
+          if (center === undefined && this._map && !map._animatingZoom && this._deepest(map.getCenter(), map.getZoom()) !== this.options.maxNativeZoom) {
+            return this._setView(map.getCenter(), map.getZoom());
+          }
+          return L.TileLayer.prototype._update.call(this, center);
+        },
+      });
+
       var currentTileLayer = null;
       function setTileLayer(layerId) {
         if (currentTileLayer) {
           map.removeLayer(currentTileLayer);
         }
         var info = layers[layerId] || layers.osm;
-        currentTileLayer = L.tileLayer(info.url, {
-          maxZoom: info.maxZoom || 19,
+        var zoomOffset = window.devicePixelRatio >= ${HD_SCREEN_RATIO} ? 1 : 0;
+        currentTileLayer = new DetailTiles(info.url, {
+          maxZoom: ${MAX_ZOOM},
+          serverZoom: info.serverZoom,
+          maxNativeZoom: info.serverZoom - zoomOffset,
+          zoomOffset: zoomOffset,
+          tileSize: zoomOffset ? 128 : 256,
           attribution: info.attribution || '',
           subdomains: info.subdomains || 'abc',
         }).addTo(map);
@@ -332,8 +374,10 @@ export function generateMapHtml({
         ? L.markerClusterGroup({
             showCoverageOnHover: false,
             maxClusterRadius: 40,
-            spiderfyOnMaxZoom: true,
-            disableClusteringAtZoom: 17,
+            // Handled below: a tap zooms in, then lists the plants once zoomed far enough.
+            zoomToBoundsOnClick: false,
+            spiderfyOnMaxZoom: false,
+            disableClusteringAtZoom: ${PLANT_ZOOM},
             iconCreateFunction: function(cluster) {
               var count = cluster.getChildCount();
               var size = count < 10 ? 'small' : count < 30 ? 'medium' : 'large';
@@ -346,7 +390,22 @@ export function generateMapHtml({
             },
           }).addTo(map)
         : L.layerGroup().addTo(map);
-      var markersMap = {};
+
+      markersGroup.on('clusterclick', function(e) {
+        var kids = e.layer.getAllChildMarkers().map(function(m) { return m.options.point; });
+        var box = e.layer.getBounds();
+        var oneSpot = box.getNorthEast().distanceTo(box.getSouthWest()) < 2; // metres
+        var cannotZoomIn = map.getBoundsZoom(box) <= map.getZoom();
+        if (oneSpot || cannotZoomIn || map.getZoom() >= ${LIST_ZOOM}) {
+          sendToHost({ type: 'SELECT_PLANT', id: kids[0].id, qr_id: kids[0].qr_id, ids: kids.map(function(k) { return k.id; }) });
+        } else {
+          e.layer.zoomToBounds({ padding: [40, 40] });
+        }
+      });
+
+      map.on('click', function(e) {
+        sendToHost({ type: 'MAP_CLICK', lat: e.latlng.lat, lng: e.latlng.lng });
+      });
 
       function createIcon(pt, isSelected) {
         var color = pt.color || '#2f7a3c';
@@ -362,45 +421,49 @@ export function generateMapHtml({
         });
       }
 
-      function renderMarkers() {
+      // Pins this close (about a metre) are one spot: a hand-held GPS cannot tell them apart.
+      function spotKey(pt) { return pt.lat.toFixed(5) + ',' + pt.lng.toFixed(5); }
+
+      // Not animated unless asked: a pin tapped during the zoom would be replaced under the finger.
+      function fitToPoints(animate) {
+        var spots = points.filter(hasCoords).map(function(pt) { return [pt.lat, pt.lng]; });
+        if (!spots.length) return;
+        if (spots.length === 1) map.setView(spots[0], ${PLANT_ZOOM}, { animate: !!animate });
+        else map.fitBounds(spots, { padding: [48, 48], maxZoom: ${PLANT_ZOOM}, animate: !!animate });
+      }
+
+      function renderMarkers(moveView) {
         markersGroup.clearLayers();
-        markersMap = {};
+
+        // Done before adding markers, or the clusters keep their grouping from the old zoom.
+        if (moveView) {
+          var chosen = points.filter(function(pt) { return hasCoords(pt) && (pt.id === selectedId || pt.qr_id === selectedId); })[0];
+          if (chosen) map.setView([chosen.lat, chosen.lng], ${SELECTED_ZOOM}, { animate: false });
+          else fitToPoints(false);
+        }
 
         points.forEach(function(pt) {
-          if (pt.lat == null || pt.lng == null) return;
+          if (!hasCoords(pt)) return;
           var isSelected = (pt.id === selectedId || pt.qr_id === selectedId);
           var marker = L.marker([pt.lat, pt.lng], {
             icon: createIcon(pt, isSelected),
             title: pt.name + (pt.family ? ' (' + pt.family + ')' : ''),
-            zIndexOffset: isSelected ? 1000 : 0
+            zIndexOffset: isSelected ? 1000 : 0,
+            point: pt
           });
 
           if (interactive) {
             marker.on('click', function(e) {
               L.DomEvent.stopPropagation(e);
-              selectPlant(pt.id, pt.qr_id, [pt.lat, pt.lng]);
+              var here = spotKey(pt);
+              var ids = points.filter(function(o) { return hasCoords(o) && spotKey(o) === here; }).map(function(o) { return o.id; });
+              sendToHost({ type: 'SELECT_PLANT', id: pt.id, qr_id: pt.qr_id, ids: ids });
+              map.panTo([pt.lat, pt.lng], { animate: true, duration: 0.3 });
             });
           }
 
           markersGroup.addLayer(marker);
-          markersMap[pt.id] = { marker: marker, point: pt };
-          if (pt.qr_id) markersMap[pt.qr_id] = markersMap[pt.id];
         });
-      }
-
-      function selectPlant(id, qr_id, latlng) {
-        selectedId = id;
-        renderMarkers();
-        if (latlng) {
-          if (markersGroup.zoomToShowLayer && markersMap[id] && markersMap[id].marker) {
-            markersGroup.zoomToShowLayer(markersMap[id].marker, function() {
-              map.panTo(latlng, { animate: true, duration: 0.4 });
-            });
-          } else {
-            map.panTo(latlng, { animate: true, duration: 0.4 });
-          }
-        }
-        sendToHost({ type: 'SELECT_PLANT', id: id, qr_id: qr_id });
       }
 
       function sendToHost(payload) {
@@ -512,20 +575,19 @@ export function generateMapHtml({
           if (data.type === 'SET_SELECTED') {
             selectedId = data.id;
             renderMarkers();
-            if (data.id && markersMap[data.id]) {
-              var target = markersMap[data.id].point;
-              if (markersGroup.zoomToShowLayer && markersMap[data.id].marker) {
-                markersGroup.zoomToShowLayer(markersMap[data.id].marker, function() {
-                  map.panTo([target.lat, target.lng], { animate: true });
-                });
-              } else {
-                map.panTo([target.lat, target.lng], { animate: true });
-              }
-            }
           } else if (data.type === 'UPDATE_POINTS') {
             points = data.points || [];
             if (data.selectedId !== undefined) selectedId = data.selectedId;
-            renderMarkers();
+            // Before the view moves, so a close-up of a protected plant never asks for detailed tiles.
+            currentTileLayer._update();
+            renderMarkers(!!data.fit);
+          } else if (data.type === 'SET_INSET') {
+            // The app's own card covers the bottom of the map: keep the zoom buttons and map credit above it.
+            Array.prototype.forEach.call(document.querySelectorAll('.leaflet-bottom'), function(el) {
+              el.style.bottom = data.bottom + 'px';
+            });
+          } else if (data.type === 'FIT_POINTS') {
+            fitToPoints(true);
           } else if (data.type === 'SET_LAYER') {
             setTileLayer(data.layer);
           } else if (data.type === 'FIT_BOUNDS') {

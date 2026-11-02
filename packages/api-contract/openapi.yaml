@@ -1093,6 +1093,9 @@ paths:
         1. Call this to get `upload.url`.
         2. PUT the image bytes to that URL.
         3. Call `/observations/{id}/photos/{photoId}/confirm`.
+
+        The API also accepts the file directly as multipart/form-data: `file`, an
+        optional `id`, an optional `caption`, and `traits` (repeat for each one).
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -2134,6 +2137,11 @@ components:
         content_type: { type: string }
         size_bytes: { type: integer }
         upload_status: { type: string, enum: [pending, uploaded, failed] }
+        caption: { type: [string, 'null'], maxLength: 200, description: Staff only. Not returned to visitors. }
+        traits:
+          type: array
+          description: What the photo shows. Staff only. Not returned to visitors.
+          items: { type: string, enum: [Whole plant, Tree trunk, Bark, Leaf, Flower, Fruit, Seed, Root] }
         view_url:
           type: [string, 'null']
           format: uri

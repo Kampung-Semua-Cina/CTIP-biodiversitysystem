@@ -3,6 +3,7 @@ import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
+import SendTo from "../components/SendTo.jsx";
 import { Chip, Empty, Sci } from "../components/Bits.jsx";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
 import { useStore } from "../../../shared/store.js";
@@ -112,6 +113,10 @@ function TaggedTable() {
               {cur.key === "review" && cur.count > 0 && <a className="btn" href="#/review"><Icon name="clipboard" size={18} /> Open review queue</a>}
               {role === "botanist" && <a className="btn" href="#/add"><Icon name="plus" size={18} /> Add plant</a>}
               <button className="btn ghost" onClick={exportCsv} disabled={!shown.length}><Icon name="download" size={16} /> Export CSV</button>
+              <SendTo
+                subject={`Daun Sense: ${cur.name}`}
+                body={`Please take a look at this list. Sign in to see it.\n\n${window.location.origin}${window.location.pathname}#/dashboard`}
+              />
             </div>
           </div>
 
