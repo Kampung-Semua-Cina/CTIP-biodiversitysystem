@@ -36,7 +36,7 @@ export const ROUTE_NAMES = [
   "records", "record", "alerts", "discussion",
   "review", "reviewItem", "monitor", "alert",
   "staffMore", "speciesAdmin", "tags", "tagQr", "reports",
-  "users", "audit", "account",
+  "users", "audit", "account", "book",
 ];
 
 export function canAccess(role, routeName) {

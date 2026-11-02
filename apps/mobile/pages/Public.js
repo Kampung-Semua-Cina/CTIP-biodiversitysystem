@@ -101,6 +101,7 @@ export function More({ nav }) {
     <Screen gap={20}>
       <TitleBlock title="More" />
       <View>
+        <MenuRow icon="book" label="Plant book" onPress={() => nav.go('book')} />
         <MenuRow icon="info" label={`About ${SITE}`} onPress={() => nav.go('about')} />
         <MenuRow icon="mail" label="Contact" onPress={() => nav.go('contact')} last />
       </View>

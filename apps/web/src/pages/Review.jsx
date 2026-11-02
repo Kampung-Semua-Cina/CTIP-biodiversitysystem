@@ -4,10 +4,13 @@ import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
+import NewSpeciesButton from "../components/NewSpeciesButton.jsx";
+import SendTo from "../components/SendTo.jsx";
 import { Chip, Empty, Mono, Pills, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { nameOf, plantView } from "../../../shared/selectors.js";
 import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
+import { HIDE_LOCATION_LABEL, hideLocationRule } from "../../../shared/data.js";
 
 // Which records each filter pill shows. Only "Needs review" records can be decided on;
 // the others are shown so officers can look back at what they returned or decided.
@@ -21,7 +24,7 @@ const FILTERS = [
 // The records come from the API (GET /v1/observations, CTIP-86), which only
 // lets a botanist see their own. Photos, plant and comments come from the store.
 export default function Review() {
-  const { db, loadReviewQueue } = useStore();
+  const { db, loadReviewQueue, apiStatus } = useStore();
   const [filter, setFilter] = useState("synced");
   const [picked, setPicked] = useState(null);
   const [queue, setQueue] = useState(null); // null while loading
@@ -32,7 +35,9 @@ export default function Review() {
     setError(r.ok ? null : r.message);
     setQueue(r.ok ? r.observations : []);
   }), [loadReviewQueue]);
-  useEffect(() => { reload(); }, [reload]);
+  // db.observations is refreshed every few seconds (useLiveUpdates) and only
+  // changes when a record does, so new field records come in without a refresh.
+  useEffect(() => { reload(); }, [reload, db.observations]);
 
   // Only records whose plant has loaded can be shown with photos and details.
   const known = (queue || []).filter((o) => db.plants.some((p) => p.id === o.specimen_id));
@@ -63,6 +68,10 @@ export default function Review() {
   const obs = list.find((o) => o.id === picked) || list[0];
   const waiting = counts.synced;
 
+  // Stay on the record being read: new records arrive at the top of the list, and
+  // jumping to one would throw away a half-written note.
+  if (obs && picked !== obs.id) setPicked(obs.id);
+
   return (
     <Shell seg="review" plain>
       <div className="pagehead">
@@ -71,6 +80,7 @@ export default function Review() {
           <p className="mute">
             {waiting ? `${waiting} field ${waiting === 1 ? "record is" : "records are"} waiting for a decision.` : "Nothing is waiting for a decision."}
           </p>
+          {apiStatus !== "offline" && <p className="livenote mute small"><i aria-hidden="true" /> Live: new records from the field appear here by themselves.</p>}
         </div>
         <div className="row wrap" style={{ alignItems: "center", gap: 16 }}>
           <Pills label="Show" value={filter} onChange={(k) => { setFilter(k); setPicked(null); }}
@@ -121,7 +131,7 @@ export default function Review() {
 }
 
 function ReviewDetail({ obs, onDecided }) {
-  const { db, apiStatus, reviewObservation, addComment, setPlantSpecies, notify } = useStore();
+  const { db, apiStatus, reviewObservation, addComment, setPlantSpecies, setPlantLocationHidden, setSpeciesPublished, notify } = useStore();
   const [deciding, setDeciding] = useState(false);
   const apiDown = apiStatus === "offline"; // decisions only go through the API
   const [comment, setComment] = useState("");
@@ -131,17 +141,27 @@ function ReviewDetail({ obs, onDecided }) {
   const photos = rawPlant.photos.filter((p) => p.observation_id === obs.id);
   const thread = db.comments.filter((c) => c.observation_id === obs.id);
   const history = db.reviews.filter((r) => r.observation_id === obs.id);
-  const species = db.species.filter((s) => !s.is_deleted);
+  const species = db.species.filter((s) => !s.is_deleted).sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
+  const [hideChoice, setHideChoice] = useState(null); // null until the officer changes it
   const open = obs.status === "synced"; // only records waiting for review can be decided
 
   // Where this visit was recorded; older records only have the plant's position.
   const coords = { lat: obs.lat ?? rawPlant.lat, lng: obs.lng ?? rawPlant.lng };
   const hasCoords = coords.lat != null && coords.lng != null;
 
+  // Endangered species are always hidden by the API. Vulnerable ones start hidden,
+  // and the officer can choose for any other plant, before it is published.
+  const hideRule = hideLocationRule(plant.species?.conservation_status, rawPlant.endangered_override, hideChoice);
+  const alwaysHidden = hideRule.locked;
+  const hideLocation = hideRule.on;
+
   const decide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
     setDeciding(true);
+    if (decision === "approve" && !alwaysHidden && hideLocation !== !!rawPlant.endangered_override) {
+      if (!(await setPlantLocationHidden(rawPlant.id, hideLocation))) return setDeciding(false);
+    }
     const r = await reviewObservation(obs.id, decision, comment.trim()); // shows its own message
     setDeciding(false);
     if (r?.ok || r?.error === "WRONG_STATUS") onDecided(); // reload: decided, or decided by someone else
@@ -154,12 +174,18 @@ function ReviewDetail({ obs, onDecided }) {
           <h2>{plant.name}</h2>
           {plant.species && <span className="sci block">{plant.scientific} · {plant.species.family}</span>}
         </div>
-        <span className="tagpill">{plant.qr_id} · v{obs.version}</span>
+        <div className="row wrap" style={{ alignItems: "center" }}>
+          <SendTo
+            subject="Daun Sense: please check a plant record"
+            body={`Please take a look at this plant record. Sign in to see it.\n\n${window.location.origin}${window.location.pathname}#/tag/${plant.qr_id}`}
+          />
+          <span className="tagpill">{plant.qr_id} · v{obs.version}</span>
+        </div>
       </div>
 
       {photos.length > 0 && (
         <div className="photo3">
-          {photos.map((p, i) => <Img key={p.id} src={p.url} alt={`Photo ${i + 1} of ${photos.length}`} />)}
+          {photos.map((p, i) => <Img key={p.id} src={p.url} alt={p.caption || `Photo ${i + 1} of ${photos.length}`} />)}
         </div>
       )}
 
@@ -168,9 +194,10 @@ function ReviewDetail({ obs, onDecided }) {
           Species {open && <span className="hint">(confirm before approving)</span>}
           <select value={rawPlant.species_id || ""} disabled={!open} onChange={(e) => setPlantSpecies(rawPlant.id, e.target.value || null)}>
             <option value="">Not confirmed</option>
-            {species.map((s) => <option key={s.id} value={s.id}>{s.scientific_name}</option>)}
+            {species.map((s) => <option key={s.id} value={s.id}>{s.scientific_name}{s.common_name ? ` (${s.common_name})` : ""}</option>)}
           </select>
         </label>
+        {open && <NewSpeciesButton guess={rawPlant.proposed_species} onCreated={(s) => setPlantSpecies(rawPlant.id, s.id)} />}
         {rawPlant.proposed_species && (
           <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
             <p className="mute small" style={{ margin: 0 }}>Botanist's guess: <Sci>{rawPlant.proposed_species}</Sci></p>
@@ -195,6 +222,23 @@ function ReviewDetail({ obs, onDecided }) {
           </div>
         )}
       </div>
+
+      {open && plant.species && !plant.species.is_published && (
+        <div className="callout" role="status">
+          <p><b>This species is not published.</b> Visitors will not see this plant until it is, even after you approve it.</p>
+          <p><button type="button" className="btn ghost" onClick={() => setSpeciesPublished(plant.species.id, true)}>Publish species</button></p>
+        </div>
+      )}
+
+      {open && hasCoords && (
+        <label className="check hidespot">
+          <input type="checkbox" checked={hideLocation} disabled={alwaysHidden} onChange={(e) => setHideChoice(e.target.checked)} />
+          <span>
+            <b>{HIDE_LOCATION_LABEL}</b>
+            <small className="mute block">{alwaysHidden ? "" : "Saved when you approve. "}{hideRule.hint}</small>
+          </span>
+        </label>
+      )}
 
       {!hasCoords && (
         <div className="callout" role="status">

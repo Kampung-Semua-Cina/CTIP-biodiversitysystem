@@ -220,6 +220,39 @@ test('photo upload: stored at {observation_id}/{photo_id}.jpg, row saved, signed
   assert.equal(db.observation_photos.length, 1);
 });
 
+test('photo upload keeps its caption and traits, and refuses a trait not on the list', async () => {
+  const obs = observation();
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  const one = await request(app).post(`/v1/observations/${obs.id}/photos`).set(as('botanist'))
+    .field('caption', ' Bark near the base ').field('traits', 'Tree trunk').attach('file', jpeg, 'a.jpg');
+  assert.equal(one.status, 201);
+  assert.equal(db.observation_photos[0].caption, 'Bark near the base');
+  assert.deepEqual(db.observation_photos[0].traits, ['Tree trunk'], 'one trait arrives as a list too');
+
+  const two = await request(app).post(`/v1/observations/${obs.id}/photos`).set(as('botanist'))
+    .field('traits', 'Flower').field('traits', 'Leaf').attach('file', jpeg, 'b.jpg');
+  assert.deepEqual(db.observation_photos[1].traits, ['Flower', 'Leaf']);
+  assert.equal(db.observation_photos[1].caption, null);
+
+  const bad = await request(app).post(`/v1/observations/${obs.id}/photos`).set(as('botanist'))
+    .field('traits', 'Secret spot').attach('file', jpeg, 'c.jpg');
+  assert.equal(bad.status, 422);
+  assert.equal(db.observation_photos.length, 2);
+});
+
+test('a botanist cannot add a record to a plant while one is waiting for an officer', async () => {
+  const first = observation();
+  const body = { specimen_id: first.specimen_id, status: 'synced' };
+  const blocked = await request(app).post('/v1/observations').set(as('botanist')).send(body);
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.error?.code ?? blocked.body.code, 'REVIEW_IN_PROGRESS');
+  assert.equal(db.observations.length, 1);
+
+  first.status = 'returned';
+  const allowed = await request(app).post('/v1/observations').set(as('botanist')).send(body);
+  assert.equal(allowed.status, 201, 'allowed again once the decision is back');
+});
+
 test('photo upload rejects a file that is not an image, whatever its name', async () => {
   const obs = observation();
   const res = await request(app).post(`/v1/observations/${obs.id}/photos`).set(as('botanist'))

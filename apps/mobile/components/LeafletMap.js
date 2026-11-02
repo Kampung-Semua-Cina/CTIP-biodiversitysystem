@@ -7,10 +7,15 @@ import { generateMapHtml } from '../../shared/mapHtml.js';
 import { MAP_BOUNDS } from '../../shared/mapConfig.js';
 import { useTheme } from './Theme.js';
 
+// onSelect(id, qr_id, ids): ids lists every plant at the spot or cluster that was chosen.
+// onMapClick(lat, lng): for choosing a location by hand.
+// fitKey: when it changes, the view moves to the current points (a new search or filter).
 const LeafletMap = forwardRef(function LeafletMap({
   points = [],
   selectedId = null,
   onSelect,
+  onMapClick,
+  fitKey = null,
   bounds = MAP_BOUNDS,
   interactive = true,
   height = '100%',
@@ -19,128 +24,97 @@ const LeafletMap = forwardRef(function LeafletMap({
   layer = 'osm',
   initialLayer = 'osm',
   userLocation = null,
+  bottomInset = 0, // height the screen covers at the bottom of the map
   onLocatePress,
   style,
 }, ref) {
   const { c } = useTheme();
   const webViewRef = useRef(null);
   const isLoadedRef = useRef(false);
+  const drawnRef = useRef(null); // what the map shows now, so an unchanged list is not redrawn
+  const fittedRef = useRef(null); // the fitKey the view last moved for
+
+  const send = (msg) => {
+    if (!isLoadedRef.current || !webViewRef.current) return;
+    webViewRef.current.injectJavaScript(`
+      (function() {
+        if (typeof window.handleIncoming === 'function') {
+          window.handleIncoming(${JSON.stringify(msg)});
+        }
+      })();
+      true;
+    `);
+  };
+
+  const sendPoints = () => {
+    // Move the view once per fitKey, as soon as there is something to show: new data
+    // must not move the map under the user.
+    const fit = fitKey != null && points.length > 0 && fittedRef.current !== fitKey;
+    const drawn = JSON.stringify(points);
+    if (drawnRef.current === drawn && !fit) return;
+    drawnRef.current = drawn;
+    if (fit) fittedRef.current = fitKey;
+    send({ type: 'UPDATE_POINTS', points, selectedId, fit });
+  };
 
   // Expose imperative actions to parent (e.g. MapPage)
   useImperativeHandle(ref, () => ({
-    recenter: () => {
-      if (!webViewRef.current) return;
-      webViewRef.current.injectJavaScript(`
-        (function() {
-          if (typeof window.handleIncoming === 'function') {
-            window.handleIncoming({ type: 'FIT_BOUNDS' });
-          }
-        })();
-        true;
-      `);
-    },
-    setLayer: (nextLayer) => {
-      if (!webViewRef.current) return;
-      const msg = JSON.stringify({ type: 'SET_LAYER', layer: nextLayer });
-      webViewRef.current.injectJavaScript(`
-        (function() {
-          if (typeof window.handleIncoming === 'function') {
-            window.handleIncoming(${msg});
-          }
-        })();
-        true;
-      `);
-    },
-    panToUser: () => {
-      if (!webViewRef.current || !userLocation) return;
-      const msg = JSON.stringify({ type: 'SET_USER_LOCATION', location: userLocation, panTo: true });
-      webViewRef.current.injectJavaScript(`
-        (function() {
-          if (typeof window.handleIncoming === 'function') {
-            window.handleIncoming(${msg});
-          }
-        })();
-        true;
-      `);
+    recenter: () => send({ type: 'FIT_BOUNDS' }),
+    fitPoints: () => send({ type: 'FIT_POINTS' }),
+    setLayer: (nextLayer) => send({ type: 'SET_LAYER', layer: nextLayer }),
+    panToUser: (location) => {
+      if (location || userLocation) send({ type: 'SET_USER_LOCATION', location: location || userLocation, panTo: true });
     },
   }));
 
-  // Generate initial HTML payload
-  const activeLayer = layer || initialLayer;
+  // The page loads once. Later changes are sent to it, because a reload would lose the
+  // zoom and position (a moving phone's location changes every few metres).
+  const boundsKey = JSON.stringify(bounds);
   const html = useMemo(() => {
     return generateMapHtml({
       points,
       selectedId,
       bounds,
       interactive,
-      initialLayer: activeLayer,
+      initialLayer: layer || initialLayer,
       showControls,
       userLocation,
     });
-  }, [bounds, interactive, activeLayer, showControls, userLocation]);
+  }, [boundsKey, interactive, showControls]);
 
   // Sync selected pin dynamically without full HTML reload
   useEffect(() => {
-    if (!isLoadedRef.current || !webViewRef.current) return;
-    const msg = JSON.stringify({ type: 'SET_SELECTED', id: selectedId });
-    webViewRef.current.injectJavaScript(`
-      (function() {
-        if (typeof window.handleIncoming === 'function') {
-          window.handleIncoming(${msg});
-        }
-      })();
-      true;
-    `);
+    send({ type: 'SET_SELECTED', id: selectedId });
   }, [selectedId]);
 
   // Sync points dynamically (e.g., family filter, search)
   useEffect(() => {
-    if (!isLoadedRef.current || !webViewRef.current) return;
-    const msg = JSON.stringify({ type: 'UPDATE_POINTS', points, selectedId });
-    webViewRef.current.injectJavaScript(`
-      (function() {
-        if (typeof window.handleIncoming === 'function') {
-          window.handleIncoming(${msg});
-        }
-      })();
-      true;
-    `);
-  }, [points]);
+    if (isLoadedRef.current) sendPoints();
+  }, [points, fitKey]);
 
   // Sync layer dynamically (street map vs satellite)
   useEffect(() => {
-    if (!isLoadedRef.current || !webViewRef.current || !layer) return;
-    const msg = JSON.stringify({ type: 'SET_LAYER', layer });
-    webViewRef.current.injectJavaScript(`
-      (function() {
-        if (typeof window.handleIncoming === 'function') {
-          window.handleIncoming(${msg});
-        }
-      })();
-      true;
-    `);
+    if (layer) send({ type: 'SET_LAYER', layer });
   }, [layer]);
 
-  // Sync live user location
+  // Sync live user location. Only the marker moves: panning here would pull the map
+  // away from whatever the user is looking at.
   useEffect(() => {
-    if (!isLoadedRef.current || !webViewRef.current || !userLocation) return;
-    const msg = JSON.stringify({ type: 'SET_USER_LOCATION', location: userLocation, panTo: true });
-    webViewRef.current.injectJavaScript(`
-      (function() {
-        if (typeof window.handleIncoming === 'function') {
-          window.handleIncoming(${msg});
-        }
-      })();
-      true;
-    `);
+    if (userLocation) send({ type: 'SET_USER_LOCATION', location: userLocation, panTo: false });
   }, [userLocation]);
+
+  useEffect(() => {
+    send({ type: 'SET_INSET', bottom: bottomInset });
+  }, [bottomInset]);
 
   const handleMessage = (event) => {
     try {
       const raw = event.nativeEvent.data;
       const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (data.type === 'SELECT_PLANT' && onSelect) {
-        onSelect(data.id, data.qr_id);
+        onSelect(data.id, data.qr_id, data.ids);
+      } else if (data.type === 'MAP_CLICK' && onMapClick) {
+        onMapClick(data.lat, data.lng);
       } else if (data.type === 'REQUEST_LOCATION' && onLocatePress) {
         onLocatePress();
       }
@@ -157,21 +131,16 @@ const LeafletMap = forwardRef(function LeafletMap({
         source={{ html }}
         onLoadEnd={() => {
           isLoadedRef.current = true;
-          // Apply active layer on initial load
-          if (layer && layer !== 'osm') {
-            const msg = JSON.stringify({ type: 'SET_LAYER', layer });
-            webViewRef.current?.injectJavaScript(`
-              (function() {
-                if (typeof window.handleIncoming === 'function') {
-                  window.handleIncoming(${msg});
-                }
-              })();
-              true;
-            `);
-          }
+          // Anything that changed while the page was loading
+          drawnRef.current = null;
+          sendPoints();
+          if (layer) send({ type: 'SET_LAYER', layer });
+          send({ type: 'SET_INSET', bottom: bottomInset });
+          if (userLocation) send({ type: 'SET_USER_LOCATION', location: userLocation, panTo: false });
         }}
         onMessage={handleMessage}
         scrollEnabled={false}
+        nestedScrollEnabled
         bounces={false}
         overScrollMode="never"
         javaScriptEnabled={true}

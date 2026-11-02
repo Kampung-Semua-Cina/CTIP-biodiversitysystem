@@ -2,6 +2,7 @@
 // Main application layout shell for web: navbar, drawer, active page, bottom bar, footer, and toast.
 import { useEffect, useState } from "react";
 import { useRoute } from "../useRoute.js";
+import { useLiveUpdates } from "../useLiveUpdates.js";
 import { useStore } from "../../../shared/store.js";
 import { themeVars, useThemeMode } from "../theme.js";
 import { Navbar, Drawer, BottomBar, Footer } from "./Chrome.jsx";
@@ -11,6 +12,7 @@ import RouteView from "./RouteView.jsx";
 export default function Site() {
   const { seg, arg } = useRoute();
   const { role, me, db, toast, logout } = useStore();
+  useLiveUpdates();
   const { mode, theme, setMode } = useThemeMode(); // Light, Dark, or follow the device (remembered)
   const [menuAt, setMenuAt] = useState(null); // the page the menu was opened on, so it closes when you move on
 

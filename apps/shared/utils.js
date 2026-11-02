@@ -162,3 +162,24 @@ export async function withExponentialRetry(fn, { maxRetries = 3, initialDelayMs 
   }
 }
 
+// Browsers and Android builds refuse plain http images on a secure page, so an older
+// http link would show nothing. The same address over https gets through. A computer on
+// the local network has no certificate, so development addresses are left alone.
+export const safeImageUrl = (url) =>
+  typeof url === "string" && url.startsWith("http://") && !/^http:\/\/(localhost|127\.|10\.|192\.168\.)/.test(url)
+    ? `https://${url.slice(7)}`
+    : url;
+
+// Private photo links stop working after 24 hours (SIGNED_FOR in services/api/src/field.js),
+// so a tab or phone left open swaps to a fresh link well before that. Between swaps the
+// same link is kept, so images do not reload on every refresh.
+const PHOTO_LINK_KEPT_MS = 12 * 60 * 60 * 1000;
+export function keepPhotoUrl(cache, key, freshUrl) {
+  const fresh = safeImageUrl(freshUrl);
+  if (!key) return fresh;
+  const kept = cache.get(key);
+  if (!fresh) return kept?.url || null;
+  if (kept && Date.now() - kept.at < PHOTO_LINK_KEPT_MS) return kept.url;
+  cache.set(key, { url: fresh, at: Date.now() });
+  return fresh;
+}

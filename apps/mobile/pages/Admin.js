@@ -1,10 +1,11 @@
 // apps/mobile/pages/Admin.js
 // Staff "More" tab (profile, tools, appearance, sign out), and the admin's Users and Audit log.
 import React, { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
 import { nameOf } from '../../shared/selectors.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { can, ROLE_LABEL } from '../../shared/permissions.js';
 import { useTheme, font } from '../components/Theme.js';
 import { AppearanceSection, VersionLine } from '../components/Chrome.js';
@@ -27,6 +28,7 @@ export function StaffMore({ nav }) {
     can(role, 'discuss') && { icon: 'chat', label: 'Discussion', go: 'discussion' },
     { icon: 'map', label: 'Plant map', go: 'map' },
     { icon: 'leaf', label: 'Species catalogue', go: 'plants' },
+    { icon: 'book', label: 'Plant book', go: 'book' },
   ].filter(Boolean);
 
   return (
@@ -80,13 +82,14 @@ const SORT_USERS = [
 ];
 
 export function Users({ nav }) {
-  const { db, addUser, notify } = useStore();
+  const { db, me, addUser, updateUser } = useStore();
+  const [openId, setOpenId] = useState(null); // the account showing its role and active controls
   const { c } = useTheme();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('active');
   const [inviting, setInviting] = useState(false);
-  const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist' });
+  const [form, setForm] = useState({ full_name: '', email: '', role: 'botanist', password: '' });
   const [error, setError] = useState('');
   const needle = q.trim().toLowerCase();
   const rows = db.profiles
@@ -102,29 +105,39 @@ export function Users({ nav }) {
   });
   const off = db.profiles.filter((p) => !p.is_active).length;
 
+  const setActive = (p) => {
+    if (!p.is_active) return updateUser(p.id, { is_active: true });
+    Alert.alert(`Deactivate ${p.full_name}?`, 'They will not be able to sign in. Their records stay.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Deactivate', style: 'destructive', onPress: () => updateUser(p.id, { is_active: false }) },
+    ]);
+  };
+
   const invite = async () => {
     if (!form.full_name.trim() || !/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError('Enter a name and a valid email.');
-    const res = await addUser({ ...form, full_name: form.full_name.trim() });
+    if (form.password && form.password.length < 8) return setError('A temporary password needs at least 8 characters.');
+    const res = await addUser({ ...form, full_name: form.full_name.trim(), password: form.password || undefined }); // says what happened itself
     if (!res?.ok) return setError(res?.message || 'Someone already uses this email.');
-    notify(res.invited ? `Invitation sent to ${form.email.trim()}` : `${form.full_name.trim()} can now sign in`);
     setInviting(false);
-    setForm({ full_name: '', email: '', role: 'botanist' });
+    setForm({ full_name: '', email: '', role: 'botanist', password: '' });
     setError('');
   };
 
   return (
     <Screen gap={14}>
       <TitleBlock title="Users" sub={`${db.profiles.length} accounts · ${off} deactivated`}
-        right={!inviting ? <Button label="Invite" icon="plus" height={44} size={15} onPress={() => setInviting(true)} /> : null} />
+        right={!inviting ? <Button label="Invite member" icon="plus" height={44} size={15} onPress={() => setInviting(true)} /> : null} />
       {inviting ? (
         <View style={{ gap: 14, padding: 16, borderRadius: 14, backgroundColor: c.bg }}>
-          <Txt v="title3">Invite someone</Txt>
+          <Txt v="title3">Invite member</Txt>
           <Field label="Full name" value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} />
           <Field label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} keyboardType="email-address" error={error || undefined} />
           <Segmented value={form.role} onChange={(v) => setForm({ ...form, role: v })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
+          <Field label="Temporary password" optional secure value={form.password} onChangeText={(v) => setForm({ ...form, password: v })}
+            hint="Leave blank to send an email invitation, or set one so they can sign in straight away." />
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button label="Cancel" kind="secondary" flex={1} onPress={() => { setInviting(false); setError(''); }} />
-            <Button label="Send invite" flex={1.4} onPress={invite} />
+            <Button label={form.password ? 'Create account' : 'Send invite'} flex={1.4} onPress={invite} />
           </View>
         </View>
       ) : null}
@@ -134,10 +147,21 @@ export function Users({ nav }) {
       <View>
         {sorted.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
         {sorted.map((p, i) => (
-          <Row key={p.id} serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={p.full_name}
-            sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
-            right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
-            last={i === sorted.length - 1} />
+          <View key={p.id}>
+            <Row serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={`${p.full_name}${p.id === me?.id ? ' (you)' : ''}`}
+              sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
+              right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
+              // You cannot change your own role or lock yourself out, same as the website.
+              onPress={p.id === me?.id ? undefined : () => setOpenId(openId === p.id ? null : p.id)}
+              last={i === sorted.length - 1 && openId !== p.id} />
+            {openId === p.id ? (
+              <View style={{ gap: 10, padding: 14, marginBottom: 8, borderRadius: 14, backgroundColor: c.bg }}>
+                <Txt v="label">Role</Txt>
+                <Segmented value={p.role} onChange={(role) => updateUser(p.id, { role })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
+                <Button label={p.is_active ? 'Deactivate account' : 'Turn account back on'} kind={p.is_active ? 'dangerText' : 'secondary'} height={44} size={15} onPress={() => setActive(p)} />
+              </View>
+            ) : null}
+          </View>
         ))}
       </View>
       <Button label="Audit log" kind="text" icon="shield" height={48} size={15} onPress={() => nav.go('audit')} />

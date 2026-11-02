@@ -1,3 +1,4 @@
+import { fmtDate } from "../../../shared/utils.js";
 import { useEffect, useState } from "react";
 import Icon from "../components/Icon.jsx";
 import MiniMap from "../components/MiniMap.jsx";
@@ -72,6 +73,7 @@ export default function PublicPlant({ qr }) {
             {s.genus && <><dt>Genus</dt><dd>{s.genus}</dd></>}
             {s.conservation_status && <><dt>Conservation status</dt><dd><Chip value={s.conservation_status} /></dd></>}
             {s.cultural_significance && <><dt>Cultural note</dt><dd>{s.cultural_significance}</dd></>}
+            {s.updated_at && <><dt>Last updated</dt><dd>{fmtDate(s.updated_at)}</dd></>}
           </dl>
           <a className="btn ghost gap-top-s" href={"#/plants/" + s.id}><Icon name="leaf" size={18} /> More about this species</a>
         </div>

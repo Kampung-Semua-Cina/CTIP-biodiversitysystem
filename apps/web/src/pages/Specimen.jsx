@@ -3,13 +3,15 @@ import { QRCodeSVG } from "qrcode.react";
 import Icon from "../components/Icon.jsx";
 import Img from "../components/Img.jsx";
 import MiniMap from "../components/MiniMap.jsx";
+import NewSpeciesButton from "../components/NewSpeciesButton.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
 import PublicPlant from "./PublicPlant.jsx";
 import { Chip, Empty, Mono, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
-import { nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../../../shared/selectors.js";
+import { lastUpdated, nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../../../shared/selectors.js";
+import { HIDDEN_LOCATION_NOTE, HIDE_LOCATION_LABEL, REDUCED_LOCATION_NOTE, hideLocationRule } from "../../../shared/data.js";
 import { fmtDate, fmtDateTime, label } from "../../../shared/utils.js";
 
 const height = (cm) => (cm == null ? "-" : cm >= 100 ? `${(cm / 100).toFixed(cm % 10 ? 2 : 1)} m` : `${cm} cm`);
@@ -17,7 +19,7 @@ const height = (cm) => (cm == null ? "-" : cm >= 100 ? `${(cm / 100).toFixed(cm 
 // One tagged plant (a specimen): the page a QR tag opens.
 // Tabs: Overview and Photos for everyone; Visits, Sensor and Discussion for staff.
 export default function Specimen({ qr }) {
-  const { db, me, role, setPlantPhotos, setPlantSpecies, reviewObservation, notify } = useStore();
+  const { db, me, role, setPlantPhotos, setPlantSpecies, setPlantLocationHidden, reviewObservation, notify } = useStore();
   const staff = can(role, "pending");
   const canReview = can(role, "review");
   const [tab, setTab] = useState("overview");
@@ -47,6 +49,7 @@ export default function Specimen({ qr }) {
   const speciesList = db.species.filter((s) => !s.is_deleted);
 
   const first = visits[visits.length - 1];
+  const updated = lastUpdated(db, plant, role);
   const coords = shownCoords(plant, role);
   const node = db.nodes.find((n) => n.specimen_id === plant.id);
   const obsIds = new Set(db.observations.filter((o) => o.specimen_id === plant.id).map((o) => o.id));
@@ -87,6 +90,7 @@ export default function Specimen({ qr }) {
           <p className="mute small">
             {first ? `First recorded ${fmtDate(first.observed_at)} by ${nameOf(db, plant.registered_by)}` : `Tagged by ${nameOf(db, plant.registered_by)}`}
             {visits.length > 0 && ` · ${visits.length} ${visits.length === 1 ? "visit" : "visits"} · last visited ${fmtDate(visits[0].observed_at)}`}
+            {updated && ` · last updated ${fmtDate(updated)}`}
           </p>
         </div>
         <div className="row wrap">
@@ -121,6 +125,7 @@ export default function Specimen({ qr }) {
           speciesList={speciesList}
           reviewObservation={reviewObservation}
           setPlantSpecies={setPlantSpecies}
+          setPlantLocationHidden={setPlantLocationHidden}
           notify={notify}
           onClose={() => setShowReviewPanel(false)}
         />
@@ -206,10 +211,26 @@ export default function Specimen({ qr }) {
               <>
                 <MiniMap points={[{ p: plant, c: coords }]} height={150} highlight={plant.qr_id} label={`Location of ${plant.qr_id}`} />
                 <p className="gap-top-s"><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono></p>
-                {plant.gps_accuracy_m != null && <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>}
+                {plant.location_reduced
+                  ? <p className="mute small">{REDUCED_LOCATION_NOTE}</p>
+                  : plant.gps_accuracy_m != null && <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>}
+                {canReview && (
+                  <label className="check hidespot gap-top-s">
+                    <input
+                      type="checkbox"
+                      checked={plant.endangered}
+                      disabled={hideLocationRule(plant.species?.conservation_status).locked}
+                      onChange={(e) => setPlantLocationHidden(plant.id, e.target.checked)}
+                    />
+                    <span>
+                      {HIDE_LOCATION_LABEL}
+                      <small className="mute block">{hideLocationRule(plant.species?.conservation_status).hint}</small>
+                    </span>
+                  </label>
+                )}
               </>
             ) : (
-              <p className="mute">{plant.lat == null ? "Location not captured when this plant was recorded." : "Hidden to protect this plant."}</p>
+              <p className="mute">{plant.lat == null ? "Location not captured when this plant was recorded." : HIDDEN_LOCATION_NOTE}</p>
             )}
           </section>
           {staff && (
@@ -249,16 +270,21 @@ export default function Specimen({ qr }) {
 }
 
 // Inline review card on the tag's page for officers
-function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservation, setPlantSpecies, notify, onClose }) {
+function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservation, setPlantSpecies, setPlantLocationHidden, notify, onClose }) {
   const [comment, setComment] = useState("");
+  const [hideChoice, setHideChoice] = useState(null); // null until the officer changes it
   const isPending = obs.status === "synced";
+  const hideRule = hideLocationRule(plant.species?.conservation_status, rawPlant?.endangered_override, hideChoice);
 
-  const handleDecide = (decision) => {
+  const handleDecide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) {
       return notify("Add a note so the botanist knows why");
     }
     if (decision === "approve" && !rawPlant?.species_id) {
       return notify("Confirm the species before approving");
+    }
+    if (decision === "approve" && !hideRule.locked && hideRule.on !== !!rawPlant.endangered_override) {
+      if (!(await setPlantLocationHidden(rawPlant.id, hideRule.on))) return;
     }
     reviewObservation(obs.id, decision, comment.trim());
     notify(
@@ -305,6 +331,7 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
             ))}
           </select>
         </label>
+        {isPending && <NewSpeciesButton guess={rawPlant?.proposed_species} onCreated={(s) => setPlantSpecies(rawPlant.id, s.id)} />}
         {rawPlant?.proposed_species && (
           <div className="row wrap gap-top-xs" style={{ alignItems: "center" }}>
             <p className="mute small" style={{ margin: 0 }}>
@@ -331,6 +358,16 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
           </div>
         )}
       </div>
+
+      {isPending && plant.lat != null && (
+        <label className="check hidespot gap-bottom-s">
+          <input type="checkbox" checked={hideRule.on} disabled={hideRule.locked} onChange={(e) => setHideChoice(e.target.checked)} />
+          <span>
+            <b>{HIDE_LOCATION_LABEL}</b>
+            <small className="mute block">{hideRule.locked ? "" : "Saved when you approve. "}{hideRule.hint}</small>
+          </span>
+        </label>
+      )}
 
       <div className="field gap-bottom-s">
         <label>

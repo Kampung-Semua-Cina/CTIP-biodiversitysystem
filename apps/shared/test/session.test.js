@@ -143,3 +143,38 @@ test("custom storage adapter persists and restores session across app restarts",
   assert.equal(store.has("daun_session"), false);
   setStorageAdapter(null);
 });
+
+test("uses a session another tab renewed instead of spending an old refresh token", async () => {
+  const saved = new Map();
+  globalThis.window = { localStorage: { getItem: (k) => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) } };
+  try {
+    setSession({ access_token: "a1", refresh_token: "r1", expires_at: now() - 10, user: { id: "u1" } });
+    // The other tab refreshed first: only its copy in storage has the new session.
+    saved.set("daun_session", JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_at: now() + 3600, user: { id: "u1" } }));
+    answer([401, { code: "SESSION_ENDED", message: "ended" }]);
+    assert.equal(await freshAuthToken(), "a2");
+    assert.equal(calls.length, 0);
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+test("a refresh that loses the race to another tab keeps the session", async () => {
+  const saved = new Map();
+  globalThis.window = { localStorage: { getItem: (k) => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) } };
+  let ended = 0;
+  const off = onSessionEnded(() => { ended++; });
+  try {
+    setSession({ access_token: "a1", refresh_token: "r1", expires_at: now() - 10, user: { id: "u1" } });
+    calls = [];
+    globalThis.fetch = async () => {
+      saved.set("daun_session", JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_at: now() + 3600 }));
+      return new Response(JSON.stringify({ code: "SESSION_ENDED", message: "ended" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    };
+    assert.equal(await freshAuthToken(), "a2");
+    assert.equal(ended, 0);
+  } finally {
+    off();
+    delete globalThis.window;
+  }
+});

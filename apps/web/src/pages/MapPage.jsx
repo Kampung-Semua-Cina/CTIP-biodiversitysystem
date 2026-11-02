@@ -3,20 +3,21 @@
 // Endangered plants have no pin for visitors (their location is protected, CTIP-71).
 // Aligned to the Daun design language with Lucide line icons, search, and live user tracking.
 import { useState, useMemo, useEffect } from "react";
-import Img from "../components/Img.jsx";
 import Icon from "../components/Icon.jsx";
-import { Mono, Sci } from "../components/Bits.jsx";
 import LeafletMap from "../components/LeafletMap.jsx";
+import PlantWindow from "../components/PlantWindow.jsx";
 import { useStore } from "../../../shared/store.js";
 import { fuzzyMatch } from '../../../shared/fuzzy.js';
 import { can } from "../../../shared/permissions.js";
 import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../shared/selectors.js";
+import { isExactProtected } from "../../../shared/mapConfig.js";
 import { MAP_BOUNDS } from "../../../shared/mapConfig.js";
 
 export default function MapPage({ arg }) {
   const { db, role, getDistributionPoints } = useStore();
   const [apiDistribution, setApiDistribution] = useState(null);
   const [picked, setPicked] = useState(null);
+  const [spotIds, setSpotIds] = useState(null); // the plants open in the details window
   const [only, setOnly] = useState(null); // family picked in the legend, or null for all
   const [q, setQ] = useState("");
   const staff = can(role, "pending");
@@ -81,11 +82,11 @@ export default function MapPage({ arg }) {
         return { p, c: shownCoords(p, role) };
       });
     const m = s.filter((x) => x.c);
-    return { onMap: m, hidden: s.length - m.length };
+    return { onMap: m, hidden: s.filter((x) => !x.c && x.p.endangered).length };
   }, [plants, only, needle, role, apiDistribution]);
 
   const selId = picked || arg;
-  const sel = onMap.find((x) => x.p.qr_id === selId || x.p.id === selId) || onMap[0];
+  const spotPlants = spotIds ? onMap.filter((x) => spotIds.includes(x.p.id)) : [];
   const count = (f) => onMap.filter((x) => familyOf(x.p) === f).length;
 
   const mapPoints = useMemo(() => {
@@ -98,6 +99,7 @@ export default function MapPage({ arg }) {
       color: colors[familyOf(p)] || "var(--acc)",
       lat: c.lat,
       lng: c.lng,
+      protect: isExactProtected(p),
     }));
   }, [onMap, colors]);
 
@@ -107,8 +109,9 @@ export default function MapPage({ arg }) {
         <div>
           <h1>Plant map</h1>
           <p className="mute">
-            Each pin is one plant and its colour shows the plant family (see the legend). Select a pin to see the plant,
-            or a family in the legend to show only that family. Switch between street map and satellite view at any time.
+            Each pin is one plant and its colour shows the plant family. Zoom in and select a pin to see the plants at
+            that spot, with their photos and details. A number is a group of plants: select it to zoom in.
+            {staff && " Plants appear here once a record has been approved."}
             {!staff && " Locations of endangered plants are not shown, to protect them."}
           </p>
         </div>
@@ -136,7 +139,11 @@ export default function MapPage({ arg }) {
       <LeafletMap
         points={mapPoints}
         selectedId={selId}
-        onSelect={(id, qr_id) => setPicked(qr_id || id)}
+        onSelect={(id, qr_id, ids) => {
+          setPicked(qr_id || id);
+          setSpotIds(ids);
+        }}
+        fitKey={`${only || ""}|${needle}`}
         bounds={MAP_BOUNDS}
         height={480}
       />
@@ -176,21 +183,7 @@ export default function MapPage({ arg }) {
         </div>
       )}
 
-      {sel && (
-        <div className="item on card-row gap-top">
-          <Img src={sel.p.photos[0]?.url} />
-          <span>
-            <b>{sel.p.name}</b>
-            {sel.p.scientific ? <Sci block className="small">{sel.p.scientific}</Sci> : <Mono className="block">{sel.p.qr_id}</Mono>}
-            <small className="mute block">
-              <i className="dot" style={{ background: colors[familyOf(sel.p)] }} /> {familyOf(sel.p)} · <Mono>{sel.c.lat.toFixed(5)}, {sel.c.lng.toFixed(5)}</Mono>{sel.p.location_reduced ? " (approximate ~1.1km area)" : ""}
-            </small>
-          </span>
-          <a className="btn" href={"#/tag/" + sel.p.qr_id}>
-            View plant <Icon name="arrowR" size={18} />
-          </a>
-        </div>
-      )}
+      {spotPlants.length > 0 && <PlantWindow entries={spotPlants} onClose={() => setSpotIds(null)} />}
     </section>
   );
 }

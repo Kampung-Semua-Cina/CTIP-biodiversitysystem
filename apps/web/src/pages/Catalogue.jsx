@@ -83,6 +83,7 @@ export default function Catalogue() {
           <button className="btn ghost" onClick={refreshFromBackend} disabled={isSyncing} title="Sync species catalogue with API">
             <Icon name="refresh" size={16} /> {isSyncing ? "Syncing..." : "Sync API"}
           </button>
+          <a className="btn ghost" href="#/book"><Icon name="book" size={18} /> Plant book</a>
           <a className="btn ghost" href="#/map"><Icon name="map" size={18} /> Show plants on the map</a>
         </div>
       </div>

@@ -158,6 +158,7 @@ export function Drawer({ role, mode, onMode, onClose }) {
     { to: "/", label: "Home", icon: "home" },
     staff && { to: "/dashboard", label: DASHBOARD_LABEL[role], icon: "dashboard" },
     { to: "/plants", label: "Plants", icon: "leaf" },
+    { to: "/book", label: "Plant book", icon: "book" },
     { to: "/map", label: "Map", icon: "map" },
     { to: "/about", label: "About us", icon: "info" },
     { to: "/contact", label: "Contact", icon: "chat" },

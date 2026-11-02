@@ -6,15 +6,18 @@ import { View, Text, ScrollView, Pressable, Image, useWindowDimensions } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
-import { plantView, visiblePlants, shownCoords, nameOf, speciesObservationPhotos } from '../../shared/selectors.js';
+import { plantView, visiblePlants, shownCoords, nameOf, speciesObservationPhotos, lastUpdated } from '../../shared/selectors.js';
 import { can } from '../../shared/permissions.js';
 import { MAP_BOUNDS } from '../../shared/site.js';
+import { isExactProtected } from '../../shared/mapConfig.js';
+import { HIDDEN_LOCATION_NOTE, HIDE_LOCATION_LABEL, REDUCED_LOCATION_NOTE, hideLocationRule } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import LeafletMap from '../components/LeafletMap.js';
 import {
-  Txt, Sci, Mono, Chip, Section, TextLink, Row, Thumb, MiniMap, KV, Button, Empty, Header, IconButton, Screen, Notice,
+  Txt, Sci, Mono, Chip, Section, TextLink, Row, Thumb, MiniMap, KV, Button, Empty, Header, IconButton, Screen, Notice, Check,
 } from '../components/Bits.js';
+import PhotoNote from '../components/PhotoNote.js';
 import { longDate, coords } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
 
@@ -30,28 +33,31 @@ function Hero({ photos, height = 260, onBack }) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   return (
-    <View style={{ height }}>
-      {photos.length ? (
-        <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
-          {photos.map((p, i) => (
-            <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={`Photo ${i + 1} of ${photos.length}`} style={{ width, height, backgroundColor: c.accentSoft }} />
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft }}>
-          <Icon name="leaf" size={64} color={c.accent} />
-        </View>
-      )}
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack}
-        style={{ position: 'absolute', left: 12, top: 12, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface }}>
-        <Icon name="chevL" size={22} color={c.ink} />
-      </Pressable>
-      {photos.length > 1 ? (
-        <View style={{ position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>
-          <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink }}>{index + 1} / {photos.length}</Text>
-        </View>
-      ) : null}
+    <View>
+      <View style={{ height }}>
+        {photos.length ? (
+          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}>
+            {photos.map((p, i) => (
+              <Image key={p.id ? `${p.id}-${i}` : i} source={{ uri: p.url }} accessibilityLabel={p.caption || `Photo ${i + 1} of ${photos.length}`} style={{ width, height, backgroundColor: c.accentSoft }} />
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft }}>
+            <Icon name="leaf" size={64} color={c.accent} />
+          </View>
+        )}
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack}
+          style={{ position: 'absolute', left: 12, top: 12, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface }}>
+          <Icon name="chevL" size={22} color={c.ink} />
+        </Pressable>
+        {photos.length > 1 ? (
+          <View style={{ position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: c.surface }}>
+            <Text style={{ fontFamily: font('text', 700), fontSize: 12, color: c.ink }}>{index + 1} / {photos.length}</Text>
+          </View>
+        ) : null}
+      </View>
+      <PhotoNote photo={photos[Math.min(index, photos.length - 1)]} style={{ paddingHorizontal: 20, paddingTop: 10 }} />
     </View>
   );
 }
@@ -69,7 +75,7 @@ function Page({ hero, children }) {
   );
 }
 
-const HIDDEN_NOTE = 'Location hidden to protect this plant.';
+const HIDDEN_NOTE = HIDDEN_LOCATION_NOTE;
 
 export function SpeciesProfile({ nav, params }) {
   const { db, role } = useStore();
@@ -106,6 +112,7 @@ export function SpeciesProfile({ nav, params }) {
         <View style={{ paddingTop: 6 }}><Chip status={sp.conservation_status} /></View>
       </View>
       {sp.description ? <Txt v="body" style={{ lineHeight: 25 }}>{sp.description}</Txt> : null}
+      {sp.updated_at ? <Txt v="caption" color={c.ink2}>Last updated {longDate(sp.updated_at)}</Txt> : null}
       {sp.cultural_significance ? (
         <Section title="Cultural significance"><Txt v="body" style={{ lineHeight: 25 }}>{sp.cultural_significance}</Txt></Section>
       ) : null}
@@ -136,6 +143,7 @@ export function SpeciesProfile({ nav, params }) {
                     color: c.accent,
                     lat: pt.lat,
                     lng: pt.lng,
+                    protect: isExactProtected(p),
                   } : null;
                 }).filter(Boolean)}
                 bounds={MAP_BOUNDS}
@@ -168,7 +176,7 @@ export function SpeciesProfile({ nav, params }) {
 
 export function TaggedPlant({ nav, params }) {
   usePolling(5000);
-  const { db, role } = useStore();
+  const { db, role, setPlantLocationHidden } = useStore();
   const { c } = useTheme();
   const raw = db.plants.find((p) => p.qr_id === params?.qr && !p.is_deleted);
   const p = plantView(db, raw);
@@ -185,6 +193,8 @@ export function TaggedPlant({ nav, params }) {
   const firstObs = obs[0];
   const lastObs = obs[obs.length - 1];
   const where = (!p.isPublic && !staff) ? null : shownCoords(p, role);
+  const updated = lastUpdated(db, p, role);
+  const hideRule = hideLocationRule(p.species?.conservation_status);
 
   return (
     <Page hero={<Hero photos={p.photos} height={220} onBack={nav.back} />}>
@@ -212,8 +222,19 @@ export function TaggedPlant({ nav, params }) {
           ['Height', p.height_cm ? `${p.height_cm} cm` : '-'],
           ['Recorded', longDate(firstObs?.observed_at)],
           ...(staff ? [['Recorded by', nameOf(db, p.registered_by)], ['Last visit', longDate(lastObs?.observed_at)]] : []),
+          ...(updated ? [['Last updated', longDate(updated)]] : []),
           ['Location', where ? <Mono size={14}>{coords(where.lat, where.lng)}</Mono> : p.lat == null ? 'Not captured when recorded.' : HIDDEN_NOTE],
         ]} />
+        {p.location_reduced ? <Txt v="caption" color={c.ink2}>{REDUCED_LOCATION_NOTE}</Txt> : null}
+        {where && can(role, 'review') ? (
+          <Check
+            label={HIDE_LOCATION_LABEL}
+            hint={hideRule.hint}
+            value={p.endangered}
+            disabled={hideRule.locked}
+            onChange={(on) => setPlantLocationHidden(p.id, on)}
+          />
+        ) : null}
       </Section>
       {where ? (
         <Section
@@ -243,6 +264,7 @@ export function TaggedPlant({ nav, params }) {
                   color: c.accent,
                   lat: where.lat,
                   lng: where.lng,
+                  protect: isExactProtected(p),
                 }]}
                 selectedId={p.id}
                 bounds={{

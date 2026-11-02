@@ -125,6 +125,18 @@ export function tokenClaims(token) {
   }
 }
 
+// The session saved by another tab, when it differs from this tab's: adopted and returned.
+function sessionFromOtherTab() {
+  try {
+    const saved = JSON.parse(storage.get(SESSION_KEY) || "null");
+    if (!saved?.access_token || saved.access_token === inMemorySession?.access_token) return null;
+    inMemorySession = saved;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
 const expiresAt = (session) => session?.expires_at || tokenClaims(session?.access_token)?.exp || null;
 
 // Called when a refresh is refused, so the app can show the signed-out state.
@@ -147,8 +159,12 @@ export async function freshAuthToken({ force = false } = {}) {
   if (!inMemorySession && customStorage?.getItem) {
     await restoreSession();
   }
+  // Another tab may have renewed the session. Each refresh token works once, so
+  // refreshing with this tab's old copy would be refused and sign everyone out.
+  const renewedElsewhere = sessionFromOtherTab();
   const session = getSession();
   if (!session?.access_token) return null;
+  if (force && renewedElsewhere) return session.access_token;
   const exp = expiresAt(session);
   if (!force && (!exp || exp - Date.now() / 1000 > REFRESH_MARGIN_S)) return session.access_token;
   if (!session.refresh_token) return session.access_token; // a pasted token: nothing to renew with
@@ -159,6 +175,8 @@ export async function freshAuthToken({ force = false } = {}) {
       return res.data.access_token;
     }
     if (res.status === 401) {
+      // Lost the race with another tab: its new session is still good.
+      if (sessionFromOtherTab()) return getSession().access_token;
       setSession(null);
       endedListeners.forEach((fn) => fn());
       return null;
@@ -581,6 +599,8 @@ export async function uploadObservationPhotoApi(observationId, photo, { token } 
   if (!part) return { ok: false, code: "UNREADABLE_PHOTO", message: "This photo could not be read. Remove it and add it again." };
   const form = new FormData();
   if (photo.id) form.append("id", photo.id);
+  if (photo.caption?.trim()) form.append("caption", photo.caption.trim());
+  for (const trait of photo.traits || []) form.append("traits", trait);
   const fileName = photo.name || part.name || "photo.jpg";
 
   if (typeof Blob !== "undefined" && part instanceof Blob) {

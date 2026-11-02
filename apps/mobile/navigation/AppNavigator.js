@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
+import { usePlantBook } from '../../shared/plantBook.js';
 import { useTheme } from '../components/Theme.js';
 import { useKeyboardOffset } from '../hooks/useKeyboardOffset.js';
 import { useAppNavigation } from './useAppNavigation.js';
@@ -38,6 +39,7 @@ export default function AppNavigator() {
   const { c, scheme } = useTheme();
   const { keyboard, keyboardOpen } = useKeyboardOffset();
   const navBar = useSafeAreaInsets().bottom;
+  usePlantBook(); // keeps the phone's copy up to date, ready for when there is no signal
 
   const { stack, route, nav, currentTab } = useAppNavigation(role);
 

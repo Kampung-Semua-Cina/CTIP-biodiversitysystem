@@ -93,6 +93,29 @@ export function Area({ label, value, onChangeText, placeholder, rows = 3, option
   );
 }
 
+// Tick box with a label and an optional line of explanation.
+export function Check({ label, hint, value, onChange, disabled }) {
+  const { c } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: !!value, disabled: !!disabled }}
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={() => onChange(!value)}
+      style={{ flexDirection: 'row', gap: 12, paddingVertical: 8, minHeight: 44, opacity: disabled ? 0.7 : 1 }}
+    >
+      <View style={{ width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: value ? c.accent : c.ink3, backgroundColor: value ? c.accent : 'transparent' }}>
+        {value ? <Icon name="check" size={16} color={c.onAccent} /> : null}
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ fontFamily: font('text', 700), fontSize: 15, color: c.ink }}>{label}</Text>
+        {hint ? <Text style={{ fontFamily: font('text', 400), fontSize: 13, lineHeight: 18, color: c.ink2 }}>{hint}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
 // Filter pills in a sideways-scrolling row. items: [{ key, label }]
 export function Pills({ items, value, onChange }) {
   const { c } = useTheme();
