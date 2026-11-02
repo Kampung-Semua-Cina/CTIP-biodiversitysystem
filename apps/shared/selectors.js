@@ -53,10 +53,17 @@ export function plantView(db, p) {
   if (!p) return null;
   const species = db.species.find((s) => s.id === p.species_id && !s.is_deleted) || null;
   const status = plantStatus(db, p.id);
-  const obs = visitsOf(db, p.id).find((o) => o.status === "approved");
+  const visits = visitsOf(db, p.id);
+  const approvedObs = visits.find((o) => o.status === "approved");
+  const latestObs = visits[0];
+  const obs = approvedObs || latestObs;
   const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
+  const lat = p.lat ?? latestObs?.lat ?? null;
+  const lng = p.lng ?? latestObs?.lng ?? null;
   return {
     ...p,
+    lat,
+    lng,
     species,
     status,
     endangered,

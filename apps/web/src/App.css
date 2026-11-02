@@ -472,6 +472,33 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 }
 .callout > *, .banner > * { margin: 0 !important; }
 
+/* Drafts callout list in My Records (CTIP-45 / Drafts Separation) */
+.drafts-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--s-3) !important;
+  margin-top: var(--s-3) !important;
+  padding: 0 !important;
+  list-style: none !important;
+}
+.draft-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: var(--s-3) !important;
+  padding: var(--s-3) var(--s-4) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--warn-line) !important;
+  border-radius: var(--r-card, 12px) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.draft-card:hover {
+  border-color: var(--acc) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+
 /* ---------- 5. Cards and page layouts ---------- */
 /* .glass is kept as the class name for a card, so every page did not need renaming. It is solid now. */
 .glass { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow); }

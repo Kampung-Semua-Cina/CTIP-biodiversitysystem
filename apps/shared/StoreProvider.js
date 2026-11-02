@@ -439,7 +439,7 @@ function collectionMatches(a = [], b = []) {
     return res;
   };
   useEffect(() => {
-    checkApi();
+    // Periodic health check; initial health is established promptly by loadFromApi
     const id = setInterval(checkApi, API_CHECK_MS);
     const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") checkApi(); };
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);

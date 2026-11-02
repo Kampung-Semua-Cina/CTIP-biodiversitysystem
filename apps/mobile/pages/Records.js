@@ -5,11 +5,14 @@ import React, { useState } from 'react';
 import { View, Text } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
-import { plantView, nameOf } from '../../shared/selectors.js';
+import { plantView, nameOf, unfinishedPlants } from '../../shared/selectors.js';
+import { isExactProtected } from '../../shared/mapConfig.js';
+import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
+import LeafletMap from '../components/LeafletMap.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
+  Screen, Bar, TitleBlock, Pills, SortBar, SearchField, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
@@ -34,6 +37,8 @@ export function MyRecords({ nav }) {
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('newest');
+  const [q, setQ] = useState('');
+  const unfinished = unfinishedPlants(db, me?.id);
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id)
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
@@ -44,7 +49,28 @@ export function MyRecords({ nav }) {
       if (sort === 'tag') return (a.plant?.qr_id || '').localeCompare(b.plant?.qr_id || '');
       return b.observed_at.localeCompare(a.observed_at);
     });
-  const count = (g) => mine.filter((o) => g.statuses.includes(o.status)).length;
+
+  const needle = q.trim().toLowerCase();
+  const filteredMine = mine.filter((o) => {
+    if (!needle) return true;
+    if (o.plant?.qr_id && o.plant.qr_id.toLowerCase().includes(needle)) return true;
+    const text = [
+      o.plant.name,
+      o.plant.scientific,
+      o.plant.proposed_species,
+      o.morphology,
+      o.notes,
+    ].filter(Boolean).join(' ');
+    return fuzzyMatch(text, needle);
+  });
+  const filteredUnfinished = unfinished.filter((p) => {
+    if (!needle) return true;
+    if (p.qr_id && p.qr_id.toLowerCase().includes(needle)) return true;
+    const text = [p.proposed_species].filter(Boolean).join(' ');
+    return fuzzyMatch(text, needle);
+  });
+
+  const count = (g) => filteredMine.filter((o) => g.statuses.includes(o.status)).length;
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
   // A plant's later visits are labelled as revisits.
   const isRevisit = (o) => db.observations.some((x) => x.specimen_id === o.specimen_id && x.observed_at < o.observed_at);
@@ -52,15 +78,62 @@ export function MyRecords({ nav }) {
   return (
     <Screen gap={18}>
       <TitleBlock title="My records" sub={me?.full_name} />
+      <SearchField
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search records by plant, species or tag"
+      />
       <Pills
         value={filter}
         onChange={setFilter}
-        items={[{ key: 'all', label: `All ${mine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
+        items={[{ key: 'all', label: `All ${filteredMine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
       />
       <SortBar items={SORT_RECORDS} value={sort} onChange={setSort} />
-      {mine.length === 0 ? <Empty icon="file">No records yet. Scan an unused tag to add your first plant.</Empty> : null}
+      {filteredUnfinished.length > 0 && (filter === 'all' || filter === 'fix') ? (
+        <View style={{ gap: 12, marginBottom: 8 }}>
+          <Notice
+            tone="warning"
+            icon="file"
+            title="Not sent yet"
+            body={`${filteredUnfinished.length === 1 ? 'This plant was' : 'These plants were'} saved as a draft, but the record did not reach the server. Finish and send to put it in the review queue.`}
+          />
+          <View style={{ gap: 14 }}>
+            {filteredUnfinished.map((p) => (
+              <View
+                key={p.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: c.warningLine || c.line,
+                  backgroundColor: c.surface,
+                  gap: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Txt v="label" style={{ fontSize: 16 }}>{p.proposed_species || 'Unnamed plant'}</Txt>
+                    <Mono size={13}>{p.qr_id}</Mono>
+                  </View>
+                  <DotLabel status="draft" label="Draft" />
+                </View>
+                <Button
+                  label="Finish and send"
+                  icon="send"
+                  size={14}
+                  height={42}
+                  onPress={() => nav.go('add', { qr: p.qr_id })}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {filteredMine.length === 0 && filteredUnfinished.length === 0 ? (
+        <Empty icon="file">{needle ? `No records match "${q}".` : 'No records yet. Scan an unused tag to add your first plant.'}</Empty>
+      ) : null}
       {groups.map((g, gi) => {
-        const rows = mine.filter((o) => g.statuses.includes(o.status));
+        const rows = filteredMine.filter((o) => g.statuses.includes(o.status));
         return (
           <Section key={g.key} title={g.title} top={gi > 0} gap={0}>
             {rows.map((o, i) => (
@@ -193,6 +266,35 @@ export function RecordDetail({ nav, params = {} }) {
           ['Version', `${o.version}`],
         ]} />
       </Section>
+
+      {plant.lat != null && plant.lng != null ? (
+        <Section title="Observed location" gap={8}>
+          <View style={{ height: 180, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.mapTile }}>
+            <LeafletMap
+              points={[{
+                id: plant.id,
+                qr_id: plant.qr_id,
+                name: plant.name,
+                scientific: plant.scientific || '',
+                color: c.accent,
+                lat: plant.lat,
+                lng: plant.lng,
+                protect: isExactProtected(plant),
+              }]}
+              selectedId={plant.id}
+              bounds={{
+                minLat: plant.lat - 0.003,
+                maxLat: plant.lat + 0.003,
+                minLng: plant.lng - 0.003,
+                maxLng: plant.lng + 0.003,
+              }}
+              interactive={false}
+              rounded
+              height="100%"
+            />
+          </View>
+        </Section>
+      ) : null}
 
       {returned ? <Area label="Reply to the officer" optional value={message} onChangeText={setMessage} placeholder="What did you change?" rows={2} /> : null}
       {o.status === 'approved' ? <Button label="Open plant page" kind="secondary" onPress={() => nav.go('tag', { qr: plant.qr_id })} /> : null}
