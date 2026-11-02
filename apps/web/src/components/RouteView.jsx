@@ -4,6 +4,7 @@ import React, { Suspense } from "react";
 // Core public views imported directly for instant zero-flash rendering
 import { Home, About, Contact, StaffPage, NoAccess, NotFound } from "../pages/Public.jsx";
 import Catalogue from "../pages/Catalogue.jsx";
+import Book from "../pages/Book.jsx";
 import SpeciesPage from "../pages/SpeciesPage.jsx";
 import Specimen from "../pages/Specimen.jsx";
 import MapPage from "../pages/MapPage.jsx";
@@ -64,6 +65,7 @@ export default function RouteView({ seg, arg, role }) {
     case "about": return <About />;
     case "contact": return <Contact />;
     case "staff": return <StaffPage />;
+    case "book": return <Book />;
     case "plants": return arg ? <SpeciesPage key={arg} id={arg} /> : <Catalogue />;
     case "tag": return <Specimen key={arg} qr={arg} />;
     case "map": return <MapPage arg={arg} />;

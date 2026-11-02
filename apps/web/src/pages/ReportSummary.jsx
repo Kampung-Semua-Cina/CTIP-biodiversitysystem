@@ -3,7 +3,7 @@ import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip, Empty, Mono, Pills } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
-import { visiblePlants } from "../../../shared/selectors.js";
+import { countPlants, visiblePlants } from "../../../shared/selectors.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { download, fmtDate, label, toCsv } from "../../../shared/utils.js";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
@@ -12,6 +12,35 @@ import { setQuery, useRoute } from "../useRoute.js";
 const PAGE = 25;
 const RECORD_STATUSES = ["approved", "synced", "returned", "rejected", "draft", "queued"];
 const NO_ZONE = "none"; // plants saved without a GPS fix have no zone
+
+// One bar for each group. Picking one filters the table below, to identify those plants.
+function PickBars({ title, rows, onPick }) {
+  if (!rows.length) return null;
+  const max = Math.max(...rows.map((r) => r.n));
+  return (
+    <div>
+      <h3 className="sub">{title}</h3>
+      <ul className="bars">
+        {rows.map((r) => {
+          const row = (
+            <>
+              <span className="rowname">{r.label}</span>
+              <i style={{ width: `${(r.n / max) * 100}%` }} className="bar single" />
+              <b>{r.n}</b>
+            </>
+          );
+          return (
+            <li key={r.label}>
+              {r.key == null
+                ? <span className="barpick" style={{ cursor: "default" }}>{row}</span>
+                : <button type="button" className="barpick" title={`${r.n} ${r.n === 1 ? "plant" : "plants"}. Show them in the table.`} aria-label={`${r.label}: ${r.n} ${r.n === 1 ? "plant" : "plants"}. Show them in the table.`} onClick={() => onPick(r)}>{row}</button>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 const SORTS = {
   tag: { label: "Tag", by: (a, b) => (a.qr_id || "").localeCompare(b.qr_id || "") }, // a plant may have no tag
   name: { label: "Name A–Z", by: (a, b) => a.name.localeCompare(b.name) },
@@ -65,7 +94,6 @@ export default function ReportSummary() {
   const genera = [...new Set(all.filter((p) => family === "all" || p.species?.family === family).map((p) => p.species?.genus).filter(Boolean))].sort();
   const filtered = q || family !== "all" || genus !== "all" || zone !== "all" || conservation !== "all" || status !== "all" || from || to;
   const count = (fn) => all.filter(fn).length;
-  const max = Math.max(1, ...CONSERVATION.map((c) => count((p) => p.conservation === c)));
 
   const exportCsv = () => {
     const head = ["Tag", "Name", "Scientific name", "Family", "Genus", "Conservation status", "Record status", "Last recorded", "Height (cm)", "Zone", "Latitude", "Longitude", "GPS accuracy (m)"];
@@ -90,19 +118,15 @@ export default function ReportSummary() {
         <p><b>{count((p) => p.status === "synced")}</b> waiting for review</p>
       </div>
 
-      <h3 className="sub">By conservation status</h3>
-      <ul className="bars">
-        {CONSERVATION.map((c) => {
-          const n = count((p) => p.conservation === c);
-          return (
-            <li key={c}>
-              <span>{label(c)}</span>
-              <i style={{ width: `${(n / max) * 100}%` }} className={"bar chip-" + c.replaceAll(" ", "-")} />
-              <b>{n}</b>
-            </li>
-          );
-        })}
-      </ul>
+      <p className="mute small noprint">Select a bar to list those plants in the table below.</p>
+      <div className="reportcharts">
+        <PickBars title="By conservation status" onPick={(r) => setQuery({ conservation: r.key, page: null })}
+          rows={CONSERVATION.map((c) => ({ key: c, label: label(c), n: count((p) => p.conservation === c) })).filter((r) => r.n > 0)} />
+        <PickBars title="By family" rows={countPlants(all, (p) => p.species?.family)}
+          onPick={(r) => setQuery({ family: r.key, genus: null, page: null })} />
+        <PickBars title="By species" rows={countPlants(all, (p) => p.scientific || null)}
+          onPick={(r) => setQuery({ q: r.key, page: null })} />
+      </div>
 
       <h3 className="sub">Plant records</h3>
       <div className="toolbar">

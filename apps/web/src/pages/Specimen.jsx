@@ -11,7 +11,7 @@ import { Chip, Empty, Mono, Sci } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { lastUpdated, nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../../../shared/selectors.js";
-import { HIDE_LOCATION_LABEL, hideLocationRule } from "../../../shared/data.js";
+import { HIDDEN_LOCATION_NOTE, HIDE_LOCATION_LABEL, REDUCED_LOCATION_NOTE, hideLocationRule } from "../../../shared/data.js";
 import { fmtDate, fmtDateTime, label } from "../../../shared/utils.js";
 
 const height = (cm) => (cm == null ? "-" : cm >= 100 ? `${(cm / 100).toFixed(cm % 10 ? 2 : 1)} m` : `${cm} cm`);
@@ -212,7 +212,7 @@ export default function Specimen({ qr }) {
                 <MiniMap points={[{ p: plant, c: coords }]} height={150} highlight={plant.qr_id} label={`Location of ${plant.qr_id}`} />
                 <p className="gap-top-s"><Mono>{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</Mono></p>
                 {plant.location_reduced
-                  ? <p className="mute small">Approximate area, about 1.1 km across. The exact spot is protected.</p>
+                  ? <p className="mute small">{REDUCED_LOCATION_NOTE}</p>
                   : plant.gps_accuracy_m != null && <p className="mute small">GPS accuracy ±{plant.gps_accuracy_m} m</p>}
                 {canReview && (
                   <label className="check hidespot gap-top-s">
@@ -230,7 +230,7 @@ export default function Specimen({ qr }) {
                 )}
               </>
             ) : (
-              <p className="mute">{plant.lat == null ? "Location not captured when this plant was recorded." : "Hidden to protect this plant."}</p>
+              <p className="mute">{plant.lat == null ? "Location not captured when this plant was recorded." : HIDDEN_LOCATION_NOTE}</p>
             )}
           </section>
           {staff && (

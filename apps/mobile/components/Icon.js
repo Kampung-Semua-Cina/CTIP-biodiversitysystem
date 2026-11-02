@@ -6,11 +6,11 @@ import {
   Activity, ArrowRight, ArrowUpDown, Bell, Camera, ChartColumn, Check, ChevronDown, ChevronLeft, ChevronRight,
   ClipboardCheck, Droplet, Ellipsis, Eye, EyeOff, FileText, Flashlight, House, Info, Keyboard, Leaf,
   Lock, LogOut, Mail, Map, MapPin, MessageSquare, Plus, QrCode, RefreshCw, ScanLine, Search, Send,
-  Share2, Shield, Thermometer, Undo2, Users, X, Compass, Layers, Locate, User,
+  Share2, Shield, Thermometer, Undo2, Users, X, Compass, Layers, Locate, User, BookOpen,
 } from 'lucide-react-native';
 
 const ICONS = {
-  activity: Activity, arrowRight: ArrowRight, bell: Bell, camera: Camera, chart: ChartColumn, check: Check,
+  book: BookOpen, activity: Activity, arrowRight: ArrowRight, bell: Bell, camera: Camera, chart: ChartColumn, check: Check,
   chevD: ChevronDown, chevL: ChevronLeft, chevR: ChevronRight, clipboard: ClipboardCheck, drop: Droplet,
   more: Ellipsis, eye: Eye, eyeOff: EyeOff, file: FileText, torch: Flashlight, home: House, info: Info,
   keyboard: Keyboard, leaf: Leaf, lock: Lock, logout: LogOut, mail: Mail, map: Map, pin: MapPin,

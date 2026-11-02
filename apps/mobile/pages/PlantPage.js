@@ -10,7 +10,7 @@ import { plantView, visiblePlants, shownCoords, nameOf, speciesObservationPhotos
 import { can } from '../../shared/permissions.js';
 import { MAP_BOUNDS } from '../../shared/site.js';
 import { isExactProtected } from '../../shared/mapConfig.js';
-import { HIDE_LOCATION_LABEL, hideLocationRule } from '../../shared/data.js';
+import { HIDDEN_LOCATION_NOTE, HIDE_LOCATION_LABEL, REDUCED_LOCATION_NOTE, hideLocationRule } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import LeafletMap from '../components/LeafletMap.js';
@@ -75,7 +75,7 @@ function Page({ hero, children }) {
   );
 }
 
-const HIDDEN_NOTE = 'Location hidden to protect this plant.';
+const HIDDEN_NOTE = HIDDEN_LOCATION_NOTE;
 
 export function SpeciesProfile({ nav, params }) {
   const { db, role } = useStore();
@@ -112,6 +112,7 @@ export function SpeciesProfile({ nav, params }) {
         <View style={{ paddingTop: 6 }}><Chip status={sp.conservation_status} /></View>
       </View>
       {sp.description ? <Txt v="body" style={{ lineHeight: 25 }}>{sp.description}</Txt> : null}
+      {sp.updated_at ? <Txt v="caption" color={c.ink2}>Last updated {longDate(sp.updated_at)}</Txt> : null}
       {sp.cultural_significance ? (
         <Section title="Cultural significance"><Txt v="body" style={{ lineHeight: 25 }}>{sp.cultural_significance}</Txt></Section>
       ) : null}
@@ -224,7 +225,7 @@ export function TaggedPlant({ nav, params }) {
           ...(updated ? [['Last updated', longDate(updated)]] : []),
           ['Location', where ? <Mono size={14}>{coords(where.lat, where.lng)}</Mono> : p.lat == null ? 'Not captured when recorded.' : HIDDEN_NOTE],
         ]} />
-        {p.location_reduced ? <Txt v="caption" color={c.ink2}>Approximate area, about 1.1 km across. The exact spot is protected.</Txt> : null}
+        {p.location_reduced ? <Txt v="caption" color={c.ink2}>{REDUCED_LOCATION_NOTE}</Txt> : null}
         {where && can(role, 'review') ? (
           <Check
             label={HIDE_LOCATION_LABEL}

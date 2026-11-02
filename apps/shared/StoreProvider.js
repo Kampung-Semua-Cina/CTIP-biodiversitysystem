@@ -4,7 +4,7 @@ import { StoreContext } from "./store.js";
 import { seed, initialPublicPlants } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
-import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry } from "./utils.js";
+import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry, keepPhotoUrl } from "./utils.js";
 import {
   getAuthToken,
   setAuthToken,
@@ -119,15 +119,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
 
 // Stable URL cache to avoid re-rendering images every polling cycle
 const photoUrlCache = new Map();
-function stablePhotoUrl(key, freshUrl) {
-  if (!key) return freshUrl;
-  if (!freshUrl) return photoUrlCache.get(key) || null;
-  if (photoUrlCache.has(key)) {
-    return photoUrlCache.get(key);
-  }
-  photoUrlCache.set(key, freshUrl);
-  return freshUrl;
-}
+const stablePhotoUrl = (key, freshUrl) => keepPhotoUrl(photoUrlCache, key, freshUrl);
 
 // Compare two lists shallowly by checking lengths and item JSON representations
 function collectionMatches(a = [], b = []) {

@@ -18,5 +18,5 @@ export const dateTime = (iso) => {
   return `${shortDate(iso)}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export const coords = (lat, lng) => (lat == null || lng == null ? 'Not captured' : `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`);
+export const coords = (lat, lng) => (lat == null || lng == null ? 'Not captured' : `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`);
 export const accuracy = (m) => (m == null ? '' : `±${Math.round(m)} m`);

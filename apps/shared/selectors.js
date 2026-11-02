@@ -133,6 +133,45 @@ export function plantVisits(db, plantId, role) {
 // Date of the newest visit, or null.
 export const lastVisit = (db, plantId, role) => plantVisits(db, plantId, role)[0]?.observed_at || null;
 
+// Plants counted by one property, most first, for the report bars. Past `limit` rows the
+// rest join one "Other" row, which has no key because it cannot be picked. keyOf returning
+// null leaves a plant out. Each row keeps its plants, so it can list what it counts.
+export function countPlants(plants, keyOf, limit = 8) {
+  const groups = new Map();
+  for (const p of plants) {
+    const key = keyOf(p);
+    if (key == null) continue;
+    groups.set(key, [...(groups.get(key) || []), p]);
+  }
+  const rows = [...groups].map(([key, list]) => ({ key, label: key, n: list.length, plants: list }))
+    .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  if (rows.length <= limit) return rows;
+  const rest = rows.slice(limit).flatMap((r) => r.plants);
+  return [...rows.slice(0, limit), { key: null, label: "Other", n: rest.length, plants: rest }];
+}
+
+// The plant book (plantBook.js): published species only, and no plant locations.
+export const bookName = (s) => s.common_name || s.scientific_name;
+
+export function bookEntries(species = []) {
+  return species
+    .filter((s) => s.is_published && !s.is_deleted)
+    .map(({ id, common_name, scientific_name, family, genus, conservation_status, description, cultural_significance, updated_at }) => (
+      { id, common_name, scientific_name, family, genus, conservation_status, description, cultural_significance, updated_at }
+    ))
+    .sort((a, b) => bookName(a).localeCompare(bookName(b)));
+}
+
+// Entries under their first letter: [{ letter, entries }].
+export function bookLetters(entries) {
+  const groups = new Map();
+  for (const e of entries) {
+    const letter = (bookName(e)[0] || "?").toUpperCase();
+    groups.set(letter, [...(groups.get(letter) || []), e]);
+  }
+  return [...groups].map(([letter, list]) => ({ letter, entries: list }));
+}
+
 // When this plant's information last changed: the plant itself or any visit this role can see.
 export function lastUpdated(db, plant, role) {
   const times = [plant?.updated_at, ...plantVisits(db, plant?.id, role).map((o) => o.updated_at || o.observed_at)];

@@ -6,6 +6,7 @@ import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { familyOf, lastUpdated, nameOf, plantView, plantVisits } from "../../../shared/selectors.js";
 import { fmtDate } from "../../../shared/utils.js";
+import { REDUCED_LOCATION_NOTE } from "../../../shared/data.js";
 
 // The window a map pin opens: every plant at that spot, with photos and details.
 // `entries` is a list of { p, c } from the map page, c being the coordinates this role may see.
@@ -66,7 +67,7 @@ function PlantDetails({ point, coords }) {
             </span>
             <small className="mute block">
               {plant.location_reduced
-                ? "Approximate area, about 1.1 km across. The exact spot is protected."
+                ? REDUCED_LOCATION_NOTE
                 : plant.gps_accuracy_m != null ? `GPS accuracy ±${plant.gps_accuracy_m} m` : "GPS accuracy not recorded"}
             </small>
           </dd>

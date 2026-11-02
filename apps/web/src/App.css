@@ -881,6 +881,20 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .bars li { display: grid; grid-template-columns: 130px 1fr 28px; align-items: center; gap: 10px; }
 .bars .bar { display: block; height: 12px; min-width: 4px; border-radius: 6px; background: var(--c, var(--neutral)); border: 0; padding: 0; }
 .bars .bar::before { display: none; }
+/* A bar that can be picked: the whole row is the button. */
+.bars .barpick { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; width: 100%; padding: var(--s-1) 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+.bars .barpick:hover { background: var(--sunken); }
+.bars .bar.single { background: var(--acc); }
+.bars .rowname { overflow-wrap: break-word; }
+.reportcharts .bars li { grid-template-columns: minmax(0, 45%) 1fr 28px; }
+.reportcharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--s-5); }
+
+/* Plant book */
+.plantbook h2 { margin-top: var(--s-5); padding-bottom: var(--s-1); border-bottom: 1px solid var(--line); }
+.plantbook article { padding: var(--s-3) 0; break-inside: avoid; }
+.plantbook article + article { border-top: 1px solid var(--line); }
+.plantbook h3 { margin: 0; }
+.plantbook p { margin: var(--s-1) 0 0; }
 
 /* Sensor nodes and readings */
 .nodecard {
@@ -1219,7 +1233,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 }
 
 @media (max-width: 800px) {
-  .links, .right > .signin, .who .whoname, .who > .icon:last-child { display: none; }
+  .links, .site .right > .signin, .who .whoname, .who > .icon:last-child { display: none; }
   .who { padding: 2px; }
   .printsetup, .settings { grid-template-columns: minmax(0, 1fr); }
   .photorow { flex-direction: column; align-items: flex-start; }
@@ -1241,6 +1255,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
   .row > input { min-width: 0; }
   .charts, .two { grid-template-columns: 1fr; }
   .bars li { grid-template-columns: 100px 1fr 24px; }
+  .reportcharts .bars li { grid-template-columns: minmax(0, 45%) 1fr 24px; }
   .site dl { grid-template-columns: 110px minmax(0, 1fr); }
   .pad { padding: var(--s-4); }
   .photo3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1379,7 +1394,7 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 }
 
 @media print {
-  .top, .foot, .bottom, .protobar, .side, .quick, .toast, .scrim, .themeswitch { display: none !important; }
+  .top, .foot, .bottom, .protobar, .side, .quick, .toast, .scrim, .themeswitch, .noprint { display: none !important; }
   body { background: #fff; }
   .site { background: #fff; color: #000; }
   .glass { background: #fff !important; border: 0; box-shadow: none; }

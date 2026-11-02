@@ -14,14 +14,14 @@ import {
   Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
 import LeafletMap from '../components/LeafletMap.js';
-import { PHOTO_TRAITS, PHOTO_CAPTION_MAX } from '../../shared/data.js';
+import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, THREATENED } from '../../shared/data.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
 import { TagQrView } from './TagQr.js';
 import { prefillFromSpecies } from '../../shared/speciesSearch.js';
 import { uid } from '../../shared/utils.js';
-import { extractTag } from '../../shared/selectors.js';
+import { extractTag, plantView } from '../../shared/selectors.js';
 
 const MAX_PHOTOS = 6;
 
@@ -236,8 +236,48 @@ function GpsRow({ gps, loading, error, onRefresh, title }) {
   );
 }
 
+// The location on a form: the phone's GPS, which the botanist can override by hand.
+function useSpot() {
+  const [gps, setGps] = useState(NO_GPS);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState('');
+  const [typed, setTyped] = useState(null); // { lat, lng } as text while setting the location by hand, else null
+  const typedRef = useRef(false); // a slow GPS reading must not replace a spot set by hand
+
+  const fetchGps = async () => {
+    setGpsLoading(true);
+    setGpsError('');
+    const res = await requestHardwareLocation();
+    setGpsLoading(false);
+    if (typedRef.current) return;
+    setGps(res.gps);
+    setGpsError(res.error || '');
+  };
+
+  // Half-typed or out-of-range numbers count as no location.
+  const typeSpot = (next) => {
+    typedRef.current = true;
+    setTyped(next);
+    setGpsError('');
+    const lat = Number(next.lat);
+    const lng = Number(next.lng);
+    const valid = next.lat !== '' && next.lng !== '' && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    setGps(valid ? { lat, lng, acc: null } : NO_GPS);
+  };
+
+  const refresh = () => {
+    typedRef.current = false;
+    setTyped(null);
+    fetchGps();
+  };
+  const toggleHand = () => (typed ? setTyped(null) : typeSpot({ lat: hasFix(gps) ? String(gps.lat) : '', lng: hasFix(gps) ? String(gps.lng) : '' }));
+
+  return { gps, setGps, gpsLoading, gpsError, typed, typeSpot, fetchGps, refresh, toggleHand };
+}
+
 // A location set by hand: type it, or tap the spot on the map.
-function SetByHand({ typed, gps, qr, onChange }) {
+// `protect`: a protected plant's spot, which limits the map tiles (T19 in mapConfig.js).
+function SetByHand({ typed, gps, qr, protect, onChange }) {
   const { c } = useTheme();
   return (
     <View style={{ gap: 12 }}>
@@ -250,7 +290,7 @@ function SetByHand({ typed, gps, qr, onChange }) {
         height={280}
         rounded
         fitKey="spot"
-        points={hasFix(gps) ? [{ id: 'spot', qr_id: qr, name: 'This plant', lat: gps.lat, lng: gps.lng }] : []}
+        points={hasFix(gps) ? [{ id: 'spot', qr_id: qr, name: 'This plant', lat: gps.lat, lng: gps.lng, protect }] : []}
         onMapClick={(lat, lng) => onChange({ lat: lat.toFixed(6), lng: lng.toFixed(6) })}
       />
     </View>
@@ -268,11 +308,7 @@ export function AddPlant({ nav, params = {} }) {
   const [height, setHeight] = useState('');
   const [looks, setLooks] = useState('');
   const [notes, setNotes] = useState('');
-  const [gps, setGps] = useState(NO_GPS);
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsError, setGpsError] = useState('');
-  const [typed, setTyped] = useState(null); // { lat, lng } as text while setting the location by hand, else null
-  const typedRef = useRef(false); // a slow GPS reading must not replace a spot set by hand
+  const { gps, setGps, gpsLoading, gpsError, typed, typeSpot, fetchGps, refresh, toggleHand } = useSpot();
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -363,27 +399,6 @@ export function AddPlant({ nav, params = {} }) {
     } catch (err) {
       Alert.alert('Gallery Error', err?.message || 'Could not load photo from gallery.');
     }
-  };
-
-  const fetchGps = async () => {
-    setGpsLoading(true);
-    setGpsError('');
-    const res = await requestHardwareLocation();
-    setGpsLoading(false);
-    if (typedRef.current) return;
-    setGps(res.gps);
-    setGpsError(res.error || '');
-  };
-
-  // Half-typed or out-of-range numbers count as no location.
-  const typeSpot = (next) => {
-    typedRef.current = true;
-    setTyped(next);
-    setGpsError('');
-    const lat = Number(next.lat);
-    const lng = Number(next.lng);
-    const valid = next.lat !== '' && next.lng !== '' && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
-    setGps(valid ? { lat, lng, acc: null } : NO_GPS);
   };
 
   useEffect(() => {
@@ -607,12 +622,9 @@ export function AddPlant({ nav, params = {} }) {
         <Area label="Field notes" optional value={notes} onChangeText={setNotes} placeholder="Habitat, nearby trail, anything unusual" rows={2} />
       </Section>
 
-      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={() => { typedRef.current = false; setTyped(null); fetchGps(); }} />
-      <TextLink
-        label={typed ? 'Close map' : 'Set it by hand'}
-        onPress={() => (typed ? setTyped(null) : typeSpot({ lat: hasFix(gps) ? String(gps.lat) : '', lng: hasFix(gps) ? String(gps.lng) : '' }))}
-      />
-      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} onChange={typeSpot} /> : null}
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={refresh} />
+      <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
+      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={THREATENED.includes(db.species.find((s) => s.id === picked?.id)?.conservation_status)} onChange={typeSpot} /> : null}
     </Screen>
   );
 }
@@ -652,18 +664,7 @@ export function Revisit({ nav, params = {} }) {
   const [photos, setPhotos] = useState([]);
   const [height, setHeight] = useState('');
   const [changes, setChanges] = useState('');
-  const [gps, setGps] = useState(NO_GPS);
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsError, setGpsError] = useState('');
-
-  const fetchGps = async () => {
-    setGpsLoading(true);
-    setGpsError('');
-    const res = await requestHardwareLocation();
-    setGps(res.gps);
-    setGpsError(res.error || '');
-    setGpsLoading(false);
-  };
+  const { gps, gpsLoading, gpsError, typed, typeSpot, fetchGps, refresh, toggleHand } = useSpot();
 
   useEffect(() => {
     fetchGps();
@@ -744,7 +745,9 @@ export function Revisit({ nav, params = {} }) {
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} placeholder={last?.height_cm ? String(last.height_cm) : ''} keyboardType="decimal-pad" width={140} hint="Leave empty if it has not changed" />
         <Area label="Changes" value={changes} onChangeText={setChanges} placeholder="New pitchers, flowering, damage…" />
       </Section>
-      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} title="Same place as before" onRefresh={fetchGps} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} title={typed ? 'Set by hand' : 'Same place as before'} onRefresh={refresh} />
+      <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
+      {typed ? <SetByHand typed={typed} gps={gps} qr={plant.qr_id} protect={!!plantView(db, plant)?.endangered} onChange={typeSpot} /> : null}
     </Screen>
   );
 }

@@ -7,6 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { useStore } from '../../shared/store.js';
 import { can } from '../../shared/permissions.js';
+import { REDUCED_LOCATION_NOTE } from '../../shared/data.js';
 import { familyOf, lastUpdated, nameOf, plantVisits } from '../../shared/selectors.js';
 import { useTheme, font } from './Theme.js';
 import Icon from './Icon.js';
@@ -97,7 +98,7 @@ function PlantDetails({ plant, coords, onOpen, last }) {
         </View>
         <Txt v="caption" color={c.ink2} style={{ fontFamily: font('text', 400) }}>
           {plant.location_reduced
-            ? 'Approximate area, about 1.1 km across. The exact spot is protected.'
+            ? REDUCED_LOCATION_NOTE
             : plant.gps_accuracy_m != null ? `GPS accuracy ${accuracy(plant.gps_accuracy_m)}` : 'GPS accuracy not recorded'}
         </Txt>
       </View>
