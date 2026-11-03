@@ -13,7 +13,7 @@ export const EXACT_LOCATION_ROLES = ['officer', 'admin'];
 
 // Same rule as apps/shared/selectors.js: the officer's per-plant flag, or the
 // species' status. Compared without case so "Endangered" also counts.
-const ENDANGERED_STATUSES = ['endangered', 'critically endangered', 'vulnerable'];
+const ENDANGERED_STATUSES = ['endangered', 'critically endangered'];
 export const isEndangered = (specimen) =>
   specimen.endangered_override ||
   ENDANGERED_STATUSES.includes(specimen.species?.conservation_status?.trim().toLowerCase());

@@ -19,22 +19,19 @@ export default function Records() {
   const unfinished = unfinishedPlants(db, me?.id);
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id && (filter === "all" || o.status === filter))
+    .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
     .sort((a, b) => {
       if (sort === "oldest") return (a.observed_at || "").localeCompare(b.observed_at || "");
       if (sort === "name") {
-        const pa = plantView(db, db.plants.find((x) => x.id === a.specimen_id));
-        const pb = plantView(db, db.plants.find((x) => x.id === b.specimen_id));
-        return (pa?.name || "").localeCompare(pb?.name || "");
+        return (a.plant?.name || "").localeCompare(b.plant?.name || "");
       }
       if (sort === "tag") {
-        const pa = db.plants.find((x) => x.id === a.specimen_id);
-        const pb = db.plants.find((x) => x.id === b.specimen_id);
-        return (pa?.qr_id || "").localeCompare(pb?.qr_id || "");
+        return (a.plant?.qr_id || "").localeCompare(b.plant?.qr_id || "");
       }
       return (b.observed_at || "").localeCompare(a.observed_at || "");
     });
 
-  const filteredMine = mine.filter((o) => recordMatches(o, db, q));
+  const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
   const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
 
   return (
@@ -110,7 +107,7 @@ function RecordRow({ obs }) {
   });
   const set = (k) => (e) => setFix({ ...fix, [k]: e.target.value });
   // The plant can be missing for a moment while data loads, or if it was deleted.
-  const plant = plantView(db, db.plants.find((p) => p.id === obs.specimen_id)) || { name: "Plant not loaded", qr_id: "-" };
+  const plant = obs.plant || plantView(db, db.plants.find((p) => p.id === obs.specimen_id)) || { name: "Plant not loaded", qr_id: "-" };
   const lastReturn = [...db.reviews].reverse().find((r) => r.observation_id === obs.id && r.decision !== "approve");
 
   return (

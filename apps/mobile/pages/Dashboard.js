@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, nameOf, speciesCatalogue } from '../../shared/selectors.js';
-import { THREATENED, isThreatened } from '../../shared/data.js';
+import { isThreatened } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
   TitleBlock, SearchField, Pills, Segmented, SortBar, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,

@@ -73,6 +73,10 @@ export function createSecureStorage(options = {}) {
             return legacy;
           } catch (migrateErr) {
             console.warn('[SecureStore migration error]', migrateErr?.message || migrateErr);
+            // Purge plaintext session even if SecureStore setItemAsync threw so credentials are not left unencrypted
+            try {
+              if (legacyStorage?.removeItem) await legacyStorage.removeItem(key);
+            } catch {}
             // Fail closed: do not return legacy plaintext token if it could not be securely saved
             return null;
           }

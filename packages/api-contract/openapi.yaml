@@ -1663,7 +1663,7 @@ paths:
       summary: Plant locations for the distribution map (staff)
       description: >
         One point per plant, from its latest approved observation. For an endangered
-        plant (species status endangered / critically endangered / vulnerable, or the specimen's
+        plant (species status endangered / critically endangered, or the specimen's
         endangered_override), roles other than Officer and Admin get the centre of a
         0.01 degree grid square (about 1.1 km) instead of the exact spot. The
         reduction happens in the API; the exact values are never sent (threat T13).

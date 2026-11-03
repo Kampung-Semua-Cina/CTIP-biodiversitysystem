@@ -10,13 +10,12 @@ test("isThreatened normalizes status and matches case-insensitively", () => {
   assert.equal(isThreatened("endangered"), true);
   assert.equal(isThreatened("Endangered"), true);
   assert.equal(isThreatened("  ENDANGERED  "), true);
-  assert.equal(isThreatened("vulnerable"), true);
-  assert.equal(isThreatened("Vulnerable"), true);
-  assert.equal(isThreatened("  Vulnerable  "), true);
   assert.equal(isThreatened("critically endangered"), true);
   assert.equal(isThreatened("Critically Endangered"), true);
   assert.equal(isThreatened("CRITICALLY ENDANGERED"), true);
 
+  assert.equal(isThreatened("vulnerable"), false);
+  assert.equal(isThreatened("Vulnerable"), false);
   assert.equal(isThreatened("least concern"), false);
   assert.equal(isThreatened("Least Concern"), false);
   assert.equal(isThreatened("near threatened"), false);
@@ -25,28 +24,31 @@ test("isThreatened normalizes status and matches case-insensitively", () => {
   assert.equal(isThreatened(undefined), false);
 });
 
-test("red status species (endangered and vulnerable) automatically disable GPS metadata and location sharing", () => {
-  for (const status of ["endangered", "critically endangered", "vulnerable", "Endangered", "Vulnerable", "Critically Endangered"]) {
+test("endangered species have exact coordinates locked to hidden", () => {
+  for (const status of ["endangered", "critically endangered", "Endangered", "Critically Endangered"]) {
     const rule = hideLocationRule(status, false, false);
     assert.equal(rule.locked, true);
     assert.equal(rule.on, true);
-    assert.match(rule.hint, /Automatically disabled for red status species/);
+    assert.match(rule.hint, /Always on for endangered species/);
   }
 });
 
-test("vulnerable species have GPS metadata automatically disabled", () => {
+test("vulnerable species are hidden by default but can be published by officer choice", () => {
+  // on by default
   assert.equal(hideLocationRule("vulnerable", false).on, true);
-  assert.equal(hideLocationRule("vulnerable", false).locked, true);
+  assert.equal(hideLocationRule("vulnerable", false).locked, false);
   assert.equal(hideLocationRule("Vulnerable", false).on, true);
-  assert.equal(hideLocationRule("Vulnerable", false).locked, true);
-  assert.equal(hideLocationRule("vulnerable", false, false).on, true);
-  assert.match(hideLocationRule("vulnerable", false).hint, /Automatically disabled/);
+  assert.equal(hideLocationRule("Vulnerable", false).locked, false);
+  assert.match(hideLocationRule("vulnerable", false).hint, /On by default for vulnerable species/);
+
+  // officer can untick to publish location
+  assert.equal(hideLocationRule("vulnerable", false, false).on, false);
 });
 
-test("plantView and shownCoords protect capitalized vulnerable species from public visitors", () => {
+test("plantView and shownCoords protect endangered species from public visitors while staff see exact spots", () => {
   const db = {
     species: [
-      { id: "s1", scientific_name: "Nepenthes rajah", common_name: "Rajah Pitcher", conservation_status: "Vulnerable", is_published: true },
+      { id: "s1", scientific_name: "Nepenthes rajah", common_name: "Rajah Pitcher", conservation_status: "Endangered", is_published: true },
       { id: "s2", scientific_name: "Hevea brasiliensis", common_name: "Rubber Tree", conservation_status: "Least Concern", is_published: true },
     ],
     plants: [
@@ -63,6 +65,7 @@ test("plantView and shownCoords protect capitalized vulnerable species from publ
   const v1 = plantView(db, db.plants[0]);
   assert.equal(v1.endangered, true);
   assert.equal(shownCoords(v1, "visitor"), null);
+  assert.deepEqual(shownCoords(v1, "botanist"), { lat: 3.8, lng: 113.7 });
   assert.deepEqual(shownCoords(v1, "officer"), { lat: 3.8, lng: 113.7 });
 
   const v2 = plantView(db, db.plants[1]);

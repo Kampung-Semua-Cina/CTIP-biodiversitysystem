@@ -11,10 +11,10 @@ import { useStore } from '../../shared/store.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import {
-  Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty, Check, Notice,
+  Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
 import LeafletMap from '../components/LeafletMap.js';
-import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, THREATENED, HIDE_LOCATION_LABEL, isThreatened } from '../../shared/data.js';
+import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, isThreatened } from '../../shared/data.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
@@ -314,18 +314,6 @@ export function AddPlant({ nav, params = {} }) {
   const [generating, setGenerating] = useState(false);
   const [showQr, setShowQr] = useState(false); // the tag's QR, shown over the form (CTIP-27)
   const [tried, setTried] = useState(false);
-  const [disableLocation, setDisableLocation] = useState(false);
-  const cleanSp = sp.trim().toLowerCase();
-  const pickedSpecies =
-    picked ||
-    db.species.find(
-      (s) =>
-        !s.is_deleted &&
-        (s.scientific_name?.toLowerCase() === cleanSp ||
-          (s.common_name && s.common_name.toLowerCase() === cleanSp))
-    );
-  const isRedStatus = !!(pickedSpecies && isThreatened(pickedSpecies.conservation_status));
-  const locationDisabled = isRedStatus || disableLocation;
 
   useEffect(() => {
     if (params.qr && params.qr !== qr) {
@@ -542,14 +530,14 @@ export function AddPlant({ nav, params = {} }) {
         height_cm: height,
         notes: notes.trim(),
         photos,
-        lat: locationDisabled ? null : gps.lat,
-        lng: locationDisabled ? null : gps.lng,
-        gps_accuracy_m: locationDisabled || !hasFix(gps) ? null : gps.acc,
+        lat: gps.lat,
+        lng: gps.lng,
+        gps_accuracy_m: hasFix(gps) ? gps.acc : null,
       });
       // addPlant reports failure instead of throwing. Keep the draft so nothing is lost.
       if (!res?.ok) throw new Error(res?.message || 'Failed to submit observation.');
       await clearDraft(qr); // Clean up crash draft after successful submit (CTIP-57)
-      nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, located: !locationDisabled && hasFix(gps), acc: locationDisabled ? null : gps.acc, cover: photos[0]?.url });
+      nav.replace('submitted', { qr, name: sp.trim(), photos: photos.length, located: hasFix(gps), acc: gps.acc, cover: photos[0]?.url });
     } catch (err) {
       Alert.alert('Submission Error', err?.message || 'Failed to submit observation. Draft has been saved safely.');
     } finally {
@@ -634,24 +622,9 @@ export function AddPlant({ nav, params = {} }) {
         <Area label="Field notes" optional value={notes} onChangeText={setNotes} placeholder="Habitat, nearby trail, anything unusual" rows={2} />
       </Section>
 
-      {isRedStatus ? (
-        <Notice
-          tone="danger"
-          icon="shield"
-          title="GPS metadata automatically disabled"
-          body="GPS metadata and exact coordinates are automatically disabled for red status species (Endangered, Vulnerable) to protect location privacy."
-        />
-      ) : null}
-      <Check
-        label={HIDE_LOCATION_LABEL}
-        hint={isRedStatus ? "Automatically disabled for red status species (Endangered, Vulnerable)." : "Turn off GPS location sharing before publishing records."}
-        value={locationDisabled}
-        disabled={isRedStatus}
-        onChange={setDisableLocation}
-      />
-      <GpsRow gps={locationDisabled ? NO_GPS : gps} loading={locationDisabled ? false : gpsLoading} error={locationDisabled ? '' : gpsError} title={locationDisabled ? 'Location sharing disabled' : undefined} onRefresh={refresh} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={refresh} />
       <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
-      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={isRedStatus} onChange={typeSpot} /> : null}
+      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={isThreatened(db.species.find((s) => s.id === picked?.id)?.conservation_status)} onChange={typeSpot} /> : null}
     </Screen>
   );
 }
@@ -692,9 +665,6 @@ export function Revisit({ nav, params = {} }) {
   const [height, setHeight] = useState('');
   const [changes, setChanges] = useState('');
   const { gps, gpsLoading, gpsError, typed, typeSpot, fetchGps, refresh, toggleHand } = useSpot();
-  const [disableLocation, setDisableLocation] = useState(false);
-  const isRedStatus = !!plantView(db, plant)?.endangered;
-  const locationDisabled = isRedStatus || disableLocation;
 
   useEffect(() => {
     fetchGps();
@@ -733,9 +703,9 @@ export function Revisit({ nav, params = {} }) {
       morphology: changes.trim() || last?.morphology,
       notes: '',
       photos,
-      lat: locationDisabled ? null : (hasFix(gps) ? gps.lat : (plant.lat ?? null)),
-      lng: locationDisabled ? null : (hasFix(gps) ? gps.lng : (plant.lng ?? null)),
-      gps_accuracy_m: locationDisabled || !hasFix(gps) ? null : gps.acc,
+      lat: hasFix(gps) ? gps.lat : (plant.lat ?? null),
+      lng: hasFix(gps) ? gps.lng : (plant.lng ?? null),
+      gps_accuracy_m: hasFix(gps) ? gps.acc : null,
     });
     if (!obsId) return; // addRevisit already showed why; keep what was entered
     notify(`Revisit of ${plant.qr_id} sent for review`);
@@ -775,22 +745,7 @@ export function Revisit({ nav, params = {} }) {
         <Field label="Height (cm)" value={height} onChangeText={(t) => setHeight(t.replace(/[^\d.]/g, ''))} placeholder={last?.height_cm ? String(last.height_cm) : ''} keyboardType="decimal-pad" width={140} hint="Leave empty if it has not changed" />
         <Area label="Changes" value={changes} onChangeText={setChanges} placeholder="New pitchers, flowering, damage…" />
       </Section>
-      {isRedStatus ? (
-        <Notice
-          tone="danger"
-          icon="shield"
-          title="GPS metadata automatically disabled"
-          body="GPS metadata and exact coordinates are automatically disabled for red status species (Endangered, Vulnerable) to protect location privacy."
-        />
-      ) : null}
-      <Check
-        label={HIDE_LOCATION_LABEL}
-        hint={isRedStatus ? "Automatically disabled for red status species (Endangered, Vulnerable)." : "Turn off GPS location sharing before publishing records."}
-        value={locationDisabled}
-        disabled={isRedStatus}
-        onChange={setDisableLocation}
-      />
-      <GpsRow gps={locationDisabled ? NO_GPS : gps} loading={locationDisabled ? false : gpsLoading} error={locationDisabled ? '' : gpsError} title={locationDisabled ? 'Location sharing disabled' : (typed ? 'Set by hand' : 'Same place as before')} onRefresh={refresh} />
+      <GpsRow gps={gps} loading={gpsLoading} error={gpsError} title={typed ? 'Set by hand' : 'Same place as before'} onRefresh={refresh} />
       <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
       {typed ? <SetByHand typed={typed} gps={gps} qr={plant.qr_id} protect={!!plantView(db, plant)?.endangered} onChange={typeSpot} /> : null}
     </Screen>

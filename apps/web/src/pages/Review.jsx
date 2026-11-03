@@ -159,7 +159,7 @@ function ReviewDetail({ obs, onDecided }) {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
     setDeciding(true);
-    if (decision === "approve" && hideLocation !== !!rawPlant.endangered_override) {
+    if (decision === "approve" && !alwaysHidden && hideLocation !== !!rawPlant.endangered_override) {
       if (!(await setPlantLocationHidden(rawPlant.id, hideLocation))) return setDeciding(false);
     }
     const r = await reviewObservation(obs.id, decision, comment.trim()); // shows its own message
@@ -237,11 +237,11 @@ function ReviewDetail({ obs, onDecided }) {
             checked={hideLocation}
             disabled={alwaysHidden}
             onChange={(e) => setHideChoice(e.target.checked)}
-            aria-label="Disable location sharing before publishing records (Hide the exact location from the public)"
+            aria-label="Hide the exact location from the public"
           />
           <span>
             <b>{HIDE_LOCATION_LABEL}</b>
-            <small className="mute block">{alwaysHidden ? "GPS metadata automatically disabled for red status species (Endangered, Vulnerable). " : "Saved when you approve. "}{hideRule.hint}</small>
+            <small className="mute block">{alwaysHidden ? "" : "Saved when you approve. "}{hideRule.hint}</small>
           </span>
         </label>
       )}

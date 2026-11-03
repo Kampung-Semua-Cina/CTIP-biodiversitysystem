@@ -127,7 +127,7 @@ export function ReviewRecord({ nav, params = {} }) {
     if (busy) return;
     setBusy(true);
     if (decision === 'approve' && match && match.id !== plant.species_id) await setPlantSpecies(plant.id, match.id);
-    if (decision === 'approve' && plant.lat != null && hideRule.on !== !!plant.endangered_override) {
+    if (decision === 'approve' && plant.lat != null && !hideRule.locked && hideRule.on !== !!plant.endangered_override) {
       if (!(await setPlantLocationHidden(plant.id, hideRule.on))) return setBusy(false);
     }
     const r = await reviewObservation(o.id, decision, note.trim()); // shows its own message when it fails

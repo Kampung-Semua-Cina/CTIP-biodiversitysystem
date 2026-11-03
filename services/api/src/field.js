@@ -260,7 +260,9 @@ export const fieldHandlers = {
     }
     if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
     const type = photoType(req.file.buffer);
-    if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG, WebP or HEIC');
+    if (!type || type === 'image/heic') {
+      return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP (HEIC is not supported to protect location privacy; CTIP-110)');
+    }
     const photoId = req.body?.id ?? crypto.randomUUID();
     if (!UUID.test(photoId)) return fail(res, 422, 'VALIDATION_ERROR', 'id must be a UUID');
     const notes = PhotoNotes.safeParse({ caption: req.body?.caption, traits: [req.body?.traits ?? []].flat() });

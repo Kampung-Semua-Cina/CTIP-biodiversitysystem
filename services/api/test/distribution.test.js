@@ -26,14 +26,12 @@ const obs = (spec, lat, lng, observed_at) =>
 const rajahPlant = specimen('QR-0001', RAJAH);
 const ampullariaPlant = specimen('QR-0002', AMPULLARIA);
 const shoreaFlagged = specimen('QR-0003', SHOREA, true); // officer flagged this one plant as endangered
-const shoreaPlant = specimen('QR-0004', SHOREA, false); // vulnerable species without officer override
 
 const rows = [
   obs(rajahPlant, 3.815372, 113.781946, '2026-10-20T02:00:00Z'),
   obs(rajahPlant, 3.815300, 113.781900, '2026-10-01T02:00:00Z'), // older visit of the same plant
   obs(ampullariaPlant, 3.808811, 113.775123, '2026-10-18T02:00:00Z'),
   obs(shoreaFlagged, 3.821444, 113.790777, '2026-10-15T02:00:00Z'),
-  obs(shoreaPlant, 3.821444, 113.790777, '2026-10-16T02:00:00Z'),
 ];
 
 let lastUrl;
@@ -60,7 +58,7 @@ test('asks the database for approved, not-deleted observations only', async () =
 test('one point per plant, from its latest approved observation', async () => {
   const res = await get('officer');
   assert.equal(res.status, 200);
-  assert.equal(res.body.data.length, 4);
+  assert.equal(res.body.data.length, 3);
   assert.equal(byQr(res)['QR-0001'].observed_at, '2026-10-20T02:00:00Z');
 });
 
@@ -89,13 +87,6 @@ test('botanist gets reduced coordinates for endangered plants, never the exact o
 
 test('the officer\'s endangered flag on one plant also reduces it, whatever the species status', async () => {
   const shorea = byQr(await get('botanist'))['QR-0003'];
-  assert.equal(shorea.endangered, true);
-  assert.equal(shorea.location_reduced, true);
-  assert.deepEqual([shorea.lat, shorea.lng], [3.825, 113.795]);
-});
-
-test('vulnerable species automatically reduce coordinates for botanists', async () => {
-  const shorea = byQr(await get('botanist'))['QR-0004'];
   assert.equal(shorea.endangered, true);
   assert.equal(shorea.location_reduced, true);
   assert.deepEqual([shorea.lat, shorea.lng], [3.825, 113.795]);

@@ -253,6 +253,25 @@ test('a botanist cannot add a record to a plant while one is waiting for an offi
   assert.equal(allowed.status, 201, 'allowed again once the decision is back');
 });
 
+test('photo upload rejects HEIC images to protect location privacy (CTIP-110)', async () => {
+  const obs = observation();
+  const heicHeader = Buffer.from([
+    0x00, 0x00, 0x00, 0x18,
+    0x66, 0x74, 0x79, 0x70, // 'ftyp'
+    0x68, 0x65, 0x69, 0x63, // 'heic'
+    0x00, 0x00, 0x00, 0x00,
+    0x6d, 0x69, 0x66, 0x31,
+    0x68, 0x65, 0x69, 0x63,
+  ]);
+  const res = await request(app)
+    .post(`/v1/observations/${obs.id}/photos`)
+    .set(as('botanist'))
+    .attach('file', heicHeader, 'photo.heic');
+  assert.equal(res.status, 415);
+  assert.match(res.body.message, /HEIC is not supported/);
+  assert.equal(db.observation_photos.length, 0);
+});
+
 test('photo upload rejects a file that is not an image, whatever its name', async () => {
   const obs = observation();
   const res = await request(app).post(`/v1/observations/${obs.id}/photos`).set(as('botanist'))
@@ -396,13 +415,11 @@ test('workspace: null coordinates stay null', async () => {
 test('workspace: override and capitalised status both reduce', async () => {
   plant({ endangered_override: true });
   plant({ qr_id: 'NIAH-0098', species_id: species('Critically Endangered').id });
-  plant({ qr_id: 'NIAH-0096', species_id: species('Vulnerable').id });
   plant({ qr_id: 'NIAH-0097', species_id: species('least concern').id });
   const res = await request(app).get('/v1/workspace').set(as('botanist'));
   const byTag = Object.fromEntries(res.body.specimens.map((p) => [p.qr_id, p]));
   assert.equal(byTag['NIAH-0099'].location_reduced, true, 'override with no species');
   assert.equal(byTag['NIAH-0098'].location_reduced, true, 'status in capitals');
-  assert.equal(byTag['NIAH-0096'].location_reduced, true, 'vulnerable species automatically reduces coordinates');
   assert.equal(byTag['NIAH-0097'].lat, EXACT.lat, 'not endangered stays exact');
 });
 

@@ -16,11 +16,11 @@ export const BLANK_SPECIES = {
 };
 
 // Statuses whose exact locations are hidden from visitors. Matches the API (distribution.js).
-export const RED_STATUSES = ["endangered", "critically endangered", "vulnerable"];
-export const THREATENED = ["endangered", "critically endangered", "vulnerable"];
+export const THREATENED = ["endangered", "critically endangered"];
 
 /**
- * Returns true if the given conservation status represents a threatened/red-status species.
+ * Returns true if the given conservation status represents a threatened species
+ * whose location is always locked to hidden (endangered, critically endangered).
  * Normalizes input by trimming and lowercasing for case-insensitive protection matching.
  */
 export const isThreatened = (status) =>
@@ -31,12 +31,12 @@ export const isThreatened = (status) =>
 // changes, and the plant's details and photos stay visible.
 // Endangered: always on. Vulnerable: on by default. Anything else: the officer's choice.
 // `choice` is what the officer ticked on this screen (null until they change it).
-export const HIDE_LOCATION_LABEL = "Disable location sharing before publishing records (Hide the exact location from the public)";
+export const HIDE_LOCATION_LABEL = "Hide the exact location from the public";
 export function hideLocationRule(status, override, choice = null) {
   const norm = String(status || "").trim().toLowerCase();
   const locked = isThreatened(norm);
   const byDefault = norm === "vulnerable";
-  const first = locked ? "Automatically disabled for red status species (Endangered, Vulnerable). " : byDefault ? "On by default for vulnerable species. " : "";
+  const first = locked ? "Always on for endangered species. " : byDefault ? "On by default for vulnerable species. " : "";
   return {
     locked,
     on: locked || (choice ?? (!!override || byDefault)),

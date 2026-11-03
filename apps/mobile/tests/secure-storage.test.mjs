@@ -91,7 +91,7 @@ describe('CTIP-119: SecureStore Session Persistence & AsyncStorage Migration', (
     assert.equal(secondRead, legacySession);
   });
 
-  test('migration: fails closed and returns null if writing to SecureStore throws during migration', async () => {
+  test('migration: fails closed, purges legacy copy, and returns null if writing to SecureStore throws during migration', async () => {
     const legacySession = JSON.stringify({ access_token: 'leak_candidate' });
     const asyncMock = new Map([['daun_session', legacySession]]);
 
@@ -114,6 +114,7 @@ describe('CTIP-119: SecureStore Session Persistence & AsyncStorage Migration', (
 
     const result = await storage.getItem('daun_session');
     assert.equal(result, null, 'Must NOT return plaintext token when migration to SecureStore fails');
+    assert.equal(asyncMock.has('daun_session'), false, 'Legacy unencrypted session must be purged even when SecureStore write fails');
   });
 
   test('fails closed: does NOT write to unencrypted AsyncStorage if SecureStore is unavailable or throws', async () => {
