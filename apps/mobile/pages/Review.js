@@ -8,8 +8,9 @@ import { plantView, nameOf } from '../../shared/selectors.js';
 import { HIDE_LOCATION_LABEL, hideLocationRule } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice, Check, TextLink,
+  Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice, Check, TextLink, Section,
 } from '../components/Bits.js';
+import PlantSpotMap from '../components/PlantSpotMap.js';
 import PhotoNote from '../components/PhotoNote.js';
 import SpeciesForm from '../components/SpeciesForm.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
@@ -152,14 +153,15 @@ export function ReviewRecord({ nav, params = {} }) {
       <Photos photos={plant.photos.filter((p) => p.observation_id === o.id).length ? plant.photos.filter((p) => p.observation_id === o.id) : plant.photos} />
       {plant.scientific ? <Sci size={16}>{plant.scientific}{plant.species?.family ? ` · ${plant.species.family}` : ''}</Sci> : null}
       {!open ? <DotLabel status={o.status} /> : null}
-      {plant.lat == null ? <Notice tone="warning" icon="pin" title="Location not captured" body="The botanist's phone had no GPS fix, so this plant will not appear on the map. Ask where it is, or return the record for a location." /> : null}
+      {(o.lat ?? plant?.lat) == null ? <Notice tone="warning" icon="pin" title="Location not captured" body="The botanist's phone had no GPS fix, so this plant will not appear on the map. Ask where it is, or return the record for a location." /> : null}
       <KV rows={[
         ['Recorded by', `${nameOf(db, o.recorded_by)} · ${dateTime(o.observed_at)}`],
         ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
         ['Appearance', o.morphology || '-'],
         ['Notes', o.notes || '-'],
-        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
+        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(o.lat ?? plant?.lat, o.lng ?? plant?.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{(o.lat ?? plant?.lat) != null ? accuracy(o.gps_accuracy_m ?? plant?.gps_accuracy_m) : ''}</Text></Text>],
       ]} />
+      <PlantSpotMap title="Where it was recorded" lat={o.lat ?? plant?.lat} lng={o.lng ?? plant?.lng} plant={plant} />
       {open ? (
         <>
           <View style={{ gap: 6 }}>

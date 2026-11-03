@@ -14,7 +14,7 @@ import {
   Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty,
 } from '../components/Bits.js';
 import LeafletMap from '../components/LeafletMap.js';
-import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, THREATENED } from '../../shared/data.js';
+import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, isThreatened } from '../../shared/data.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
@@ -624,7 +624,7 @@ export function AddPlant({ nav, params = {} }) {
 
       <GpsRow gps={gps} loading={gpsLoading} error={gpsError} onRefresh={refresh} />
       <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
-      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={THREATENED.includes(db.species.find((s) => s.id === picked?.id)?.conservation_status)} onChange={typeSpot} /> : null}
+      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={isThreatened(db.species.find((s) => s.id === picked?.id)?.conservation_status)} onChange={typeSpot} /> : null}
     </Screen>
   );
 }

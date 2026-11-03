@@ -221,6 +221,7 @@ export default function Specimen({ qr }) {
                       checked={plant.endangered}
                       disabled={hideLocationRule(plant.species?.conservation_status).locked}
                       onChange={(e) => setPlantLocationHidden(plant.id, e.target.checked)}
+                      aria-label="Hide the exact location from the public"
                     />
                     <span>
                       {HIDE_LOCATION_LABEL}

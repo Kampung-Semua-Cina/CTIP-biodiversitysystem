@@ -5,7 +5,7 @@ import Icon from "../components/Icon.jsx";
 import { Chip, Empty, Mono, Pills } from "../components/Bits.jsx";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
 import { useStore } from "../../../shared/store.js";
-import { nameOf, plantView, unfinishedPlants } from "../../../shared/selectors.js";
+import { nameOf, plantView, unfinishedPlants, recordMatches, draftMatches } from "../../../shared/selectors.js";
 import { fmtDateTime } from "../../../shared/utils.js";
 import { OBS_STATUS } from "../../../shared/data.js";
 
@@ -14,29 +14,40 @@ export default function Records() {
   const { db, me } = useStore();
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("recent");
+  const [q, setQ] = useState("");
 
   const unfinished = unfinishedPlants(db, me?.id);
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id && (filter === "all" || o.status === filter))
+    .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
     .sort((a, b) => {
       if (sort === "oldest") return (a.observed_at || "").localeCompare(b.observed_at || "");
       if (sort === "name") {
-        const pa = plantView(db, db.plants.find((x) => x.id === a.specimen_id));
-        const pb = plantView(db, db.plants.find((x) => x.id === b.specimen_id));
-        return (pa?.name || "").localeCompare(pb?.name || "");
+        return (a.plant?.name || "").localeCompare(b.plant?.name || "");
       }
       if (sort === "tag") {
-        const pa = db.plants.find((x) => x.id === a.specimen_id);
-        const pb = db.plants.find((x) => x.id === b.specimen_id);
-        return (pa?.qr_id || "").localeCompare(pb?.qr_id || "");
+        return (a.plant?.qr_id || "").localeCompare(b.plant?.qr_id || "");
       }
       return (b.observed_at || "").localeCompare(a.observed_at || "");
     });
 
+  const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
+  const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
+
   return (
     <Shell seg="records">
       <h2>My records</h2>
-      <div className="row wrap between gap-bottom gap-top-s" style={{ alignItems: "center" }}>
+      <div className="row wrap between gap-bottom gap-top-s" style={{ alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 220 }}>
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search records by plant, species or tag..."
+            aria-label="Search my records"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--r-small, 8px)", border: "1px solid var(--line)" }}
+          />
+        </div>
         <Pills label="Status" value={filter} onChange={setFilter}
           items={["all", ...OBS_STATUS].map((s) => ({ key: s, label: s === "all" ? "All" : STATUS_TEXT[s] || s[0].toUpperCase() + s.slice(1) }))} />
         <label className="inline" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -50,22 +61,30 @@ export default function Records() {
         </label>
       </div>
 
-      {unfinished.length > 0 && (filter === "all" || filter === "draft") && (
+      {filteredUnfinished.length > 0 && (filter === "all" || filter === "draft") && (
         <div className="callout gap-bottom">
-          <p><b>Not sent yet.</b> {unfinished.length === 1 ? "This plant was" : "These plants were"} saved, but the record did not reach the server. Finish and send to put it in the review queue.</p>
-          <ul className="plain">
-            {unfinished.map((p) => (
-              <li key={p.id} className="row between wrap">
-                <span><Mono>{p.qr_id}</Mono> · {p.proposed_species || "Unnamed plant"}</span>
-                <a className="btn small-btn" href={`#/add/${encodeURIComponent(p.qr_id)}`}><Icon name="send" size={16} /> Finish and send</a>
+          <p><b>Not sent yet.</b> {filteredUnfinished.length === 1 ? "This plant was" : "These plants were"} saved, but the record did not reach the server. Finish and send to put it in the review queue.</p>
+          <ul className="drafts-list">
+            {filteredUnfinished.map((p) => (
+              <li key={p.id} className="draft-card">
+                <div className="row wrap" style={{ alignItems: "center", gap: 10 }}>
+                  <Mono className="tagpill">{p.qr_id}</Mono>
+                  <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.proposed_species || "Unnamed plant"}</span>
+                  <span className="mute small">· Draft saved</span>
+                </div>
+                <a className="btn small-btn" href={`#/add/${encodeURIComponent(p.qr_id)}`} style={{ whiteSpace: "nowrap" }}>
+                  <Icon name="send" size={16} /> Finish and send
+                </a>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {mine.length === 0 && unfinished.length === 0 && <Empty icon="file">No records with this status.</Empty>}
-      {mine.map((o) => <RecordRow key={o.id} obs={o} />)}
+      {filteredMine.length === 0 && filteredUnfinished.length === 0 && (
+        <Empty icon="file">{q.trim() ? `No records match "${q}".` : "No records with this status."}</Empty>
+      )}
+      {filteredMine.map((o) => <RecordRow key={o.id} obs={o} />)}
     </Shell>
   );
 }
@@ -88,7 +107,7 @@ function RecordRow({ obs }) {
   });
   const set = (k) => (e) => setFix({ ...fix, [k]: e.target.value });
   // The plant can be missing for a moment while data loads, or if it was deleted.
-  const plant = plantView(db, db.plants.find((p) => p.id === obs.specimen_id)) || { name: "Plant not loaded", qr_id: "-" };
+  const plant = obs.plant || plantView(db, db.plants.find((p) => p.id === obs.specimen_id)) || { name: "Plant not loaded", qr_id: "-" };
   const lastReturn = [...db.reviews].reverse().find((r) => r.observation_id === obs.id && r.decision !== "approve");
 
   return (

@@ -41,7 +41,7 @@ export default function AddPlant() {
 
   const needle = guess.trim().toLowerCase();
   const exactMatch = activeSpecies.find(
-    (s) => s.scientific_name.toLowerCase() === needle || (s.common_name && s.common_name.toLowerCase() === needle)
+    (s) => s.scientific_name?.toLowerCase() === needle || (s.common_name && s.common_name.toLowerCase() === needle)
   );
 
   const suggestions = needle.length >= 1 && !exactMatch
