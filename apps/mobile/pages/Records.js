@@ -111,7 +111,7 @@ export function MyRecords({ nav }) {
         </View>
       ) : null}
       {filteredMine.length === 0 && filteredUnfinished.length === 0 ? (
-        <Empty icon="file">{needle ? `No records match "${q}".` : 'No records yet. Scan an unused tag to add your first plant.'}</Empty>
+        <Empty icon="file">{q.trim() ? `No records match "${q.trim()}".` : 'No records yet. Scan an unused tag to add your first plant.'}</Empty>
       ) : null}
       {groups.map((g, gi) => {
         const rows = filteredMine.filter((o) => g.statuses.includes(o.status));

@@ -1,7 +1,7 @@
 // apps/mobile/tests/agent-mobile-improvements.test.mjs
 // Automated verification for:
 // 1. Observed record map visibility using o.lat ?? plant.lat
-// 2. Search feature in My Records using recordMatches / draftMatches (with null plant safety)
+// 2. Search feature in My Records using recordMatches / draftMatches (with null plant safety & empty state)
 // 3. App initialisation pre-warming
 // 4. QR Tags page interactive QR card & unused tag tap
 import { test, describe } from 'node:test';
@@ -71,7 +71,7 @@ describe('Mobile Enhancements Test Suite', () => {
   });
 
   // 2. Search feature for My Records
-  test('Requirement 2: Search filters records by plant name, tag ID, species or notes using recordMatches (null-safe)', () => {
+  test('Requirement 2: Search filters records by plant name, tag ID, species or notes using recordMatches (null-safe & empty state)', () => {
     const sampleRecords = [
       { id: '1', specimen_id: 'p1', plant: { name: 'Pitcher Plant', scientific: 'Nepenthes rajah', qr_id: 'NIAH-0001', proposed_species: 'Rajah' }, notes: 'Found near cave entrance' },
       { id: '2', specimen_id: 'p2', plant: { name: 'Black Orchid', scientific: 'Coelogyne pandurata', qr_id: 'NIAH-0002', proposed_species: 'Black Orchid' }, notes: 'Growing on limestone ledge' },
@@ -99,6 +99,11 @@ describe('Mobile Enhancements Test Suite', () => {
 
     // Query non-matching
     assert.equal(search('nonexistent').length, 0);
+
+    // Empty state resolution (safely uses q without undefined needle variable)
+    const resolveEmpty = (query, count) => (count === 0 ? (query.trim() ? `No records match "${query.trim()}".` : 'No records yet. Scan an unused tag to add your first plant.') : null);
+    assert.equal(resolveEmpty('nonexistent', search('nonexistent').length), 'No records match "nonexistent".');
+    assert.equal(resolveEmpty('', 0), 'No records yet. Scan an unused tag to add your first plant.');
 
     // Draft matching
     const sampleDrafts = [

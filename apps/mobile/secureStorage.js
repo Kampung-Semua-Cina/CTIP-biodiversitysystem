@@ -70,10 +70,12 @@ export function createSecureStorage(options = {}) {
               keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
             });
             if (legacyStorage?.removeItem) await legacyStorage.removeItem(key);
+            return legacy;
           } catch (migrateErr) {
             console.warn('[SecureStore migration error]', migrateErr?.message || migrateErr);
+            // Fail closed: do not return legacy plaintext token if it could not be securely saved
+            return null;
           }
-          return legacy;
         }
       } catch {
         // Ignore legacy read errors
@@ -108,30 +110,39 @@ export function createSecureStorage(options = {}) {
 
     async removeItem(key) {
       const ss = await getSS();
-      if (ss) {
-        let deleted = false;
-        // Retry deleteItemAsync up to 3 times to prevent leaving session on shared device
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await ss.deleteItemAsync(key);
-            deleted = true;
-            break;
-          } catch (err) {
-            if (attempt === 2) {
-              console.warn('[SecureStore deleteItem error after retries]', err?.message || err);
-            }
+      if (!ss) {
+        // Also clean up legacy storage if any exists
+        try {
+          const legacyStorage = await getLegacyStorage();
+          if (legacyStorage?.removeItem) await legacyStorage.removeItem(key).catch(() => {});
+        } catch {}
+        // Don't report sign-out as complete unless the stored session was invalidated.
+        // Surface the failure so callers know the keystore wasn't cleared.
+        throw new Error('[SecureStore] Storage unavailable; failed to securely invalidate session on device.');
+      }
+
+      let deleted = false;
+      // Retry deleteItemAsync up to 3 times to prevent leaving session on shared device
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await ss.deleteItemAsync(key);
+          deleted = true;
+          break;
+        } catch (err) {
+          if (attempt === 2) {
+            console.warn('[SecureStore deleteItem error after retries]', err?.message || err);
           }
         }
-        // If deleteItemAsync failed, overwrite with empty value so restoreSession cannot resurrect it
-        if (!deleted) {
-          try {
-            await ss.setItemAsync(key, '', {
-              keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-            });
-          } catch (overwriteErr) {
-            console.error('[SecureStore failed to delete and overwrite session]', overwriteErr);
-            throw overwriteErr;
-          }
+      }
+      // If deleteItemAsync failed, overwrite with empty value so restoreSession cannot resurrect it
+      if (!deleted) {
+        try {
+          await ss.setItemAsync(key, '', {
+            keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+          });
+        } catch (overwriteErr) {
+          console.error('[SecureStore failed to delete and overwrite session]', overwriteErr);
+          throw overwriteErr;
         }
       }
 

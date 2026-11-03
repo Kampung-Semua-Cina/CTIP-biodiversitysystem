@@ -91,6 +91,31 @@ describe('CTIP-119: SecureStore Session Persistence & AsyncStorage Migration', (
     assert.equal(secondRead, legacySession);
   });
 
+  test('migration: fails closed and returns null if writing to SecureStore throws during migration', async () => {
+    const legacySession = JSON.stringify({ access_token: 'leak_candidate' });
+    const asyncMock = new Map([['daun_session', legacySession]]);
+
+    const throwingSS = {
+      getItemAsync: async () => null,
+      setItemAsync: async () => { throw new Error('Secure hardware failure during migration'); },
+      deleteItemAsync: async () => {},
+      WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1,
+    };
+    const mockAsync = {
+      getItem: async (k) => asyncMock.get(k) ?? null,
+      setItem: async (k, v) => asyncMock.set(k, String(v)),
+      removeItem: async (k) => asyncMock.delete(k),
+    };
+
+    const storage = createSecureStorage({
+      getSecureStore: async () => throwingSS,
+      asyncStorage: mockAsync,
+    });
+
+    const result = await storage.getItem('daun_session');
+    assert.equal(result, null, 'Must NOT return plaintext token when migration to SecureStore fails');
+  });
+
   test('fails closed: does NOT write to unencrypted AsyncStorage if SecureStore is unavailable or throws', async () => {
     const asyncMock = new Map();
     const mockAsync = {
@@ -150,6 +175,28 @@ describe('CTIP-119: SecureStore Session Persistence & AsyncStorage Migration', (
     assert.equal(deleteAttempts, 3, 'Must retry deleteItemAsync 3 times before fallback overwrite');
     assert.equal(secureMock.get('daun_session'), '', 'Must overwrite session with empty string so restoreSession cannot read old token');
     assert.equal(await storage.getItem('daun_session'), null, 'Empty string must return null on getItem');
+  });
+
+  test('sign-out: throws and does not report clean completion when SecureStore is unavailable', async () => {
+    const asyncMock = new Map([['daun_session', 'legacy_data']]);
+    const mockAsync = {
+      getItem: async (k) => asyncMock.get(k) ?? null,
+      setItem: async (k, v) => asyncMock.set(k, String(v)),
+      removeItem: async (k) => asyncMock.delete(k),
+    };
+
+    const unavailableStorage = createSecureStorage({
+      getSecureStore: async () => null,
+      asyncStorage: mockAsync,
+    });
+
+    await assert.rejects(
+      () => unavailableStorage.removeItem('daun_session'),
+      /Storage unavailable; failed to securely invalidate session/,
+      'Must surface error if hardware keystore cannot be reached to invalidate session'
+    );
+    // Legacy storage should still be cleaned up defensively
+    assert.equal(asyncMock.has('daun_session'), false);
   });
 
   test('integrates with api.js setStorageAdapter and restoreSession', async () => {
