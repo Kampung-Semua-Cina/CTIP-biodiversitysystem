@@ -10,6 +10,7 @@ import { useStore } from "../../../shared/store.js";
 import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
 import { can } from "../../../shared/permissions.js";
 import { go, useRoute } from "../useRoute.js";
+import { THREATENED } from "../../../shared/data.js";
 
 // Botanist form. Step 1 binds a QR tag to the plant (scan, pick an unused tag, or generate a new one).
 // Step 2 records what was seen. Location comes from the phone's GPS.
@@ -31,6 +32,10 @@ export default function AddPlant() {
   const [typed, setTyped] = useState(null); // { lat, lng } as text while setting the location by hand, else null
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [disableLocation, setDisableLocation] = useState(false);
+  const matchedSpecies = (db.species || []).find((s) => s.scientific_name.toLowerCase() === guess.trim().toLowerCase());
+  const isRedStatus = !!(matchedSpecies && THREATENED.includes(matchedSpecies.conservation_status?.trim().toLowerCase()));
+  const locationDisabled = isRedStatus || disableLocation;
   const [suggestOpen, setSuggestOpen] = useState(false);
   const suggestRef = useRef(null);
 
@@ -175,7 +180,7 @@ export default function AddPlant() {
     setSaving(true);
     const res = await addPlant({
       qr_id: qr, proposed_species: guess, morphology, height_cm: height, notes, photos,
-      lat: spot.lat, lng: spot.lng, gps_accuracy_m: hasSpot ? spot.acc : null,
+      lat: locationDisabled ? null : spot.lat, lng: locationDisabled ? null : spot.lng, gps_accuracy_m: locationDisabled || !hasSpot ? null : spot.acc,
     });
     sending.current = false;
     setSaving(false);
@@ -300,6 +305,31 @@ export default function AddPlant() {
         </div>
 
         <label>Location</label>
+        {isRedStatus && (
+          <div className="callout gap-bottom-s" role="status" style={{ borderLeftColor: "var(--danger)" }}>
+            <p><b style={{ color: "var(--danger)" }}>GPS metadata automatically disabled.</b> Exact GPS coordinates are automatically withheld for red status species (Endangered, Vulnerable) to protect location privacy.</p>
+          </div>
+        )}
+        <label className="check hidespot gap-bottom-s">
+          <input
+            type="checkbox"
+            checked={locationDisabled}
+            disabled={isRedStatus}
+            onChange={(e) => setDisableLocation(e.target.checked)}
+            aria-label="Disable location sharing before publishing records"
+          />
+          <span>
+            <b>Disable location sharing before publishing records</b>
+            <small className="mute block">
+              {isRedStatus
+                ? "GPS metadata automatically disabled for red status species (Endangered, Vulnerable)."
+                : "Withholds GPS coordinates before publishing this record."}
+            </small>
+          </span>
+        </label>
+        {locationDisabled && (
+          <p className="mute small gap-bottom-s">Location sharing is disabled for this record. GPS metadata will not be saved.</p>
+        )}
         <div className="row wrap">
           <button type="button" className="btn ghost" onClick={locate}><Icon name="pin" size={18} /> Use my location</button>
           <button type="button" className="btn ghost" aria-expanded={!!typed}

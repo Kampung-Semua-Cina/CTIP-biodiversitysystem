@@ -91,6 +91,67 @@ describe('CTIP-119: SecureStore Session Persistence & AsyncStorage Migration', (
     assert.equal(secondRead, legacySession);
   });
 
+  test('fails closed: does NOT write to unencrypted AsyncStorage if SecureStore is unavailable or throws', async () => {
+    const asyncMock = new Map();
+    const mockAsync = {
+      getItem: async (k) => asyncMock.get(k) ?? null,
+      setItem: async (k, v) => asyncMock.set(k, String(v)),
+      removeItem: async (k) => asyncMock.delete(k),
+    };
+
+    // Case A: SecureStore is completely unavailable
+    const unavailableStorage = createSecureStorage({
+      getSecureStore: async () => null,
+      asyncStorage: mockAsync,
+    });
+    await unavailableStorage.setItem('daun_session', JSON.stringify({ token: 'fail_closed_1' }));
+    assert.equal(asyncMock.has('daun_session'), false, 'Must NOT write unencrypted session when SecureStore unavailable');
+    assert.equal(await unavailableStorage.getItem('daun_session'), null, 'Must fail closed on read');
+
+    // Case B: SecureStore setItemAsync throws an error
+    const throwingStorage = createSecureStorage({
+      getSecureStore: async () => ({
+        setItemAsync: async () => { throw new Error('Keystore locked / hardware fault'); },
+        getItemAsync: async () => null,
+        deleteItemAsync: async () => {},
+        WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1,
+      }),
+      asyncStorage: mockAsync,
+    });
+    await assert.rejects(
+      () => throwingStorage.setItem('daun_session', JSON.stringify({ token: 'fail_closed_2' })),
+      /Keystore locked/,
+      'Must rethrow or refuse write instead of silently falling back to unencrypted storage'
+    );
+    assert.equal(asyncMock.has('daun_session'), false, 'Must NOT fall back to AsyncStorage when setItemAsync throws');
+  });
+
+  test('sign-out: retries deleteItemAsync and overwrites session if delete fails so restoreSession cannot resurrect it', async () => {
+    let deleteAttempts = 0;
+    const secureMock = new Map([['daun_session', JSON.stringify({ access_token: 'secret_token' })]]);
+
+    const throwingSS = {
+      getItemAsync: async (k) => secureMock.get(k) ?? null,
+      setItemAsync: async (k, v) => { secureMock.set(k, String(v)); },
+      deleteItemAsync: async () => {
+        deleteAttempts++;
+        throw new Error('Keystore delete failure');
+      },
+      WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1,
+    };
+
+    const storage = createSecureStorage({
+      getSecureStore: async () => throwingSS,
+      asyncStorage: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+    });
+
+    // Attempt remove - delete throws all 3 times, so it falls back to overwriting with empty string
+    await storage.removeItem('daun_session');
+    assert.equal(deleteAttempts, 3, 'Must retry deleteItemAsync 3 times before fallback overwrite');
+    assert.equal(secureMock.get('daun_session'), '', 'Must overwrite session with empty string so restoreSession cannot read old token');
+    assert.equal(await storage.getItem('daun_session'), null, 'Empty string must return null on getItem');
+  });
+
   test('integrates with api.js setStorageAdapter and restoreSession', async () => {
     const secureMock = new Map();
     const asyncMock = new Map();

@@ -5,6 +5,7 @@ import { can } from "./permissions.js";
 import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
 import { THREATENED } from "./data.js";
 import { PUBLIC_SITE_URL } from "./site.js";
+import { fuzzyMatch } from "./fuzzy.js";
 
 // Primary photo first. If nobody chose one, the oldest photo is primary.
 export function orderedPhotos(photos = []) {
@@ -54,16 +55,10 @@ export function plantView(db, p) {
   const species = db.species.find((s) => s.id === p.species_id && !s.is_deleted) || null;
   const status = plantStatus(db, p.id);
   const visits = visitsOf(db, p.id);
-  const approvedObs = visits.find((o) => o.status === "approved");
-  const latestObs = visits[0];
-  const obs = approvedObs || latestObs;
+  const obs = visits.find((o) => o.status === "approved");
   const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
-  const lat = p.lat ?? latestObs?.lat ?? null;
-  const lng = p.lng ?? latestObs?.lng ?? null;
   return {
     ...p,
-    lat,
-    lng,
     species,
     status,
     endangered,
@@ -275,4 +270,41 @@ export function lookupTag(db, id) {
   if (tag?.status === "unused") return { kind: "unused", id: cleanId, tag };
   if (tag?.status === "retired") return { kind: "retired", id: cleanId, tag };
   return { kind: "unknown", id: cleanId };
+}
+
+// Matches an observation record against a search query across plant name,
+// scientific name, proposed species, tag ID, morphology, and notes.
+// Null-safe if the specimen has not loaded or has no name.
+export function recordMatches(obs, plantOrDb, query) {
+  const needle = (query || "").trim().toLowerCase();
+  if (!needle) return true;
+  if (!obs) return false;
+
+  const plant = plantOrDb && "plants" in plantOrDb
+    ? plantView(plantOrDb, plantOrDb.plants.find((x) => x.id === obs.specimen_id))
+    : plantOrDb || obs.plant;
+
+  if (plant?.qr_id && plant.qr_id.toLowerCase().includes(needle)) return true;
+
+  const text = [
+    plant?.name,
+    plant?.scientific,
+    plant?.proposed_species,
+    obs.morphology,
+    obs.notes,
+  ].filter(Boolean).join(" ");
+
+  return fuzzyMatch(text, needle);
+}
+
+// Matches an unfinished draft plant against a search query.
+export function draftMatches(draft, query) {
+  const needle = (query || "").trim().toLowerCase();
+  if (!needle) return true;
+  if (!draft) return false;
+
+  if (draft.qr_id && draft.qr_id.toLowerCase().includes(needle)) return true;
+
+  const text = [draft.proposed_species].filter(Boolean).join(" ");
+  return fuzzyMatch(text, needle);
 }

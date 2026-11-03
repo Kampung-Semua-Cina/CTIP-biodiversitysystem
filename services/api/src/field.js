@@ -2,7 +2,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
-import { detectImageType, EXTENSIONS } from './images.js';
+import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 import { protectSpecimen } from './distribution.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
@@ -277,14 +277,15 @@ export const fieldHandlers = {
 
     const key = `${obs.data.id}/${photoId}.${PHOTO_EXT[type]}`;
     // upsert: a retry after the file landed but the record did not writes the same path again.
-    const stored = await db.storage.from(PHOTO_BUCKET).upload(key, req.file.buffer, { contentType: type, upsert: true });
+    const cleanBuffer = stripMetadata(req.file.buffer, type);
+    const stored = await db.storage.from(PHOTO_BUCKET).upload(key, cleanBuffer, { contentType: type, upsert: true });
     if (stored.error) return fail(res, 502, 'STORAGE_ERROR', stored.error.message);
 
     const { data, error } = await db
       .from('observation_photos')
       .insert({
         id: photoId, observation_id: obs.data.id, s3_bucket: PHOTO_BUCKET, s3_key: key,
-        content_type: type, size_bytes: req.file.size, upload_status: 'uploaded',
+        content_type: type, size_bytes: cleanBuffer.length, upload_status: 'uploaded',
         caption: notes.data.caption ?? null, traits: notes.data.traits,
       })
       .select(PHOTO_COLUMNS)

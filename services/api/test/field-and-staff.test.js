@@ -396,11 +396,13 @@ test('workspace: null coordinates stay null', async () => {
 test('workspace: override and capitalised status both reduce', async () => {
   plant({ endangered_override: true });
   plant({ qr_id: 'NIAH-0098', species_id: species('Critically Endangered').id });
+  plant({ qr_id: 'NIAH-0096', species_id: species('Vulnerable').id });
   plant({ qr_id: 'NIAH-0097', species_id: species('least concern').id });
   const res = await request(app).get('/v1/workspace').set(as('botanist'));
   const byTag = Object.fromEntries(res.body.specimens.map((p) => [p.qr_id, p]));
   assert.equal(byTag['NIAH-0099'].location_reduced, true, 'override with no species');
   assert.equal(byTag['NIAH-0098'].location_reduced, true, 'status in capitals');
+  assert.equal(byTag['NIAH-0096'].location_reduced, true, 'vulnerable species automatically reduces coordinates');
   assert.equal(byTag['NIAH-0097'].lat, EXACT.lat, 'not endangered stays exact');
 });
 

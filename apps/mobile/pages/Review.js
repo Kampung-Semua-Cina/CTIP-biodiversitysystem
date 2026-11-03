@@ -10,8 +10,7 @@ import { useTheme, font } from '../components/Theme.js';
 import {
   Screen, Bar, TitleBlock, Pills, SortBar, Row, Thumb, Mono, Txt, Sci, DotLabel, KV, Button, Area, Empty, Field, Notice, Check, TextLink, Section,
 } from '../components/Bits.js';
-import LeafletMap from '../components/LeafletMap.js';
-import { isExactProtected } from '../../shared/mapConfig.js';
+import PlantSpotMap from '../components/PlantSpotMap.js';
 import PhotoNote from '../components/PhotoNote.js';
 import SpeciesForm from '../components/SpeciesForm.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
@@ -128,7 +127,7 @@ export function ReviewRecord({ nav, params = {} }) {
     if (busy) return;
     setBusy(true);
     if (decision === 'approve' && match && match.id !== plant.species_id) await setPlantSpecies(plant.id, match.id);
-    if (decision === 'approve' && plant.lat != null && !hideRule.locked && hideRule.on !== !!plant.endangered_override) {
+    if (decision === 'approve' && plant.lat != null && hideRule.on !== !!plant.endangered_override) {
       if (!(await setPlantLocationHidden(plant.id, hideRule.on))) return setBusy(false);
     }
     const r = await reviewObservation(o.id, decision, note.trim()); // shows its own message when it fails
@@ -154,42 +153,15 @@ export function ReviewRecord({ nav, params = {} }) {
       <Photos photos={plant.photos.filter((p) => p.observation_id === o.id).length ? plant.photos.filter((p) => p.observation_id === o.id) : plant.photos} />
       {plant.scientific ? <Sci size={16}>{plant.scientific}{plant.species?.family ? ` · ${plant.species.family}` : ''}</Sci> : null}
       {!open ? <DotLabel status={o.status} /> : null}
-      {plant.lat == null ? <Notice tone="warning" icon="pin" title="Location not captured" body="The botanist's phone had no GPS fix, so this plant will not appear on the map. Ask where it is, or return the record for a location." /> : null}
+      {(o.lat ?? plant?.lat) == null ? <Notice tone="warning" icon="pin" title="Location not captured" body="The botanist's phone had no GPS fix, so this plant will not appear on the map. Ask where it is, or return the record for a location." /> : null}
       <KV rows={[
         ['Recorded by', `${nameOf(db, o.recorded_by)} · ${dateTime(o.observed_at)}`],
         ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
         ['Appearance', o.morphology || '-'],
         ['Notes', o.notes || '-'],
-        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
+        ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(o.lat ?? plant?.lat, o.lng ?? plant?.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{(o.lat ?? plant?.lat) != null ? accuracy(o.gps_accuracy_m ?? plant?.gps_accuracy_m) : ''}</Text></Text>],
       ]} />
-      {plant.lat != null && plant.lng != null ? (
-        <Section title="Where it was recorded" gap={8}>
-          <View style={{ height: 180, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.mapTile }}>
-            <LeafletMap
-              points={[{
-                id: plant.id,
-                qr_id: plant.qr_id,
-                name: plant.name,
-                scientific: plant.scientific || '',
-                color: c.accent,
-                lat: plant.lat,
-                lng: plant.lng,
-                protect: isExactProtected(plant),
-              }]}
-              selectedId={plant.id}
-              bounds={{
-                minLat: plant.lat - 0.003,
-                maxLat: plant.lat + 0.003,
-                minLng: plant.lng - 0.003,
-                maxLng: plant.lng + 0.003,
-              }}
-              interactive={false}
-              rounded
-              height="100%"
-            />
-          </View>
-        </Section>
-      ) : null}
+      <PlantSpotMap title="Where it was recorded" lat={o.lat ?? plant?.lat} lng={o.lng ?? plant?.lng} plant={plant} />
       {open ? (
         <>
           <View style={{ gap: 6 }}>

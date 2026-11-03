@@ -5,8 +5,7 @@ import Icon from "../components/Icon.jsx";
 import { Chip, Empty, Mono, Pills } from "../components/Bits.jsx";
 import { STATUS_TEXT } from "../../../shared/tokens.js";
 import { useStore } from "../../../shared/store.js";
-import { fuzzyMatch } from "../../../shared/fuzzy.js";
-import { nameOf, plantView, unfinishedPlants } from "../../../shared/selectors.js";
+import { nameOf, plantView, unfinishedPlants, recordMatches, draftMatches } from "../../../shared/selectors.js";
 import { fmtDateTime } from "../../../shared/utils.js";
 import { OBS_STATUS } from "../../../shared/data.js";
 
@@ -35,20 +34,8 @@ export default function Records() {
       return (b.observed_at || "").localeCompare(a.observed_at || "");
     });
 
-  const needle = q.trim().toLowerCase();
-  const filteredMine = mine.filter((o) => {
-    if (!needle) return true;
-    const pa = plantView(db, db.plants.find((x) => x.id === o.specimen_id));
-    if (pa?.qr_id && pa.qr_id.toLowerCase().includes(needle)) return true;
-    const text = [pa?.name, pa?.scientific, o.morphology, o.notes].filter(Boolean).join(" ");
-    return fuzzyMatch(text, needle);
-  });
-  const filteredUnfinished = unfinished.filter((p) => {
-    if (!needle) return true;
-    if (p.qr_id && p.qr_id.toLowerCase().includes(needle)) return true;
-    const text = [p.proposed_species].filter(Boolean).join(" ");
-    return fuzzyMatch(text, needle);
-  });
+  const filteredMine = mine.filter((o) => recordMatches(o, db, q));
+  const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
 
   return (
     <Shell seg="records">
@@ -98,7 +85,7 @@ export default function Records() {
       )}
 
       {filteredMine.length === 0 && filteredUnfinished.length === 0 && (
-        <Empty icon="file">{needle ? `No records match "${q}".` : "No records with this status."}</Empty>
+        <Empty icon="file">{q.trim() ? `No records match "${q}".` : "No records with this status."}</Empty>
       )}
       {filteredMine.map((o) => <RecordRow key={o.id} obs={o} />)}
     </Shell>

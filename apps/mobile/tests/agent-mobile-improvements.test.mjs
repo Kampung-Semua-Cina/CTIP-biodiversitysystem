@@ -1,14 +1,13 @@
 // apps/mobile/tests/agent-mobile-improvements.test.mjs
 // Automated verification for:
-// 1. Observed plant map visibility for botanists & reviewers
-// 2. Search feature in My Records
+// 1. Observed record map visibility using o.lat ?? plant.lat
+// 2. Search feature in My Records using recordMatches / draftMatches (with null plant safety)
 // 3. App initialisation pre-warming
 // 4. QR Tags page interactive QR card & unused tag tap
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { plantView, shownCoords } from '../../shared/selectors.js';
+import { plantView, shownCoords, recordMatches, draftMatches } from '../../shared/selectors.js';
 import { can } from '../../shared/permissions.js';
-import { fuzzyMatch } from '../../shared/fuzzy.js';
 import { secureStorage } from '../secureStorage.js';
 import { restoreSession } from '../../shared/api.js';
 
@@ -47,41 +46,43 @@ describe('Mobile Enhancements Test Suite', () => {
     assert.equal(visitorCoords, null, 'Public visitor must NOT see exact coordinates of endangered plant');
   });
 
-  test('Requirement 1: Plant coordinates fallback to latest observation if specimen lat was not backfilled', () => {
+  test('Requirement 1: Record maps use observation spot (o.lat ?? plant.lat), keeping plantView location null when specimen has no GPS', () => {
     const mockDb = {
       species: [],
       plants: [
-        { id: 'plant-2', qr_id: 'NIAH-0099', proposed_species_name: 'Wild Orchid', registered_by: 'botanist-1', is_deleted: false, lat: null, lng: null },
+        { id: 'plant-2', qr_id: 'NIAH-0099', proposed_species: 'Wild Orchid', registered_by: 'botanist-1', is_deleted: false, lat: null, lng: null },
       ],
       observations: [
         { id: 'obs-2', specimen_id: 'plant-2', recorded_by: 'botanist-1', status: 'synced', observed_at: '2026-11-02T12:00:00Z', lat: 3.82001, lng: 113.79002 },
       ],
     };
 
+    // plantView respects CLAUDE.md: plants without GPS fixes retain null coordinates
     const plant = plantView(mockDb, mockDb.plants[0]);
-    assert.equal(plant.lat, 3.82001, 'Should resolve latitude from observation');
-    assert.equal(plant.lng, 113.79002, 'Should resolve longitude from observation');
+    assert.equal(plant.lat, null, 'Plant without GPS must not have synthetic coordinates');
+    assert.equal(plant.lng, null, 'Plant without GPS must not have synthetic coordinates');
+
+    // The observation map draws the spot where the observation was recorded: o.lat ?? plant.lat
+    const obs = mockDb.observations[0];
+    const mapLat = obs.lat ?? plant?.lat;
+    const mapLng = obs.lng ?? plant?.lng;
+    assert.equal(mapLat, 3.82001, 'Observation map must plot the observation visit spot');
+    assert.equal(mapLng, 113.79002, 'Observation map must plot the observation visit spot');
   });
 
   // 2. Search feature for My Records
-  test('Requirement 2: Search filters records by plant name, tag ID, species or notes', () => {
+  test('Requirement 2: Search filters records by plant name, tag ID, species or notes using recordMatches (null-safe)', () => {
     const sampleRecords = [
-      { id: '1', plant: { name: 'Pitcher Plant', scientific: 'Nepenthes rajah', qr_id: 'NIAH-0001', proposed_species: 'Rajah' }, notes: 'Found near cave entrance' },
-      { id: '2', plant: { name: 'Black Orchid', scientific: 'Coelogyne pandurata', qr_id: 'NIAH-0002', proposed_species: 'Black Orchid' }, notes: 'Growing on limestone ledge' },
-      { id: '3', plant: { name: 'Fringed Pitcher', scientific: 'Nepenthes tentaculata', qr_id: 'NIAH-0003', proposed_species: 'Pitcher' }, notes: 'High elevation summit trail' },
+      { id: '1', specimen_id: 'p1', plant: { name: 'Pitcher Plant', scientific: 'Nepenthes rajah', qr_id: 'NIAH-0001', proposed_species: 'Rajah' }, notes: 'Found near cave entrance' },
+      { id: '2', specimen_id: 'p2', plant: { name: 'Black Orchid', scientific: 'Coelogyne pandurata', qr_id: 'NIAH-0002', proposed_species: 'Black Orchid' }, notes: 'Growing on limestone ledge' },
+      { id: '3', specimen_id: 'p3', plant: { name: 'Fringed Pitcher', scientific: 'Nepenthes tentaculata', qr_id: 'NIAH-0003', proposed_species: 'Pitcher' }, notes: 'High elevation summit trail' },
+      // Record where plant has not loaded yet
+      { id: '4', specimen_id: 'p4', plant: null, notes: 'Orchid near riverbank' },
     ];
 
-    const search = (q) => {
-      const needle = q.trim().toLowerCase();
-      return sampleRecords.filter((o) => {
-        if (!needle) return true;
-        if (o.plant?.qr_id && o.plant.qr_id.toLowerCase().includes(needle)) return true;
-        const text = [o.plant.name, o.plant.scientific, o.plant.proposed_species, o.notes].filter(Boolean).join(' ');
-        return fuzzyMatch(text, needle);
-      });
-    };
+    const search = (q) => sampleRecords.filter((o) => recordMatches(o, o.plant, q));
 
-    // Query by tag ID
+    // Query by tag ID (exact substring, no typo collisions between 0001 and 0002)
     assert.equal(search('0002').length, 1);
     assert.equal(search('0002')[0].id, '2');
 
@@ -92,8 +93,20 @@ describe('Mobile Enhancements Test Suite', () => {
     assert.equal(search('limestone').length, 1);
     assert.equal(search('limestone')[0].id, '2');
 
+    // Query null plant record by notes without crashing
+    assert.equal(search('riverbank').length, 1);
+    assert.equal(search('riverbank')[0].id, '4');
+
     // Query non-matching
     assert.equal(search('nonexistent').length, 0);
+
+    // Draft matching
+    const sampleDrafts = [
+      { id: 'd1', qr_id: 'NIAH-0010', proposed_species: 'Rajah Pitcher' },
+      { id: 'd2', qr_id: 'NIAH-0011', proposed_species: 'Unknown Vine' },
+    ];
+    assert.equal(sampleDrafts.filter((d) => draftMatches(d, '0010')).length, 1);
+    assert.equal(sampleDrafts.filter((d) => draftMatches(d, 'Vine')).length, 1);
   });
 
   // 3. App initialisation

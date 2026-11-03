@@ -5,20 +5,20 @@ import { hideLocationRule } from "../data.js";
 import { isExactProtected, tileServerZoom, TILE_LAYERS } from "../mapConfig.js";
 import { generateMapHtml } from "../mapHtml.js";
 
-test("endangered species are always hidden, whatever was ticked", () => {
-  for (const status of ["endangered", "critically endangered"]) {
+test("red status species (endangered and vulnerable) automatically disable GPS metadata and location sharing", () => {
+  for (const status of ["endangered", "critically endangered", "vulnerable"]) {
     const rule = hideLocationRule(status, false, false);
     assert.equal(rule.locked, true);
     assert.equal(rule.on, true);
-    assert.match(rule.hint, /Always on for endangered species/);
+    assert.match(rule.hint, /Automatically disabled for red status species/);
   }
 });
 
-test("vulnerable species are hidden by default, and the officer can change it", () => {
+test("vulnerable species have GPS metadata automatically disabled", () => {
   assert.equal(hideLocationRule("vulnerable", false).on, true);
-  assert.equal(hideLocationRule("vulnerable", false).locked, false);
-  assert.equal(hideLocationRule("vulnerable", false, false).on, false);
-  assert.match(hideLocationRule("vulnerable", false).hint, /On by default/);
+  assert.equal(hideLocationRule("vulnerable", false).locked, true);
+  assert.equal(hideLocationRule("vulnerable", false, false).on, true);
+  assert.match(hideLocationRule("vulnerable", false).hint, /Automatically disabled/);
 });
 
 test("other species are the officer's choice and start from what is saved", () => {

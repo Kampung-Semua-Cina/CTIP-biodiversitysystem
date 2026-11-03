@@ -5,12 +5,10 @@ import React, { useState } from 'react';
 import { View, Text } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
-import { plantView, nameOf, unfinishedPlants } from '../../shared/selectors.js';
-import { isExactProtected } from '../../shared/mapConfig.js';
-import { fuzzyMatch } from '../../shared/fuzzy.js';
+import { plantView, nameOf, unfinishedPlants, recordMatches, draftMatches } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
-import LeafletMap from '../components/LeafletMap.js';
+import PlantSpotMap from '../components/PlantSpotMap.js';
 import {
   Screen, Bar, TitleBlock, Pills, SortBar, SearchField, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
 } from '../components/Bits.js';
@@ -50,25 +48,8 @@ export function MyRecords({ nav }) {
       return b.observed_at.localeCompare(a.observed_at);
     });
 
-  const needle = q.trim().toLowerCase();
-  const filteredMine = mine.filter((o) => {
-    if (!needle) return true;
-    if (o.plant?.qr_id && o.plant.qr_id.toLowerCase().includes(needle)) return true;
-    const text = [
-      o.plant.name,
-      o.plant.scientific,
-      o.plant.proposed_species,
-      o.morphology,
-      o.notes,
-    ].filter(Boolean).join(' ');
-    return fuzzyMatch(text, needle);
-  });
-  const filteredUnfinished = unfinished.filter((p) => {
-    if (!needle) return true;
-    if (p.qr_id && p.qr_id.toLowerCase().includes(needle)) return true;
-    const text = [p.proposed_species].filter(Boolean).join(' ');
-    return fuzzyMatch(text, needle);
-  });
+  const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
+  const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
 
   const count = (g) => filteredMine.filter((o) => g.statuses.includes(o.status)).length;
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
@@ -262,39 +243,12 @@ export function RecordDetail({ nav, params = {} }) {
           ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
           ['Appearance', o.morphology || '-'],
           ['Notes', o.notes || '-'],
-          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
+          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(o.lat ?? plant?.lat, o.lng ?? plant?.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{(o.lat ?? plant?.lat) != null ? accuracy(o.gps_accuracy_m ?? plant?.gps_accuracy_m) : ''}</Text></Text>],
           ['Version', `${o.version}`],
         ]} />
       </Section>
 
-      {plant.lat != null && plant.lng != null ? (
-        <Section title="Observed location" gap={8}>
-          <View style={{ height: 180, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: c.line, backgroundColor: c.mapTile }}>
-            <LeafletMap
-              points={[{
-                id: plant.id,
-                qr_id: plant.qr_id,
-                name: plant.name,
-                scientific: plant.scientific || '',
-                color: c.accent,
-                lat: plant.lat,
-                lng: plant.lng,
-                protect: isExactProtected(plant),
-              }]}
-              selectedId={plant.id}
-              bounds={{
-                minLat: plant.lat - 0.003,
-                maxLat: plant.lat + 0.003,
-                minLng: plant.lng - 0.003,
-                maxLng: plant.lng + 0.003,
-              }}
-              interactive={false}
-              rounded
-              height="100%"
-            />
-          </View>
-        </Section>
-      ) : null}
+      <PlantSpotMap title="Observed location" lat={o.lat ?? plant?.lat} lng={o.lng ?? plant?.lng} plant={plant} />
 
       {returned ? <Area label="Reply to the officer" optional value={message} onChangeText={setMessage} placeholder="What did you change?" rows={2} /> : null}
       {o.status === 'approved' ? <Button label="Open plant page" kind="secondary" onPress={() => nav.go('tag', { qr: plant.qr_id })} /> : null}

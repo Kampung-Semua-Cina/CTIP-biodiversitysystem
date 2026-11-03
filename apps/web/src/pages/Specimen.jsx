@@ -221,6 +221,7 @@ export default function Specimen({ qr }) {
                       checked={plant.endangered}
                       disabled={hideLocationRule(plant.species?.conservation_status).locked}
                       onChange={(e) => setPlantLocationHidden(plant.id, e.target.checked)}
+                      aria-label="Disable location sharing before publishing records (Hide the exact location from the public)"
                     />
                     <span>
                       {HIDE_LOCATION_LABEL}
@@ -283,7 +284,7 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
     if (decision === "approve" && !rawPlant?.species_id) {
       return notify("Confirm the species before approving");
     }
-    if (decision === "approve" && !hideRule.locked && hideRule.on !== !!rawPlant.endangered_override) {
+    if (decision === "approve" && hideRule.on !== !!rawPlant.endangered_override) {
       if (!(await setPlantLocationHidden(rawPlant.id, hideRule.on))) return;
     }
     reviewObservation(obs.id, decision, comment.trim());

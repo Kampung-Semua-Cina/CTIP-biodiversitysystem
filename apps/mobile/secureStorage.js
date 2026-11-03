@@ -1,8 +1,8 @@
 // apps/mobile/secureStorage.js
 // Secure session storage adapter for mobile (CTIP-119).
 // Replaces unencrypted AsyncStorage with expo-secure-store (backed by Android Keystore / iOS Keychain).
+// Fails closed: if SecureStore is unavailable or throws, the session is never saved to unencrypted storage.
 // Automatically migrates existing sessions from AsyncStorage so users are not signed out by the update.
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let secureStorePromise = null;
 
@@ -23,72 +23,123 @@ async function getSecureStore() {
   return secureStorePromise;
 }
 
+let asyncStoragePromise = null;
+
+async function getAsyncStorage() {
+  if (asyncStoragePromise) return asyncStoragePromise;
+  asyncStoragePromise = (async () => {
+    try {
+      const mod = await import('@react-native-async-storage/async-storage');
+      return mod.default || mod;
+    } catch {
+      return null;
+    }
+  })();
+  return asyncStoragePromise;
+}
+
 export function createSecureStorage(options = {}) {
   const getSS = options.getSecureStore || getSecureStore;
-  const asyncStorage = options.asyncStorage || AsyncStorage;
+  const getLegacyStorage = options.asyncStorage
+    ? (async () => options.asyncStorage)
+    : (options.getAsyncStorage || getAsyncStorage);
 
   return {
     async getItem(key) {
       const ss = await getSS();
-      if (ss) {
-        try {
-          const val = await ss.getItemAsync(key);
-          if (val != null) return val;
-        } catch (err) {
-          console.warn('[SecureStore getItem error]', err?.message || err);
-        }
-
-        // Migration check: did the user have a session saved in unencrypted AsyncStorage?
-        try {
-          const legacy = asyncStorage?.getItem ? await asyncStorage.getItem(key) : null;
-          if (legacy != null) {
-            try {
-              await ss.setItemAsync(key, legacy, {
-                keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-              });
-              if (asyncStorage?.removeItem) await asyncStorage.removeItem(key);
-            } catch (migrateErr) {
-              console.warn('[SecureStore migration error]', migrateErr?.message || migrateErr);
-            }
-            return legacy;
-          }
-        } catch {
-          // Ignore legacy read errors
-        }
+      if (!ss) {
+        // Fail closed: do not read or fall back to unencrypted storage
         return null;
       }
 
-      // Fallback if SecureStore is not available
-      return asyncStorage?.getItem ? asyncStorage.getItem(key) : null;
+      try {
+        const val = await ss.getItemAsync(key);
+        // An empty string represents an invalidated/deleted session
+        if (val != null && val !== '') return val;
+      } catch (err) {
+        console.warn('[SecureStore getItem error]', err?.message || err);
+      }
+
+      // One-time migration check: did the user have a session saved in unencrypted AsyncStorage?
+      try {
+        const legacyStorage = await getLegacyStorage();
+        const legacy = legacyStorage?.getItem ? await legacyStorage.getItem(key) : null;
+        if (legacy != null && legacy !== '') {
+          try {
+            await ss.setItemAsync(key, legacy, {
+              keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            });
+            if (legacyStorage?.removeItem) await legacyStorage.removeItem(key);
+          } catch (migrateErr) {
+            console.warn('[SecureStore migration error]', migrateErr?.message || migrateErr);
+          }
+          return legacy;
+        }
+      } catch {
+        // Ignore legacy read errors
+      }
+      return null;
     },
 
     async setItem(key, value) {
       const ss = await getSS();
-      if (ss) {
-        try {
-          await ss.setItemAsync(key, String(value), {
-            keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-          });
-          // Remove legacy unencrypted copy if present
-          if (asyncStorage?.removeItem) await asyncStorage.removeItem(key).catch(() => {});
-          return;
-        } catch (err) {
-          console.warn('[SecureStore setItem error]', err?.message || err);
-        }
+      if (!ss) {
+        // Fail closed (CTIP-119): never save session tokens to unencrypted AsyncStorage
+        console.warn('[SecureStore] Storage unavailable; failing closed without persisting session');
+        return;
       }
-      return asyncStorage?.setItem ? asyncStorage.setItem(key, String(value)) : undefined;
+
+      try {
+        await ss.setItemAsync(key, String(value), {
+          keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        });
+      } catch (err) {
+        console.warn('[SecureStore setItem error]', err?.message || err);
+        // Fail closed: do not write to unencrypted storage
+        throw err;
+      }
+
+      // Remove legacy unencrypted copy if present from earlier app versions
+      try {
+        const legacyStorage = await getLegacyStorage();
+        if (legacyStorage?.removeItem) await legacyStorage.removeItem(key).catch(() => {});
+      } catch {}
     },
 
     async removeItem(key) {
       const ss = await getSS();
       if (ss) {
-        try {
-          await ss.deleteItemAsync(key);
-        } catch (err) {
-          console.warn('[SecureStore deleteItem error]', err?.message || err);
+        let deleted = false;
+        // Retry deleteItemAsync up to 3 times to prevent leaving session on shared device
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await ss.deleteItemAsync(key);
+            deleted = true;
+            break;
+          } catch (err) {
+            if (attempt === 2) {
+              console.warn('[SecureStore deleteItem error after retries]', err?.message || err);
+            }
+          }
+        }
+        // If deleteItemAsync failed, overwrite with empty value so restoreSession cannot resurrect it
+        if (!deleted) {
+          try {
+            await ss.setItemAsync(key, '', {
+              keychainAccessible: ss.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+            });
+          } catch (overwriteErr) {
+            console.error('[SecureStore failed to delete and overwrite session]', overwriteErr);
+            throw overwriteErr;
+          }
         }
       }
-      return asyncStorage?.removeItem ? asyncStorage.removeItem(key).catch(() => {}) : undefined;
+
+      // Also clean up legacy storage if any exists
+      try {
+        const legacyStorage = await getLegacyStorage();
+        if (legacyStorage?.removeItem) await legacyStorage.removeItem(key).catch(() => {});
+      } catch {}
     },
   };
 }
