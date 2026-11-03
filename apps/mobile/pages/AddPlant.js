@@ -14,7 +14,7 @@ import {
   Screen, Header, IconButton, TextLink, Txt, Mono, Section, Field, Area, Button, Thumb, Empty, Check, Notice,
 } from '../components/Bits.js';
 import LeafletMap from '../components/LeafletMap.js';
-import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, THREATENED, HIDE_LOCATION_LABEL } from '../../shared/data.js';
+import { PHOTO_TRAITS, PHOTO_CAPTION_MAX, THREATENED, HIDE_LOCATION_LABEL, isThreatened } from '../../shared/data.js';
 import { shortDate, coords } from '../components/format.js';
 import { saveDraft, getDraft, clearDraft } from '../draftStore.js';
 import SpeciesPicker from '../components/SpeciesPicker.js';
@@ -315,8 +315,16 @@ export function AddPlant({ nav, params = {} }) {
   const [showQr, setShowQr] = useState(false); // the tag's QR, shown over the form (CTIP-27)
   const [tried, setTried] = useState(false);
   const [disableLocation, setDisableLocation] = useState(false);
-  const pickedSpecies = picked || db.species.find((s) => s.scientific_name.toLowerCase() === sp.trim().toLowerCase());
-  const isRedStatus = !!(pickedSpecies && THREATENED.includes(pickedSpecies.conservation_status?.trim().toLowerCase()));
+  const cleanSp = sp.trim().toLowerCase();
+  const pickedSpecies =
+    picked ||
+    db.species.find(
+      (s) =>
+        !s.is_deleted &&
+        (s.scientific_name?.toLowerCase() === cleanSp ||
+          (s.common_name && s.common_name.toLowerCase() === cleanSp))
+    );
+  const isRedStatus = !!(pickedSpecies && isThreatened(pickedSpecies.conservation_status));
   const locationDisabled = isRedStatus || disableLocation;
 
   useEffect(() => {
@@ -643,7 +651,7 @@ export function AddPlant({ nav, params = {} }) {
       />
       <GpsRow gps={locationDisabled ? NO_GPS : gps} loading={locationDisabled ? false : gpsLoading} error={locationDisabled ? '' : gpsError} title={locationDisabled ? 'Location sharing disabled' : undefined} onRefresh={refresh} />
       <TextLink label={typed ? 'Close map' : 'Set it by hand'} onPress={toggleHand} />
-      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={THREATENED.includes(db.species.find((s) => s.id === picked?.id)?.conservation_status)} onChange={typeSpot} /> : null}
+      {typed ? <SetByHand typed={typed} gps={gps} qr={qr} protect={isRedStatus} onChange={typeSpot} /> : null}
     </Screen>
   );
 }

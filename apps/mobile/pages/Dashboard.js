@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../shared/store.js';
 import { visiblePlants, nameOf, speciesCatalogue } from '../../shared/selectors.js';
-import { THREATENED } from '../../shared/data.js';
+import { THREATENED, isThreatened } from '../../shared/data.js';
 import { useTheme, font } from '../components/Theme.js';
 import {
   TitleBlock, SearchField, Pills, Segmented, SortBar, Row, Thumb, Sci, Mono, DotLabel, Txt, IconButton,
@@ -260,7 +260,7 @@ function SpeciesRow({ s, plants, staff, onPress }) {
         sub={
           <>
             <Sci size={14}>{s.scientific_name}</Sci>
-            {THREATENED.includes(s.conservation_status) ? <DotLabel status="endangered" /> : null}
+            {isThreatened(s.conservation_status) ? <DotLabel status="endangered" /> : null}
             {staff && s.is_published === false ? <DotLabel tone="neutral" label="Not published" /> : null}
           </>
         }

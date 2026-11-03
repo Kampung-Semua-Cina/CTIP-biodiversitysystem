@@ -3,7 +3,7 @@
 
 import { can } from "./permissions.js";
 import { FAMILY_PALETTE, UNKNOWN_FAMILY_COLOR } from "./tokens.js";
-import { THREATENED } from "./data.js";
+import { isThreatened } from "./data.js";
 import { PUBLIC_SITE_URL } from "./site.js";
 import { fuzzyMatch } from "./fuzzy.js";
 
@@ -56,7 +56,7 @@ export function plantView(db, p) {
   const status = plantStatus(db, p.id);
   const visits = visitsOf(db, p.id);
   const obs = visits.find((o) => o.status === "approved");
-  const endangered = p.endangered_override || THREATENED.includes(species?.conservation_status);
+  const endangered = !!p.endangered_override || isThreatened(species?.conservation_status);
   return {
     ...p,
     species,

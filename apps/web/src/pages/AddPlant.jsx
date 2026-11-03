@@ -10,7 +10,7 @@ import { useStore } from "../../../shared/store.js";
 import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
 import { can } from "../../../shared/permissions.js";
 import { go, useRoute } from "../useRoute.js";
-import { THREATENED } from "../../../shared/data.js";
+import { isThreatened } from "../../../shared/data.js";
 
 // Botanist form. Step 1 binds a QR tag to the plant (scan, pick an unused tag, or generate a new one).
 // Step 2 records what was seen. Location comes from the phone's GPS.
@@ -33,9 +33,6 @@ export default function AddPlant() {
   const [printing, setPrinting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [disableLocation, setDisableLocation] = useState(false);
-  const matchedSpecies = (db.species || []).find((s) => s.scientific_name.toLowerCase() === guess.trim().toLowerCase());
-  const isRedStatus = !!(matchedSpecies && THREATENED.includes(matchedSpecies.conservation_status?.trim().toLowerCase()));
-  const locationDisabled = isRedStatus || disableLocation;
   const [suggestOpen, setSuggestOpen] = useState(false);
   const suggestRef = useRef(null);
 
@@ -45,9 +42,12 @@ export default function AddPlant() {
   const activeSpecies = (db.species || []).filter((s) => !s.is_deleted);
 
   const needle = guess.trim().toLowerCase();
-  const exactMatch = activeSpecies.find(
-    (s) => s.scientific_name.toLowerCase() === needle || (s.common_name && s.common_name.toLowerCase() === needle)
+  const matchedSpecies = activeSpecies.find(
+    (s) => s.scientific_name?.toLowerCase() === needle || (s.common_name && s.common_name.toLowerCase() === needle)
   );
+  const exactMatch = matchedSpecies;
+  const isRedStatus = !!(matchedSpecies && isThreatened(matchedSpecies.conservation_status));
+  const locationDisabled = isRedStatus || disableLocation;
 
   const suggestions = needle.length >= 1 && !exactMatch
     ? activeSpecies
