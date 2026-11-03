@@ -274,15 +274,11 @@ export function lookupTag(db, id) {
 
 // Matches an observation record against a search query across plant name,
 // scientific name, proposed species, tag ID, morphology, and notes.
-// Null-safe if the specimen has not loaded or has no name.
-export function recordMatches(obs, plantOrDb, query) {
+// `plant` is the record's plantView; null-safe if the specimen has not loaded or has no name.
+export function recordMatches(obs, plant, query) {
   const needle = (query || "").trim().toLowerCase();
   if (!needle) return true;
   if (!obs) return false;
-
-  const plant = plantOrDb && "plants" in plantOrDb
-    ? plantView(plantOrDb, plantOrDb.plants.find((x) => x.id === obs.specimen_id))
-    : plantOrDb || obs.plant;
 
   if (plant?.qr_id && plant.qr_id.toLowerCase().includes(needle)) return true;
 

@@ -268,7 +268,7 @@ test('photo upload rejects HEIC images to protect location privacy (CTIP-110)', 
     .set(as('botanist'))
     .attach('file', heicHeader, 'photo.heic');
   assert.equal(res.status, 415);
-  assert.match(res.body.message, /HEIC is not supported/);
+  assert.match(res.body.message, /HEIC photos can carry their location/);
   assert.equal(db.observation_photos.length, 0);
 });
 

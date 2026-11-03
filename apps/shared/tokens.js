@@ -91,8 +91,8 @@ export function colors(theme = "dark") {
 export const STATUS_TONE = {
   approved: "success", published: "success", active: "success", resolved: "success", "least concern": "success",
   synced: "info", assigned: "info",
-  returned: "warning", acknowledged: "warning", "near threatened": "warning", medium: "warning",
-  rejected: "danger", vulnerable: "danger", endangered: "danger", "critically endangered": "danger", "extinct in the wild": "danger", extinct: "danger", open: "danger", high: "danger", faulty: "danger", retired: "danger",
+  returned: "warning", acknowledged: "warning", vulnerable: "warning", "near threatened": "warning", medium: "warning",
+  rejected: "danger", endangered: "danger", "critically endangered": "danger", "extinct in the wild": "danger", extinct: "danger", open: "danger", high: "danger", faulty: "danger", retired: "danger",
   draft: "neutral", queued: "neutral", unused: "neutral", offline: "neutral", low: "neutral", unknown: "neutral", "data deficient": "neutral", "not evaluated": "neutral",
 };
 

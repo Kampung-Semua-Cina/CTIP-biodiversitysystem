@@ -426,8 +426,8 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .chip-approved, .chip-approve, .chip-published, .chip-least-concern, .chip-active, .chip-resolved, .chip-insert, .chip-restore { --c: var(--ok); --c-soft: var(--ok-soft); --c-line: var(--ok-line); }
 .chip-synced, .chip-assigned, .chip-officer { --c: var(--info); --c-soft: var(--info-soft); --c-line: var(--info-line); }
-.chip-near-threatened, .chip-medium, .chip-acknowledged, .chip-returned, .chip-return, .chip-update { --c: var(--warn); --c-soft: var(--warn-soft); --c-line: var(--warn-line); }
-.chip-vulnerable, .chip-rejected, .chip-reject, .chip-endangered, .chip-critically-endangered, .chip-extinct-in-the-wild, .chip-extinct, .chip-high, .chip-open, .chip-faulty, .chip-delete, .chip-retired { --c: var(--bad); --c-soft: var(--bad-soft); --c-line: var(--bad-line); }
+.chip-near-threatened, .chip-vulnerable, .chip-medium, .chip-acknowledged, .chip-returned, .chip-return, .chip-update { --c: var(--warn); --c-soft: var(--warn-soft); --c-line: var(--warn-line); }
+.chip-rejected, .chip-reject, .chip-endangered, .chip-critically-endangered, .chip-extinct-in-the-wild, .chip-extinct, .chip-high, .chip-open, .chip-faulty, .chip-delete, .chip-retired { --c: var(--bad); --c-soft: var(--bad-soft); --c-line: var(--bad-line); }
 .chip-botanist, .chip-admin { --c: var(--acc); --c-soft: var(--acc-soft); --c-line: var(--acc-line); }
 /* draft, queued, unused, offline, low, unknown, data deficient and not evaluated use the default neutral tone */
 
