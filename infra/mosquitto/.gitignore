@@ -1,0 +1,3 @@
+# Logins and certificates never go into git (F-14)
+passwd
+certs/

@@ -1,0 +1,9 @@
+# Who may use which topic. The username of a sensor node is its node id.
+# The gateway reads every node's readings and camera triggers.
+user gateway
+topic read nodes/+/telemetry
+topic read nodes/+/trigger
+
+# Every node may only publish to its own topics.
+pattern write nodes/%u/telemetry
+pattern write nodes/%u/trigger
