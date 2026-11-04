@@ -1,7 +1,7 @@
 // apps/shared/StoreProvider.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreContext } from "./store.js";
-import { seed, initialPublicPlants } from "./data.js";
+import { seed, initialPublicPlants, withStatusKey } from "./data.js";
 import { visiblePlants, shownCoords } from "./selectors.js";
 import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry, keepPhotoUrl } from "./utils.js";
@@ -222,6 +222,8 @@ function collectionMatches(a = [], b = []) {
       w = { ...prev.data, ...lists, unavailable };
     }
     lastWorkspace.current = owner && res.data.cursor ? { owner, data: w, cursor: res.data.cursor } : null;
+    // Every status in one form ("Endangered" -> "endangered"), so no comparison misses it.
+    w = { ...w, species: (w.species || []).map(withStatusKey) };
 
     const photosByObs = new Map();
     for (const ph of w.observation_photos) {
@@ -605,7 +607,7 @@ function collectionMatches(a = [], b = []) {
     try {
       const res = await fetchPublicSpeciesById(id);
       if (res.ok && res.data) {
-        const detail = res.data;
+        const detail = withStatusKey(res.data);
         setDb((prevDb) => {
           const updatedSpecies = prevDb.species.map((s) => (s.id === detail.id ? { ...s, ...detail } : s));
           let updatedMedia = prevDb.species_media;
@@ -1047,7 +1049,8 @@ function collectionMatches(a = [], b = []) {
 
   /* ---------- species ---------- */
   // API rows replace the matching species in the store; others are kept as they are.
-  const mergeSpecies = (rows) => setDb((prevDb) => {
+  const mergeSpecies = (apiRows) => setDb((prevDb) => {
+    const rows = apiRows.map(withStatusKey);
     const byId = new Map(rows.map((r) => [r.id, r]));
     const kept = prevDb.species.map((s) => (byId.has(s.id) ? { ...s, ...byId.get(s.id) } : s));
     const added = rows.filter((r) => !prevDb.species.some((s) => s.id === r.id));
@@ -1064,7 +1067,7 @@ function collectionMatches(a = [], b = []) {
       const byId = new Map(prevDb.species.map((s) => [s.id, s]));
       return {
         ...prevDb,
-        species: [...res.data.map((r) => ({ ...byId.get(r.id), ...r })), ...prevDb.species.filter((s) => s.is_deleted)],
+        species: [...res.data.map((r) => withStatusKey({ ...byId.get(r.id), ...r })), ...prevDb.species.filter((s) => s.is_deleted)],
       };
     });
     return { ok: true };

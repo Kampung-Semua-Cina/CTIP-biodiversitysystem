@@ -6,6 +6,7 @@ import { Mono } from "../components/Bits.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { extractTag } from "../../../shared/selectors.js";
+import { photoFileProblem } from "../../../shared/utils.js";
 import { go } from "../useRoute.js";
 
 export default function Scan() {
@@ -113,6 +114,12 @@ export default function Scan() {
   const onPickImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Not a picture (e.g. a video renamed to .jpg): say so instead of guessing.
+    const problem = await photoFileProblem(file);
+    if (problem) {
+      e.target.value = "";
+      return notify(`${problem}.`);
+    }
     try {
       if ("BarcodeDetector" in window) {
         const detector = new window.BarcodeDetector({ formats: ["qr_code"] });

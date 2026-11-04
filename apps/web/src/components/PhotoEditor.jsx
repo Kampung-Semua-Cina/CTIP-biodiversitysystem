@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon.jsx";
 import Img from "./Img.jsx";
-import { CAPTION_MAX, PHOTO_MAX_MB, PHOTO_TYPES, nowIso, photoProblem, uid } from "../../../shared/utils.js";
+import { CAPTION_MAX, PHOTO_MAX_MB, PHOTO_TYPES, nowIso, photoFileProblem, uid } from "../../../shared/utils.js";
 
 // Popup from the whiteboard sketch: upload icon on the left, close on the right,
 // numbered photo cards you drag to arrange, and a Save button.
@@ -59,12 +59,16 @@ export default function PhotoEditor({
   };
 
   // Files that break the rules are left out and listed in the error line; the rest are added.
-  const add = (e) => {
+  // Each file's contents are checked, not only its name (a renamed video is not a picture).
+  const add = async (e) => {
     const created = nowIso();
-    const files = [...e.target.files];
-    const problems = files.map(photoProblem).filter(Boolean);
+    const input = e.target;
+    const files = [...input.files];
+    input.value = "";
+    const found = await Promise.all(files.map(photoFileProblem));
+    const problems = found.filter(Boolean);
     const added = files
-      .filter((f) => !photoProblem(f))
+      .filter((f, i) => !found[i])
       .map((f) => ({
         id: uid(),
         observation_id: null,
@@ -74,9 +78,8 @@ export default function PhotoEditor({
         created_at: created,
         is_primary: false,
       }));
-    setList([...list, ...added]);
+    setList((current) => [...current, ...added]);
     setErr(problems.join(". "));
-    e.target.value = "";
   };
 
   const setCaption = (id, caption) => setList(list.map((p) => (p.id === id ? { ...p, caption } : p)));

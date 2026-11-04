@@ -298,7 +298,7 @@ Summary only; see [docs/architecture/live-updates.md](../architecture/live-updat
 # Since commit `ca507a4`: deleting users, the email limit and clearer form errors
 
 *Written 5 Nov 2026. Web app (Users page), API, contract and one database migration.
-Nothing below is committed yet.*
+Committed in `7126118`.*
 
 Four pieces of work on the admin **Users** page (`#/users`) and the account emails
 behind it, and one change for every page:
@@ -536,3 +536,153 @@ Contract: both new paths; `deleted_at`, `deleted_by` on `Profile`; new `EmailLim
 - A deleted user's notifications, and discussion threads they started, are removed with the
   account after 30 days.
 - The mobile app has no Users page, so none of this applies there.
+
+---
+
+# Since commit `7126118`: security fixes (conservation status, files that are not pictures)
+
+*Written 5 Nov 2026. Web app, mobile app (sorting only), shared code and one database
+migration. No API or contract change. Nothing below is committed yet.*
+
+Two findings from security testing:
+
+1. **"Endangered" with a capital E was not recognised by the website**, so endangered species
+   could be shown, counted and edited as if they were not. In the worst case, opening
+   **Edit species** and saving turned an endangered species into "Least concern" and made its
+   plants' exact locations public. **Severity: high** (threat T13, protecting endangered
+   locations). Fixed.
+2. **A video renamed to `.jpg`** was refused by the API, but the website showed an empty
+   preview box with no reason. **Severity: low.** Fixed.
+
+## Before this goes live
+
+- [ ] Tell Amberlyn, then dry-run and push
+      `supabase/migrations/20261105180000_species_status_lower_case.sql`
+      (`npx supabase db push --dry-run`, then `npx supabase db push`). The website fix works
+      without it; the migration corrects the stored data and keeps it correct.
+- [ ] Redeploy the website (Cloudflare Pages) after merging. The API does not change.
+- [ ] Build a new APK if the mobile "Endangered first" sort should be fixed on phones.
+- [ ] Ask the security testers to retest both findings ([how](#how-to-retest)).
+
+## 1. "Endangered" with a capital E
+
+### What was wrong
+
+| Where | What people saw |
+|---|---|
+| Officer dashboard | "Endangered species: 0" |
+| Plant catalogue | Filter by status and its counts missed the species; "Endangered first" did not put it first |
+| Species page (web and mobile) | "Endangered first" did not put it first |
+| **Edit species form** | The status list showed **Least concern**. Saving could make the species least concern, after which its plants' exact locations were shown to the public. |
+| Map | The page says endangered locations are hidden, but one way of building the map could still put a pin on them (see below) |
+
+### Cause
+
+Some species hold `"Endangered"` or `"Near Threatened"`, saved before the API existed or
+typed in by hand. The API (`distribution.js`) and the database functions compare statuses in
+any case, so they protected these plants correctly. The website compared them exactly as typed
+(`conservation_status === "endangered"`), so a capital letter matched nothing. The Edit form's
+list holds only lower-case values: `"Endangered"` matched no option, so the browser showed the
+first one, "Least concern".
+
+Live data on 5 Nov 2026: **Nepenthes rajah** (`"Endangered"`, currently in Recently deleted) and
+**Shorea leprosula** (`"Near Threatened"`).
+
+### Fix
+
+| Change | Where |
+|---|---|
+| **Every status is stored in the app in one form** (trimmed, lower case) as it is loaded: the start-up load and live updates, the staff species list, saved species and single species pages | `statusKey()` and `withStatusKey()` in `apps/shared/data.js`, used in `apps/shared/StoreProvider.js` |
+| **Every comparison ignores case:** the dashboard count, the catalogue filter and counts, and "Endangered first" sorting now use `isThreatened()` or `statusKey()`. Sorting and the dashboard now also include **critically endangered**, which they missed before. | `apps/shared/selectors.js` (`speciesCatalogue`), `apps/web/src/pages/Catalogue.jsx`, `apps/web/src/pages/Species.jsx`, `apps/mobile/pages/Species.js`, `apps/mobile/pages/Dashboard.js` |
+| **The Edit species form never falls back to another status.** It opens on the species' real status. A status it does not know is shown as *"… is not a known status. Choose one"*, and the form will not save until one is chosen. | `apps/web/src/components/SpeciesForm.jsx` |
+| **Map: no pin for an endangered plant unless you may see exact locations.** Points from the API's `/distribution` used to be pinned as they came; that includes endangered plants at their reduced (about 1.1 km) location. They now follow the same rule as every other map point (`shownCoords`), and the status is checked in any case. | `apps/web/src/pages/MapPage.jsx` |
+| **The stored data:** existing statuses are lower-cased, and a trigger lower-cases every later insert or update, whoever makes it (API, SQL Editor, an old app build) | `supabase/migrations/20261105180000_species_status_lower_case.sql` |
+
+About the map: visitors' maps are built from the visitor data, which already handled the
+capital E, and with today's data no stray visitor pin could be reproduced. The `/distribution`
+path above is the one that could pin a protected plant, so it was closed as well.
+
+## 2. A video renamed to `.jpg`
+
+### What was wrong
+
+The API reads a file's first bytes and refused the video correctly
+(`detectImageType` in `services/api/src/images.js`). The website only checked the type the
+browser reports, which comes from the **file name**, so `video.jpg` passed as `image/jpeg`. The
+preview could not be drawn, the image component hides images that fail, and an empty box was
+left with no message.
+
+### Fix
+
+Every picture picker on the website now reads the file's first bytes, the same test as the API,
+before showing a preview (`sniffFileKind()` and `photoFileProblem()` in `apps/shared/utils.js`):
+
+| Picker | Where |
+|---|---|
+| Add plant photos | `apps/web/src/pages/AddPlant.jsx` |
+| Photo editor (arrange photos) | `apps/web/src/components/PhotoEditor.jsx` |
+| Scan a QR from an image (Add plant and Scan) | `apps/web/src/pages/AddPlant.jsx`, `apps/web/src/pages/Scan.jsx` |
+
+| File | Message |
+|---|---|
+| A video (MP4, MOV, WebM, AVI) | *"field-video.jpg is a video, not a picture. Choose a JPG, PNG or WebP photo."* |
+| An iPhone HEIC photo | *"… is an iPhone HEIC photo. Save it as JPG first."* |
+| Anything else that is not a JPG, PNG or WebP | *"… is not a picture, whatever its name says. Choose a JPG, PNG or WebP photo."* |
+
+Good files picked at the same time are still added. On Add plant's QR picker this also stops a
+non-picture from falling through to the "next unused tag" fallback (the known S6 leftover).
+
+The API check is unchanged and still the real guard; this only gives the person the reason.
+
+## How to retest
+
+**Finding 1**, as an officer:
+
+1. In the SQL Editor (test only), set one species to `'Endangered'` with a capital E. After
+   the migration the trigger lower-cases it at once, which is itself the first check: reading
+   it back shows `endangered`.
+2. To test the website alone, without the migration: the dashboard's "Endangered species" count
+   includes its plants, the catalogue's Endangered filter lists it, and Edit species shows
+   **Endangered**, not Least concern.
+3. Sign out: the visitor map shows no pin for its plants, and the note under the map counts them
+   as not shown.
+
+**Finding 2:** rename any `.mp4` to `.jpg` and choose it under Add plant → Add photos, or in the
+photo editor. Expect the "is a video" message and no empty box. Choose it together with a real
+photo: only the real photo is added.
+
+## Files
+
+| Area | Files |
+|---|---|
+| Database | `supabase/migrations/20261105180000_species_status_lower_case.sql` (new) |
+| Shared | `apps/shared/data.js`, `apps/shared/selectors.js`, `apps/shared/StoreProvider.js`, `apps/shared/utils.js`; `apps/shared/test/status-and-photos.test.js` (new) |
+| Web | `src/components/SpeciesForm.jsx`, `src/components/PhotoEditor.jsx`, `src/pages/Catalogue.jsx`, `src/pages/Species.jsx`, `src/pages/MapPage.jsx`, `src/pages/AddPlant.jsx`, `src/pages/Scan.jsx` |
+| Mobile | `pages/Species.js`, `pages/Dashboard.js` (sorting only) |
+
+## Tests
+
+- Shared: **62/62 pass**, 5 new in `status-and-photos.test.js`:
+  - statuses put in one form
+  - a capitalised Endangered or CRITICALLY ENDANGERED species counts as endangered
+  - visitors get no pin for an endangered point
+  - files recognised by their first bytes (JPG, PNG, WebP, MP4, HEIC, WebM, PDF)
+  - a renamed video or PDF refused with its reason, while a real JPG passes
+- API: 179/179 pass (unchanged). Web lint and `vite build` pass. Mobile bundle builds (`expo export`).
+- **In a browser, nothing saved:**
+  - The officer dashboard counts **8** endangered plants.
+  - Edit species on a species capitalised to `"Endangered"` shows **Endangered**. The
+    capitals were added in the test browser only, because the one live capitalised endangered
+    species is in Recently deleted.
+  - The visitor map with **every** status capitalised still shows only 3 pins and *"5
+    endangered plants are not shown on the map"*.
+  - Add plant with a renamed MP4 and a real JPG shows the "is a video" message and adds only
+    the JPG.
+- **Not tested:** the migration against the database (not pushed yet).
+
+## Not covered
+
+- **Mobile photo pickers** were not changed. Every one asks the phone for pictures only
+  (`mediaTypes: ['images']` in `apps/mobile/pages/AddPlant.js` and `pages/Scan.js`), and the API
+  refuses anything else.
+

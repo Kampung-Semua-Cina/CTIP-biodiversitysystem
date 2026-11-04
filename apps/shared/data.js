@@ -26,6 +26,14 @@ export const THREATENED = ["endangered", "critically endangered"];
 export const isThreatened = (status) =>
   THREATENED.includes(String(status || "").trim().toLowerCase());
 
+// A conservation status as the apps compare it: trimmed and lower case. Rows
+// saved before the API (or by hand) can hold "Endangered"; compared as typed,
+// that matched nothing, so endangered species were counted, sorted, mapped and
+// edited as if they were not. Use this (or isThreatened) for every comparison.
+export const statusKey = (status) => (status == null ? status : String(status).trim().toLowerCase());
+export const withStatusKey = (species) =>
+  species && species.conservation_status != null ? { ...species, conservation_status: statusKey(species.conservation_status) } : species;
+
 // One rule and one wording for hiding a plant's exact location, on the website and
 // in the app. The GPS reading is always kept for officers; only the public view
 // changes, and the plant's details and photos stay visible.

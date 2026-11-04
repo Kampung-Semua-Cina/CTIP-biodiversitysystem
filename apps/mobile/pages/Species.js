@@ -8,6 +8,7 @@ import { View } from 'react-native';
 import { useStore } from '../../shared/store.js';
 import { visiblePlants } from '../../shared/selectors.js';
 import { fuzzyMatch } from '../../shared/fuzzy.js';
+import { isThreatened } from '../../shared/data.js';
 import { useTheme } from '../components/Theme.js';
 import { Screen, Header, IconButton, TitleBlock, SearchField, SortBar, Row, Thumb, Sci, DotLabel, Notice, Empty } from '../components/Bits.js';
 
@@ -38,8 +39,8 @@ export default function SpeciesAdmin({ nav }) {
       return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
     }
     if (sort === 'endangered') {
-      const ea = a.conservation_status === 'endangered' ? 1 : 0;
-      const eb = b.conservation_status === 'endangered' ? 1 : 0;
+      const ea = isThreatened(a.conservation_status) ? 1 : 0;
+      const eb = isThreatened(b.conservation_status) ? 1 : 0;
       if (eb !== ea) return eb - ea;
       return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
     }

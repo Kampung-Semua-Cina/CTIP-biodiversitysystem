@@ -10,6 +10,7 @@ import { useStore } from "../../../shared/store.js";
 import { fuzzyMatch } from '../../../shared/fuzzy.js';
 import { can } from "../../../shared/permissions.js";
 import { familyColors, familyOf, shownCoords, visiblePlants } from "../../../shared/selectors.js";
+import { isThreatened } from "../../../shared/data.js";
 import { isExactProtected } from "../../../shared/mapConfig.js";
 import { MAP_BOUNDS } from "../../../shared/mapConfig.js";
 
@@ -76,14 +77,14 @@ export default function MapPage({ arg }) {
       .filter((p) => !only || familyOf(p) === only)
       .filter((p) => !needle || fuzzyMatch([p.name, p.scientific, p.qr_id, familyOf(p)].join(' '), needle))
       .map((p) => {
-        if (apiDistribution) {
-          return { p, c: (p.lat != null && p.lng != null) ? { lat: p.lat, lng: p.lng } : null };
-        }
-        return { p, c: shownCoords(p, role) };
+        // Same rule for API points as for local ones: anyone who may not see exact
+        // endangered locations gets no pin at all, as the page tells them. Before, the
+        // API's reduced (about 1.1 km) point was still pinned for visitors.
+        return { p, c: shownCoords({ ...p, endangered: p.endangered || isThreatened(p.species?.conservation_status) }, role) };
       });
     const m = s.filter((x) => x.c);
     return { onMap: m, hidden: s.filter((x) => !x.c && x.p.endangered).length };
-  }, [plants, only, needle, role, apiDistribution]);
+  }, [plants, only, needle, role]);
 
   const selId = picked || arg;
   const spotPlants = spotIds ? onMap.filter((x) => spotIds.includes(x.p.id)) : [];

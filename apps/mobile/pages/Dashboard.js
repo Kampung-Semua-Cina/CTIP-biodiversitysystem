@@ -132,8 +132,8 @@ function SpeciesCatalogue({ nav, params, onView }) {
     if (sort === 'scientific') return (a.scientific_name || '').localeCompare(b.scientific_name || '');
     if (sort === 'family') return (a.family || '').localeCompare(b.family || '') || (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
     if (sort === 'endangered') {
-      const ea = a.conservation_status === 'endangered' ? 1 : 0;
-      const eb = b.conservation_status === 'endangered' ? 1 : 0;
+      const ea = isThreatened(a.conservation_status) ? 1 : 0;
+      const eb = isThreatened(b.conservation_status) ? 1 : 0;
       if (eb !== ea) return eb - ea;
       return (a.common_name || a.scientific_name).localeCompare(b.common_name || b.scientific_name);
     }

@@ -91,6 +91,40 @@ export const photoProblem = (file) =>
   : file.size > PHOTO_MAX_MB * 1024 * 1024 ? `${file.name} is larger than ${PHOTO_MAX_MB} MB`
   : null;
 
+// What a file really is, from its first bytes, the same test as the API
+// (detectImageType in services/api/src/images.js). The type a browser reports
+// comes from the file name, so a video renamed to .jpg says "image/jpeg"; the
+// API refuses it, but the page showed an empty preview box and no reason.
+export function sniffFileKind(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const text = (from, to) => String.fromCharCode(...b.slice(from, to));
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((x, i) => b[i] === x)) return "image/png";
+  if (b.length >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "image/webp";
+  // Common videos, so the message can say so.
+  if (b.length >= 12 && text(4, 8) === "ftyp") return /^(heic|heix|mif1|msf1|avif)/.test(text(8, 12)) ? "image/heic" : "video";
+  if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video"; // WebM / MKV
+  if (b.length >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "AVI ") return "video";
+  return null;
+}
+
+// photoProblem, then a look inside the file. Resolves to the reason it cannot be
+// used, or null. For the website's file pickers (needs Blob.arrayBuffer).
+export async function photoFileProblem(file) {
+  const basic = photoProblem(file);
+  if (basic) return basic;
+  let kind = null;
+  try {
+    kind = sniffFileKind(await file.slice(0, 16).arrayBuffer());
+  } catch {
+    return `${file.name} could not be read`;
+  }
+  if (kind === "video") return `${file.name} is a video, not a picture. Choose a JPG, PNG or WebP photo`;
+  if (kind === "image/heic") return `${file.name} is an iPhone HEIC photo. Save it as JPG first`;
+  if (!PHOTO_TYPES.includes(kind)) return `${file.name} is not a picture, whatever its name says. Choose a JPG, PNG or WebP photo`;
+  return null;
+}
+
 export const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" }) : "-";
 

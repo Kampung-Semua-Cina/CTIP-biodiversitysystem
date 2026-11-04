@@ -5,7 +5,7 @@ import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { speciesCatalogue } from "../../../shared/selectors.js";
 import { fuzzyMatch } from "../../../shared/fuzzy.js";
-import { CONSERVATION } from "../../../shared/data.js";
+import { CONSERVATION, isThreatened, statusKey } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
 import { setQuery, useRoute } from "../useRoute.js";
 
@@ -39,13 +39,13 @@ export default function Catalogue() {
   const shown = searched
     .filter((s) => family === "all" || s.family === family)
     .filter((s) => genus === "all" || s.genus === genus)
-    .filter((s) => status === "all" || s.conservation_status === status)
+    .filter((s) => status === "all" || statusKey(s.conservation_status) === status)
     .sort((a, b) => {
       if (sort === "scientific") return (a.scientific_name || "").localeCompare(b.scientific_name || "");
       if (sort === "family") return (a.family || "").localeCompare(b.family || "") || a.name.localeCompare(b.name);
       if (sort === "endangered") {
-        const ea = a.conservation_status === "endangered" ? 1 : 0;
-        const eb = b.conservation_status === "endangered" ? 1 : 0;
+        const ea = isThreatened(a.conservation_status) ? 1 : 0;
+        const eb = isThreatened(b.conservation_status) ? 1 : 0;
         return eb - ea || a.name.localeCompare(b.name);
       }
       if (sort === "tagged") return b.plants.length - a.plants.length || a.name.localeCompare(b.name);
@@ -58,7 +58,7 @@ export default function Catalogue() {
   ).sort(([a], [b]) => a.localeCompare(b));
   // Genera of the chosen family (or of every family), from the searched list.
   const genera = [...new Set(searched.filter((s) => family === "all" || s.family === family).map((s) => s.genus).filter(Boolean))].sort();
-  const statusCounts = CONSERVATION.map((c) => [c, searched.filter((s) => s.conservation_status === c).length]).filter(([, n]) => n);
+  const statusCounts = CONSERVATION.map((c) => [c, searched.filter((s) => statusKey(s.conservation_status) === c).length]).filter(([, n]) => n);
 
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages); // filters can shrink the page count
