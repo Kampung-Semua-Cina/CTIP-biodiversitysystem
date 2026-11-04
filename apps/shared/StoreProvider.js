@@ -501,9 +501,14 @@ function collectionMatches(a = [], b = []) {
   /* ---------- session & authentication ---------- */
   const logout = async () => {
     setAuthTokenState(null);
+    setDb(seed); // F-13: drop the staff data when the session ends
     setUserId(null);
+    // F-13: forget the staff data (exact endangered locations) straight away,
+    // so the next person on this browser or phone cannot see it without a reload.
+    setDb(seed);
     await signOutApi();
     notify("Signed out");
+    loadFromApi(true); // load the visitor view again
   };
 
   const loginWithToken = async (token) => {
