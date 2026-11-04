@@ -41,7 +41,7 @@ export function mockApi(page, state) {
       state.workspaceLoads++;
       return json({
         species: state.species, species_media: [], qr_tags: [], specimens: state.specimens, observations: state.observations,
-        observation_photos: state.photos, observation_reviews: [], observation_comments: [], alerts: [], alert_notes: [], sensor_nodes: [],
+        observation_photos: state.photos, observation_reviews: [], observation_comments: [], alerts: state.alerts || [], alert_notes: [], sensor_nodes: state.sensorNodes || [],
         notifications: [], audit_logs: [],
         profiles: [
           { id: ME, full_name: "Olive Officer", email: "officer@example.com", role: "officer", is_active: true },

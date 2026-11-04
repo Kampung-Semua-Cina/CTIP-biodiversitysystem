@@ -20,7 +20,8 @@ export default function SensorOverview() {
 
   const node = db.nodes?.find((n) => n.id === nodeId) || db.nodes?.[0] || null;
   const data = node ? db.telemetry[node.id] || [] : [];
-  const plantOf = (n) => plantView(db, db.plants.find((p) => p.id === n.specimen_id));
+  // A node can be unassigned, or its plant not visible to this role: show a placeholder, never crash.
+  const plantOf = (n) => plantView(db, db.plants.find((p) => p.id === n.specimen_id)) || { name: "No plant assigned", qr_id: "-" };
   const byNewest = (a, b) => b.created_at.localeCompare(a.created_at);
   const open = db.alerts.filter((a) => a.status === "open").sort(byNewest);
   const history = db.alerts.filter((a) => a.status !== "open" && (tab === "all" || a.status === tab)).sort(byNewest);
@@ -76,9 +77,9 @@ export default function SensorOverview() {
                   {up && last ? (
                     <span className="row"><span><Mono>{last.temperature}°C</Mono> temp</span><span><Mono>{last.soil_moisture}%</Mono> soil</span></span>
                   ) : (
-                    <span className="warntext"><b>No data since {fmtDateTime(n.last_seen)}</b></span>
+                    <span className="warntext"><b>{n.last_seen ? `No data since ${fmtDateTime(n.last_seen)}` : "No data yet"}</b></span>
                   )}
-                  <small className="mute">{up ? `Updated ${fmtDateTime(n.last_seen)}` : "Check the node's battery or Wi-Fi"}</small>
+                  <small className="mute">{up ? (n.last_seen ? `Updated ${fmtDateTime(n.last_seen)}` : "Waiting for the first reading") : "Check the node's battery or Wi-Fi"}</small>
                 </button>
               );
             })}
@@ -152,13 +153,13 @@ function AlertCard({ alert }) {
       <header>
         <div>
           <b>{alert.type}</b>
-          <small className="mute block">{node.name} · {fmtDateTime(alert.created_at)}</small>
+          <small className="mute block">{node?.name || "Unknown node"} · {fmtDateTime(alert.created_at)}</small>
         </div>
         <span className="row"><Chip value={alert.severity} /><Chip value={alert.status} /></span>
       </header>
 
       <p className="mute small">
-        {node.name}'s reading: {Object.entries(alert.reading).map(([k, v], i) => <span key={k}>{i > 0 && " · "}{label(k)} <Mono>{v}</Mono></span>)}
+        {node?.name || "Unknown node"}'s reading: {Object.entries(alert.reading || {}).map(([k, v], i) => <span key={k}>{i > 0 && " · "}{label(k)} <Mono>{v}</Mono></span>)}
       </p>
 
       <ol className="progress" aria-label="Alert progress">
