@@ -50,6 +50,7 @@ async function fakeSupabase(input, init = {}) {
 
   const table = url.pathname.replace('/rest/v1/', '');
   if (!db[table]) return json(404, { message: `no table ${table}` });
+  if (table.startsWith('rpc/')) return json(200, db[table]); // functions: canned answer
   if (failing.includes(table) && method === 'GET') return json(500, { code: 'XX000', message: `${table} is down` });
 
   const filters = [...url.searchParams].filter(([k]) => !['select', 'order', 'limit', 'offset', 'on_conflict'].includes(k));
@@ -98,6 +99,7 @@ beforeEach((t) => {
     qr_tags: [], specimens: [], observations: [], observation_photos: [], observation_comments: [],
     observation_reviews: [], species: [], species_media: [], alerts: [], alert_notes: [], sensor_nodes: [],
     notifications: [], audit_logs: [], profiles: [], zones: [],
+    discussions: [], discussion_audience: [], discussion_posts: [], 'rpc/discussion_directory': [],
   };
   failing = [];
   stored = [];
@@ -461,4 +463,83 @@ test("marking a notification read only touches the caller's own", async () => {
   assert.equal((await request(app).post(`/v1/notifications/${theirs.id}/read`).set(as('botanist'))).status, 404);
   assert.equal((await request(app).post('/v1/notifications/read-all').set(as('botanist'))).status, 204);
   assert.deepEqual(db.notifications.map((n) => n.is_read), [true, false]);
+});
+
+/* ---------- live updates: only what changed ---------- */
+
+const versionsAre = (v) => { db.table_versions = Object.entries(v).map(([table_name, version]) => ({ table_name, version })); };
+const poll = (who, cursor) => request(app).get('/v1/workspace').query(cursor ? { cursor } : {}).set(as(who));
+
+test('workspace: the first load is full and hands back a cursor and a poll delay', async () => {
+  versionsAre({ species: 1, notifications: 3 });
+  const res = await poll('officer');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.partial, false);
+  assert.ok(res.body.cursor);
+  assert.ok(res.body.poll_after_ms >= 5000);
+  assert.ok(Array.isArray(res.body.qr_tags));
+});
+
+test('workspace: nothing changed since the cursor answers unchanged, with no lists', async () => {
+  versionsAre({ species: 1, notifications: 3 });
+  const first = await poll('officer');
+  const again = await poll('officer', first.body.cursor);
+  assert.equal(again.body.partial, true);
+  assert.equal(again.body.unchanged, true);
+  assert.equal(again.body.qr_tags, undefined);
+});
+
+test('workspace: a changed table sends only that list', async () => {
+  versionsAre({ species: 1, notifications: 3 });
+  const first = await poll('officer');
+  versionsAre({ species: 1, notifications: 4 });
+  db.notifications.push({ id: crypto.randomUUID(), user_id: users.officer, is_read: false });
+  const res = await poll('officer', first.body.cursor);
+  assert.equal(res.body.partial, true);
+  assert.equal(res.body.notifications.length, 1);
+  assert.equal(res.body.qr_tags, undefined);
+  assert.equal(res.body.species, undefined);
+});
+
+test('workspace: a species change also resends plants, still with endangered spots reduced', async () => {
+  versionsAre({ species: 1 });
+  const first = await poll('botanist');
+  db.species.push({ id: 'sp1', conservation_status: 'Endangered' });
+  db.specimens.push({ id: crypto.randomUUID(), qr_id: 'NIAH-0001', species_id: 'sp1', registered_by: users.officer, lat: 3.81234, lng: 113.71234 });
+  versionsAre({ species: 2 });
+  const res = await poll('botanist', first.body.cursor);
+  assert.equal(res.body.species.length, 1);
+  assert.equal(res.body.specimens.length, 1);
+  assert.equal(res.body.specimens[0].location_reduced, true);
+});
+
+test("workspace: someone else's cursor gets a full load", async () => {
+  versionsAre({ species: 1 });
+  const officers = await poll('officer');
+  const res = await poll('botanist', officers.body.cursor);
+  assert.equal(res.body.partial, false);
+});
+
+test('workspace: a broken cursor gets a full load, not an error', async () => {
+  versionsAre({ species: 1 });
+  const res = await poll('officer', 'not-a-cursor');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.partial, false);
+});
+
+test('workspace: before the counters exist, every load is full', async () => {
+  delete db.table_versions;
+  const first = await poll('officer');
+  const again = await poll('officer', first.body.cursor);
+  assert.equal(again.body.partial, false);
+});
+
+test('health: answers without asking the database', async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (...args) => { calls.push(args); return fakeSupabase(...args); });
+  const res = await request(app).get('/v1/health');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.ok(res.body.db.poll_after_ms >= 5000);
+  assert.equal(calls.length, 0);
 });

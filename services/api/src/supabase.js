@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { timedFetch } from './dbLoad.js';
 
-const options = { auth: { persistSession: false, autoRefreshToken: false } };
+// timedFetch measures how busy the database is, for the apps' poll rate (dbLoad.js).
+const options = { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch } };
 
 // Visitor queries: the publishable key, so only "public read" RLS policies apply.
 // One shared client is enough because it never carries a user's token.
@@ -22,6 +24,6 @@ export function supabaseFresh() {
 export function supabaseAs(user) {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
     ...options,
-    global: { headers: { Authorization: `Bearer ${user.token}` } },
+    global: { ...options.global, headers: { Authorization: `Bearer ${user.token}` } },
   });
 }

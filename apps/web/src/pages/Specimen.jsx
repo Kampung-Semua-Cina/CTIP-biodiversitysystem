@@ -209,7 +209,12 @@ export default function Specimen({ qr }) {
                   </li>
                 ))}
               </ul>
-              {can(role, "discuss") && visits[0] && <a className="btn ghost" href={"#/discussion/" + (comments.at(-1)?.observation_id || visits[0].id)}><Icon name="chat" size={16} /> Open in Discussion</a>}
+              {can(role, "discuss") && visits[0] && (
+                <p className="row wrap">
+                  <a className="btn ghost" href={"#/discussion/" + (comments.at(-1)?.observation_id || visits[0].id)}><Icon name="chat" size={16} /> Open in Discussion</a>
+                  <a className="btn ghost" href={"#/discussion?obs=" + visits[0].id}><Icon name="send" size={16} /> Start a discussion</a>
+                </p>
+              )}
             </div>
           )}
         </section>

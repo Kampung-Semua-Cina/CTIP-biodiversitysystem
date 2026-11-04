@@ -173,13 +173,17 @@ export const safeImageUrl = (url) =>
 // Private photo links stop working after 24 hours (SIGNED_FOR in services/api/src/field.js),
 // so a tab or phone left open swaps to a fresh link well before that. Between swaps the
 // same link is kept, so images do not reload on every refresh.
+// Only a link to the same address is kept (the ?token part may differ). A different
+// address means a different kind of link: the visitor link cached before signing in
+// must give way to the signed link at once, or staff see broken photos for 12 hours.
 const PHOTO_LINK_KEPT_MS = 12 * 60 * 60 * 1000;
+const withoutQuery = (url) => String(url).split("?")[0];
 export function keepPhotoUrl(cache, key, freshUrl) {
   const fresh = safeImageUrl(freshUrl);
   if (!key) return fresh;
   const kept = cache.get(key);
   if (!fresh) return kept?.url || null;
-  if (kept && Date.now() - kept.at < PHOTO_LINK_KEPT_MS) return kept.url;
+  if (kept && Date.now() - kept.at < PHOTO_LINK_KEPT_MS && withoutQuery(kept.url) === withoutQuery(fresh)) return kept.url;
   cache.set(key, { url: fresh, at: Date.now() });
   return fresh;
 }

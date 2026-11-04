@@ -150,3 +150,146 @@ Reproduced with test data only, not the live database.
 - New `avatar-image.spec.js`: a 4000 × 2500 image becomes a 256 × 256 JPEG under 100 KB with the right crop. Passes.
 - `tests/helpers/mockApi.js` now accepts `state.sensorNodes` and `state.alerts`, so tests can send sensor data.
 - The migration has not been run against any database yet.
+
+---
+
+# Since the last commit (`175c2d5`): discussion board and faster live updates
+
+*Written 4 Nov 2026. Web app, mobile app (polling only), API, contract and two database
+migrations. Nothing below is committed yet.*
+
+Two pieces of work:
+
+1. **`#/discussion` is now a discussion board** that works like email: choose who a
+   thread goes to (people and/or whole user groups), make it private or public, and
+   @mention people.
+2. **Live updates fetch only what changed and slow down when the database is busy.**
+   This fixes the "Cannot reach the API server" notice that kept coming and going. The
+   full design is in [docs/architecture/live-updates.md](../architecture/live-updates.md).
+
+## Before this goes live
+
+- [ ] Tell Amberlyn, then dry-run and push both migrations if not done yet:
+      `npx supabase db push --dry-run` should list only the files below that are not applied yet, then
+      `npx supabase db push`.
+  - `20261104120000_discussion_board.sql`
+  - `20261105000000_table_versions.sql`
+- [ ] **Two approvals on the PR:** `packages/api-contract/openapi.yaml` changed (team rule).
+- [ ] Redeploy the API on Render after merging. Until then the live site has no
+      discussion routes (`No such endpoint`) and still does full loads every 5 s.
+- [ ] Update CLAUDE.md: the API now has **77 routes** (was 71), 6 more built, and the
+      contract has the new paths.
+
+## 1. Discussion board
+
+### What people can do
+
+| Feature | How it works |
+|---|---|
+| **Start a thread** | Title, who can read it, who it goes to, first message. Optionally linked to a field record. |
+| **Send to user groups** | Buttons for *All botanists*, *All conservation officers* and *All administrators*, each showing how many people it covers |
+| **Send to single people** | Search by name or username, shown as removable chips. Groups and people can be mixed. |
+| **Private** | Only the owner and the people and groups it was sent to can read and reply. It must go to at least one person or group. |
+| **Public** | Every signed-in staff member can read and reply. The people and groups chosen are the ones notified. |
+| **@mentions** | Typing `@` suggests names; the picked person is notified. Only people who can read the thread can be tagged. |
+| **Owner controls** | "Sharing" changes public/private and the recipients; only newly added people are notified. The owner or an admin can delete a thread (with a confirm screen). |
+| **Inbox filters** | All, Sent to me, Started by me, Public, Record comments, plus search. Threads with unread notifications are marked **New**. |
+| **Notifications** | `discussion_shared`, `discussion_post` and `discussion_mention`. Clicking one opens the thread; opening a thread marks its notifications read. |
+
+The old per-record comments (`observation_comments`) are unchanged. They are listed under
+"Record comments", old `#/discussion/<observation id>` links still open them, and the
+plant page has a new "Start a discussion" button.
+
+### Who can see what (enforced in the database)
+
+Migration `20261104120000_discussion_board.sql`:
+
+| Part | What it does |
+|---|---|
+| Tables | `discussions` (owner, title, `public`/`private`, optional observation), `discussion_audience` (one row per person **or** role group), `discussion_posts` (body, `mentions uuid[]`) |
+| `can_see_discussion(id)` | True for the owner, anyone on a public thread, a person on the audience, or anyone whose role is on the audience. Deactivated accounts get nothing. |
+| RLS | Read: `can_see_discussion`. Create: yourself as owner, and a linked record must be one you can see. Change sharing: owner only. Delete: owner or admin. Reply: anyone who can read it. Posts cannot be edited or deleted one by one. |
+| `discussion_directory()` | Botanists cannot read other profiles, so this lists active accounts with **only** id, name, username and role (no email or phone) for sharing and @mentions |
+| `create_discussion()`, `update_discussion()` | Create a thread with its audience and first post, or change its sharing, in one transaction. They run as the caller, so RLS still applies. |
+| Notification triggers | Mentions are only sent to people who can read the thread. A private thread never notifies outsiders. A failed notification never blocks a post. |
+
+`user_can_see_discussion()` (checking for someone else) cannot be called through the API
+or `/rest/v1/rpc`; only the notification trigger uses it.
+
+### API
+
+| Route | Who | Notes |
+|---|---|---|
+| `POST /v1/discussions` | any staff | Optional client-made `id`: sending it again returns the same thread (200), never a second one |
+| `GET /v1/discussions/:id` | any staff | Thread with audience and posts. **404** when you cannot read it (never 403, so nothing leaks) |
+| `PATCH /v1/discussions/:id` | owner | Title, visibility, `share_users`, `share_roles`. Others get 403 `NOT_OWNER`. |
+| `DELETE /v1/discussions/:id` | owner or admin | Posts and audience go with it |
+| `POST /v1/discussions/:id/posts` | anyone who can read it | Optional client-made `id`, as above |
+
+Code: `services/api/src/discussions.js`. The workspace load also returns `discussions`,
+`discussion_audience`, `discussion_posts` and `directory`.
+
+## 2. Faster live updates
+
+Summary only; see [docs/architecture/live-updates.md](../architecture/live-updates.md).
+
+| Change | Where |
+|---|---|
+| Per-table change counters | `supabase/migrations/20261105000000_table_versions.sql` |
+| `GET /v1/workspace?cursor=` sends only what changed, or `unchanged: true` | `services/api/src/staff.js` |
+| The API measures how busy the database is and sends `poll_after_ms` (5 to 60 s) | `services/api/src/dbLoad.js`, `services/api/src/supabase.js` |
+| `GET /v1/health`: no database call | `services/api/src/handlers.js` |
+| Store merges partial answers, waits as the API says, "API down" after 2 misses | `apps/shared/StoreProvider.js`, `apps/shared/api.js` |
+| Web and mobile pollers use the new delay | `apps/web/src/useLiveUpdates.js`, `apps/mobile/hooks/usePolling.js` |
+| Removed the separate 30 s notifications poll and 30 s open-thread poll | `apps/shared/StoreProvider.js`, `apps/web/src/pages/Discussion.jsx` |
+
+## 3. Bugs fixed
+
+| Bug | Cause | Fix |
+|---|---|---|
+| "Cannot reach the API server" came and went while the API was up | The health check was a database query with a 3 s limit, and the apps' polling kept the shared database busy | See section 2 |
+| Mobile app polled again straight after every store update | `usePolling` restarted its effect whenever the store changed, and the effect polls on start | Functions kept in a ref; the timer restarts only when the screen, sign-in or foreground state changes |
+| Staff saw broken field photos after signing in (for up to 12 hours) | The photo-link cache (`keepPhotoUrl` in `apps/shared/utils.js`) kept the first link it saw for each photo. The login page loads the visitor data first, whose field-photo links do not work (see [section 7](#7-found-in-the-page-check-not-fixed)), so the working signed link was ignored | Only a link to the same address is kept; a different kind of link replaces it at once. New test in `apps/shared/test/reports-book.test.js` |
+| "Add a person by name" dropdown would not close after picking someone | The picked name disappeared while it had focus, so the browser never reported focus leaving | Closes on any click outside the box; focus returns to the search box after a pick |
+
+## 4. Files
+
+| Area | Files |
+|---|---|
+| Database | `supabase/migrations/20261104120000_discussion_board.sql`, `supabase/migrations/20261105000000_table_versions.sql` (new) |
+| API | `src/discussions.js`, `src/dbLoad.js` (new); `src/staff.js`, `src/handlers.js`, `src/permissions.js`, `src/supabase.js` |
+| Contract | `packages/api-contract/openapi.yaml`: `/health`, `/discussions`, `/discussions/{id}`, `/discussions/{id}/posts`; the workspace `cursor` parameter and new fields; new notification types; `Discussion`, `DiscussionPost`, `DbLoad` schemas |
+| Shared | `apps/shared/StoreProvider.js`, `apps/shared/api.js`, `apps/shared/data.js` |
+| Web | `src/pages/Discussion.jsx` (rewritten), `src/pages/AlertsNotice.jsx`, `src/pages/Specimen.jsx`, `src/useLiveUpdates.js`, `src/App.css` |
+| Mobile | `hooks/usePolling.js` |
+| Tests | `services/api/test/discussions.test.js`, `services/api/test/dbLoad.test.js` (new); `services/api/test/field-and-staff.test.js` |
+
+## 5. Tests
+
+- API: **153/153 pass** (`npm run api:test`), including 24 new:
+  - `discussions.test.js` (10): private/public reading, recipient checks, retry safety, owner-only sharing, admin delete, 404 for outsiders
+  - `dbLoad.test.js` (6): the adaptive poll rate
+  - 8 in `field-and-staff.test.js`: change-only workspace loads and `/health`
+- Shared: 56/56 pass. Web lint and `vite build` pass. Mobile bundle builds (`expo export`).
+- Contract lints with no errors (`npx @redocly/cli lint`). There are 37 warnings, one more than before: `/health` has no 4xx response.
+- Measured live with 4 simulated tabs: a poll when nothing changed takes about 0.2 s and
+  589 bytes, against 3.3 s and 140 KB for a full load (table in the architecture page, §4.3).
+- Shared tests: 57/57 after the photo-cache fix.
+- **Page check:** every page and link opened in a browser for visitor, botanist, officer
+  and admin (130 page visits, 4 external links). No crashes, missing pages, wrongly
+  blocked or wrongly allowed pages, stuck pages or failed API calls. Findings in section 7.
+
+## 6. Not done
+
+- **Mobile Discussion screen** still shows only record comments. Tapping a discussion
+  notification on the phone does nothing yet.
+- No browser (Playwright) test for the discussion board yet.
+
+## 7. Found in the page check, not fixed
+
+| Problem | Where | Cause | Needs |
+|---|---|---|---|
+| **Field photos never load for visitors** (about 24 photos; home page, plant catalogue, species and plant pages) | `get /public/workspace` in `services/api/src/staff.js` | It builds *public* links into `observation-photos`, but that folder is private by design, so Supabase answers "Bucket not found". Came with the visitor catalogue (#43). | **A decision:** hide field photos from visitors (show species photos only), or let the API hand out short-lived signed links for photos of approved, published plants. The second needs a storage policy for that, and the photos must have their location data removed first (CTIP-110). |
+| Two broken photos on tag NIAH-0002 (rejected record, 26 Oct) | Plant page, dashboard | The two `observation_photos` rows hold a temporary browser address (`blob:http://localhost:5173/...`) instead of a file path. They were saved before the apps went through the API. | Delete the two rows (`90939609-…`, `e3101523-…`), with the team's OK, since it is shared data |
+| `href="#"` links | Every map | Leaflet's zoom in / zoom out buttons | Nothing; this is how Leaflet works |
+

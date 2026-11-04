@@ -70,6 +70,8 @@ tags:
   - name: Sync
   - name: Sensors
   - name: Alerts
+  - name: Discussions
+    description: Discussion board threads shared with people or role groups
   - name: Notifications
   - name: Reports
     description: File exports for officers and admins
@@ -77,6 +79,30 @@ tags:
     description: Distribution map data, with endangered locations reduced by role
 
 paths:
+
+  # ------------------------------------------------------------------ Health
+  /health:
+    get:
+      tags: [Public]
+      operationId: getHealth
+      summary: Is the API up, and how busy is the database
+      description: >
+        Never queries the database, so a busy database does not make the API
+        look down. `db` comes from the API's recent database calls:
+        `poll_after_ms` is how long the apps should wait between live-update
+        polls (5 s when the database is quick, up to 60 s when it is busy).
+      security: []
+      responses:
+        '200':
+          description: The API is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  time: { type: string, format: date-time }
+                  db: { $ref: '#/components/schemas/DbLoad' }
 
   # ------------------------------------------------------------------ Auth
   /auth/sign-in:
@@ -295,13 +321,25 @@ paths:
     get:
       tags: [Profiles]
       operationId: getWorkspace
-      summary: The apps' start-up load (any staff role)
+      summary: The apps' start-up load and live-update poll (any staff role)
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: >
+            The `cursor` from the previous answer. With it, only lists whose
+            table changed since then are sent (`partial: true`), or none at
+            all (`unchanged: true`). A missing, broken or old cursor (over 12
+            hours, another user or role) gets a full load.
       description: >
         Every list the apps show, each holding what RLS lets this user read:
         species, species_media, qr_tags, specimens, observations,
         observation_photos (with signed links), observation_reviews,
         observation_comments, alerts, alert_notes, sensor_nodes, notifications,
-        audit_logs, profiles and zones (officer and admin only). If qr_tags, specimens or observations cannot
+        audit_logs, profiles and zones (officer and admin only), discussions,
+        discussion_audience, discussion_posts, and directory (active accounts'
+        id, full_name, username and role, for sharing and @mentions). If qr_tags, specimens or observations cannot
         be read the request fails with 500; any other list that fails comes
         back empty and is named in `unavailable`.
 
@@ -325,6 +363,10 @@ paths:
                   unavailable:
                     type: array
                     items: { type: string }
+                  partial: { type: boolean, description: 'true: only the lists that changed are sent; keep the others' }
+                  unchanged: { type: boolean, description: 'true: nothing changed since the cursor' }
+                  cursor: { type: string, description: Send back on the next poll }
+                  poll_after_ms: { type: integer, description: How long to wait before the next poll }
                 additionalProperties:
                   type: array
                   items: { type: object }
@@ -1565,6 +1607,140 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AlertNote' }
 
+  # ------------------------------------------------------------- Discussions
+  /discussions:
+    post:
+      tags: [Discussions]
+      operationId: createDiscussion
+      summary: Start a discussion thread (any staff role)
+      description: |
+        Works like email. `share_users` and `share_roles` are the people and
+        role groups it is sent to; they are notified. A `private` thread can be
+        read only by its owner and that audience, so it needs at least one
+        person or group. A `public` thread can be read and replied to by every
+        signed-in staff member. `mentions` are people tagged in the first post;
+        each is notified only if they can read the thread. Sending the same
+        `id` again returns the saved thread with 200.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body]
+              additionalProperties: false
+              properties:
+                id: { type: string, format: uuid, description: 'Client-made id, so a retry is safe' }
+                title: { type: string, minLength: 1, maxLength: 200 }
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                visibility: { type: string, enum: [public, private], default: private }
+                share_users: { type: array, maxItems: 100, items: { type: string, format: uuid } }
+                share_roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+                mentions: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+                observation_id: { type: [string, 'null'], format: uuid, description: The field record it is about (optional) }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Discussion' }
+        '200':
+          description: Already saved (same id sent again)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Discussion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /discussions/{id}:
+    get:
+      tags: [Discussions]
+      operationId: getDiscussion
+      summary: One thread with its audience and posts
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: The thread
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Discussion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Discussions]
+      operationId: updateDiscussion
+      summary: Change title, visibility or audience (owner only)
+      description: >
+        Fields left out stay as they are. `share_users` and `share_roles`
+        replace the current lists; only people and groups that are new get a
+        notification.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                visibility: { type: string, enum: [public, private] }
+                share_users: { type: array, maxItems: 100, items: { type: string, format: uuid } }
+                share_roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+      responses:
+        '200':
+          description: Updated thread
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Discussion' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Discussions]
+      operationId: deleteDiscussion
+      summary: Delete a thread and its posts (owner or admin)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /discussions/{id}/posts:
+    post:
+      tags: [Discussions]
+      operationId: addDiscussionPost
+      summary: Reply to a thread you can read
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              additionalProperties: false
+              properties:
+                id: { type: string, format: uuid }
+                body: { type: string, minLength: 1, maxLength: 5000 }
+                mentions: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Posted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscussionPost' }
+        '200':
+          description: Already saved (same id sent again)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscussionPost' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ----------------------------------------------------------- Notifications
   /notifications:
     get:
@@ -1875,7 +2051,8 @@ components:
       enum: [open, acknowledged, resolved]
     NotificationType:
       type: string
-      enum: [review_returned, review_approved, review_rejected, comment_reply, alert_assigned, alert_created]
+      enum: [review_returned, review_approved, review_rejected, comment_reply, alert_assigned, alert_created,
+             observation_submitted, observation_resubmitted, discussion_shared, discussion_post, discussion_mention]
 
     # ---------- profiles
     Profile:
@@ -2176,6 +2353,49 @@ components:
         observation_id: { type: string, format: uuid }
         author_id: { type: string, format: uuid }
         body: { type: string }
+        created_at: { type: string, format: date-time }
+
+    DbLoad:
+      type: object
+      properties:
+        state: { type: string, enum: [free, normal, busy, very busy, overloaded] }
+        latency_ms: { type: [integer, 'null'], description: Moving average of recent database calls }
+        in_flight: { type: integer }
+        poll_after_ms: { type: integer, minimum: 5000, maximum: 60000 }
+
+    # ---------- discussions
+    Discussion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        owner_id: { type: string, format: uuid }
+        visibility: { type: string, enum: [public, private] }
+        observation_id: { type: [string, 'null'], format: uuid }
+        last_post_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        audience:
+          type: array
+          items:
+            type: object
+            description: One person (user_id) or one role group (role)
+            properties:
+              id: { type: string, format: uuid }
+              discussion_id: { type: string, format: uuid }
+              user_id: { type: [string, 'null'], format: uuid }
+              role: { oneOf: [{ $ref: '#/components/schemas/Role' }, { type: 'null' }] }
+        posts:
+          type: array
+          items: { $ref: '#/components/schemas/DiscussionPost' }
+    DiscussionPost:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        discussion_id: { type: string, format: uuid }
+        author_id: { type: [string, 'null'], format: uuid }
+        body: { type: string }
+        mentions: { type: array, items: { type: string, format: uuid } }
         created_at: { type: string, format: date-time }
 
     # ---------- sync

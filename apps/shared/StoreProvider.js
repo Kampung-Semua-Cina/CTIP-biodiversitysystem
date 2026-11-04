@@ -41,6 +41,11 @@ import {
   createObservationApi,
   submitObservationApi,
   addCommentApi,
+  createDiscussionApi,
+  fetchDiscussionApi,
+  updateDiscussionApi,
+  deleteDiscussionApi,
+  addDiscussionPostApi,
   uploadObservationPhotoApi,
   filePart,
   publishSpeciesApi,
@@ -54,7 +59,6 @@ import {
   resolveAlertApi,
   addAlertNoteApi,
   setThresholdsApi,
-  fetchNotificationsApi,
   markReadApi,
   markAllReadApi,
 } from "./api.js";
@@ -62,6 +66,9 @@ import {
 // Shown wherever a page needs the Express API and cannot reach it.
 export const API_DOWN = "Cannot reach the API server (Render). Please check your network connection.";
 const API_CHECK_MS = 30000;
+const BASE_POLL_MS = 5000;
+const MAX_POLL_MS = 60000;
+const MISSES_FOR_DOWN = 2;
 
 // The token to send: renewed through the API when it is about to expire.
 const sessionToken = () => freshAuthToken();
@@ -89,6 +96,9 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [backendSpeciesCount, setBackendSpeciesCount] = useState(0);
   const timer = useRef(null);
+  const lastWorkspace = useRef(null); // { owner, data, cursor } of the last staff load
+  const pollAfter = useRef(BASE_POLL_MS); // what the API last said to wait
+  const misses = useRef(0); // API answers missed in a row
   const loadsStarted = useRef(0);
   const newestLoadShown = useRef(0);
 
@@ -143,23 +153,70 @@ function collectionMatches(a = [], b = []) {
   return true;
 }
 
+  // Is the API reachable? One slow or lost answer is not enough to say it is
+  // down: the notice shows after MISSES_FOR_DOWN misses in a row, and any
+  // answer from the API clears it.
+  const markReachable = useCallback(() => {
+    misses.current = 0;
+    setApiStatus("connected");
+    setApiError(null);
+  }, []);
+  const markMiss = useCallback(() => {
+    misses.current += 1;
+    if (misses.current >= MISSES_FOR_DOWN) {
+      setApiStatus("offline");
+      setApiError(API_DOWN);
+    }
+  }, []);
+
+  // How long live updates should wait before the next poll: what the API last
+  // said (5 s when the database is quick, up to 60 s when it is busy), longer
+  // after misses, and a little random so open tabs do not all ask at once.
+  const nextPollDelay = useCallback(() => {
+    const base = Math.min(MAX_POLL_MS, pollAfter.current * 2 ** misses.current);
+    return Math.round(base * (0.9 + Math.random() * 0.2));
+  }, []);
+
   // Load everything the pages show from the API (GET /v1/workspace, or
   // /v1/public/workspace for visitors) and shape it for the store.
+  // Staff send the cursor from their last load, so the API sends only the
+  // lists that changed (or nothing), which are merged over the last load.
   const loadFromApi = useCallback(async (quiet = true) => {
     const started = ++loadsStarted.current;
     const token = await sessionToken();
-    const res = await fetchWorkspace({ token });
+    const owner = token ? tokenClaims(token)?.sub || null : null;
+    const prev = owner && lastWorkspace.current?.owner === owner ? lastWorkspace.current : null;
+    const res = await fetchWorkspace({ token, cursor: prev?.cursor });
     // A later load has already answered: this one is out of date, so drop it.
     // Otherwise a slow poll could undo a decision saved a moment ago.
     if (started < newestLoadShown.current) return { ok: true };
     newestLoadShown.current = started;
     // Not loaded: keep what we had. An empty plant list would show every tag as unused.
     if (!res.ok) {
-      if (res.offline) { setApiStatus("offline"); setApiError(API_DOWN); }
+      if (res.offline) markMiss();
       console.warn("loadFromApi:", res.message || res.code);
       return { ok: false, message: res.offline ? API_DOWN : res.message };
     }
-    const w = res.data;
+    markReachable();
+    if (res.data?.poll_after_ms) pollAfter.current = res.data.poll_after_ms;
+
+    let w = res.data;
+    if (w?.partial) {
+      // Only changes: there must be a load to put them on, or start again in full.
+      if (!prev) {
+        lastWorkspace.current = null;
+        return { ok: false, message: "Partial update without a full load" };
+      }
+      if (w.unchanged) {
+        lastWorkspace.current = { ...prev, cursor: w.cursor };
+        return { ok: true, unchanged: true };
+      }
+      // The changed lists replace their old copies; a list that failed this time keeps what it had.
+      const unavailable = w.unavailable || [];
+      const lists = Object.fromEntries(Object.entries(w).filter(([name, rows]) => Array.isArray(rows) && name !== "unavailable" && !unavailable.includes(name)));
+      w = { ...prev.data, ...lists, unavailable };
+    }
+    lastWorkspace.current = owner && res.data.cursor ? { owner, data: w, cursor: res.data.cursor } : null;
 
     const photosByObs = new Map();
     for (const ph of w.observation_photos) {
@@ -297,10 +354,20 @@ function collectionMatches(a = [], b = []) {
       const profEqual = collectionMatches(prevDb.profiles, mergedProfiles);
       const zones = w.zones || []; // an API not yet redeployed sends none
       const zonesEqual = collectionMatches(prevDb.zones, zones);
+      // Discussion board (an API not yet redeployed sends none of these)
+      const discussions = w.discussions || [];
+      const discussionAudience = w.discussion_audience || [];
+      const discussionPosts = w.discussion_posts || [];
+      const directory = w.directory || [];
+      const discEqual = collectionMatches(prevDb.discussions, discussions);
+      const audEqual = collectionMatches(prevDb.discussionAudience, discussionAudience);
+      const postsEqual = collectionMatches(prevDb.discussionPosts, discussionPosts);
+      const dirEqual = collectionMatches(prevDb.directory, directory);
 
       const hasChanges = !spEqual || !mediaEqual || !plEqual || !obsEqual || !tagsEqual ||
         !revEqual || !comEqual || !altEqual || !notesEqual || !nodesEqual ||
-        !notifsEqual || !auditEqual || !profEqual || !zonesEqual;
+        !notifsEqual || !auditEqual || !profEqual || !zonesEqual ||
+        !discEqual || !audEqual || !postsEqual || !dirEqual;
 
       // Only change stuff if there's stuff to be changed (prevents image reloads / UI flickering)
       if (!hasChanges) {
@@ -323,14 +390,16 @@ function collectionMatches(a = [], b = []) {
         audit: auditEqual ? prevDb.audit : audit,
         profiles: profEqual ? prevDb.profiles : mergedProfiles,
         zones: zonesEqual ? prevDb.zones : zones,
+        discussions: discEqual ? prevDb.discussions : discussions,
+        discussionAudience: audEqual ? prevDb.discussionAudience : discussionAudience,
+        discussionPosts: postsEqual ? prevDb.discussionPosts : discussionPosts,
+        directory: dirEqual ? prevDb.directory : directory,
       };
     });
 
-    setApiStatus("connected");
-    setApiError(null);
     if (!quiet) notify("Synchronized");
     return { ok: true };
-  }, [notify]);
+  }, [notify, markMiss, markReachable]);
 
   // Reload everything from the API (/v1) and check the signed-in profile
   const syncWithBackend = useCallback(async (quiet = false) => {
@@ -341,13 +410,10 @@ function collectionMatches(a = [], b = []) {
       const ping = await pingBackend();
       if (!ping.online) {
         // Pages keep the last data loaded; nothing new can be saved until it is back.
-        setApiStatus("offline");
-        setApiError(API_DOWN);
+        markMiss();
         return { ok: true };
       }
-
-      setApiStatus("connected");
-      setApiError(null);
+      markReachable();
 
       // Public species from API
       const spRes = await fetchPublicSpecies();
@@ -427,15 +493,20 @@ function collectionMatches(a = [], b = []) {
 
   // Is the Express API up? Checked on load, every 30 s and when the tab comes
   // back into view, so the "API down" notice appears and clears by itself.
+  // GET /v1/health never touches the database, so a busy database does not
+  // look like a dead API. It also says how fast to poll.
   const checkApi = useCallback(async () => {
     const ping = await pingBackend();
-    setApiStatus(ping.online ? "connected" : "offline");
-    setApiError(ping.online ? null : API_DOWN);
+    if (ping.online) {
+      markReachable();
+      if (ping.db?.poll_after_ms) pollAfter.current = ping.db.poll_after_ms;
+    } else markMiss();
     return ping.online;
-  }, []);
-  // A call that could not reach the API marks it down straight away.
+  }, [markMiss, markReachable]);
+  // A call that could not reach the API counts as a miss; any answer clears them.
   const noteOffline = (res) => {
-    if (res?.offline) { setApiStatus("offline"); setApiError(API_DOWN); }
+    if (res?.offline) markMiss();
+    else if (res && res.status > 0) markReachable();
     return res;
   };
   useEffect(() => {
@@ -474,32 +545,9 @@ function collectionMatches(a = [], b = []) {
     code: res.code, status: res.status, retryable: !!res.offline || res.status >= 500 || res.status === 429,
   });
 
-  // New notifications without a reload, on the same 30 s beat and when the tab
-  // comes back: GET /v1/notifications, the signed-in person's own.
-  const refreshNotifications = useCallback(async () => {
-    if (!userId) return;
-    const token = await sessionToken();
-    if (!token) return;
-    const res = await fetchNotificationsApi({ token });
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403 || res.code === "UNAUTHENTICATED") return;
-      return console.warn("refreshNotifications:", res.message);
-    }
-    setDb((prev) => ({ ...prev, notifications: [...res.data, ...prev.notifications.filter((n) => n.user_id !== userId)] }));
-  }, [userId]);
-  useEffect(() => {
-    if (!userId) return undefined;
-    const id = setInterval(refreshNotifications, API_CHECK_MS);
-    const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") refreshNotifications(); };
-    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      clearInterval(id);
-      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [userId, refreshNotifications]);
-
   /* ---------- session & authentication ---------- */
   const logout = async () => {
+    lastWorkspace.current = null;
     setAuthTokenState(null);
     setUserId(null);
     await signOutApi();
@@ -921,6 +969,75 @@ function collectionMatches(a = [], b = []) {
     await loadFromApi(true);
   };
 
+  /* ---------- discussion board ---------- */
+  // A thread from the API ({ ...discussion, audience, posts }) replaces what the
+  // store holds for it; everything else is kept.
+  const mergeThread = useCallback((thread) => setDb((prev) => {
+    const { audience = [], posts = [], ...row } = thread;
+    const others = (list) => (list || []).filter((x) => x.discussion_id !== row.id);
+    return {
+      ...prev,
+      discussions: [row, ...(prev.discussions || []).filter((d) => d.id !== row.id)],
+      discussionAudience: [...others(prev.discussionAudience), ...audience],
+      discussionPosts: [...others(prev.discussionPosts), ...posts],
+    };
+  }), []);
+
+  const dropThread = useCallback((id) => setDb((prev) => ({
+    ...prev,
+    discussions: (prev.discussions || []).filter((d) => d.id !== id),
+    discussionAudience: (prev.discussionAudience || []).filter((a) => a.discussion_id !== id),
+    discussionPosts: (prev.discussionPosts || []).filter((p) => p.discussion_id !== id),
+  })), []);
+
+  // { title, body, visibility, share_users, share_roles, mentions, observation_id }.
+  // Returns the new thread's id, or null. The client-made id makes a resend safe.
+  const startDiscussion = async (thread) => {
+    const res = await callApi(createDiscussionApi, { id: uid(), ...thread });
+    if (!res.ok) { notify(`Could not start the discussion: ${res.message}`); return null; }
+    mergeThread(res.data);
+    notify("Discussion started");
+    return res.data.id;
+  };
+
+  const replyToDiscussion = async (id, body, mentions = []) => {
+    const res = await callApi(addDiscussionPostApi, id, { id: uid(), body, mentions });
+    if (!res.ok) { notify(`Could not send: ${res.message}`); return false; }
+    setDb((prev) => ({
+      ...prev,
+      discussionPosts: [...(prev.discussionPosts || []).filter((p) => p.id !== res.data.id), res.data],
+      discussions: (prev.discussions || []).map((d) => (d.id === id ? { ...d, last_post_at: res.data.created_at } : d)),
+    }));
+    return true;
+  };
+
+  // Owner only: { title?, visibility?, share_users?, share_roles? }
+  const updateDiscussion = async (id, changes) => {
+    const res = await callApi(updateDiscussionApi, id, changes);
+    if (!res.ok) { notify(`Could not save: ${res.message}`); return false; }
+    mergeThread(res.data);
+    notify("Discussion updated");
+    return true;
+  };
+
+  const deleteDiscussion = async (id) => {
+    const res = await callApi(deleteDiscussionApi, id);
+    if (!res.ok) { notify(`Could not delete: ${res.message}`); return false; }
+    dropThread(id);
+    notify("Discussion deleted");
+    return true;
+  };
+
+  // Fresh posts for an open thread. A thread that is gone or no longer shared
+  // with this user is removed from the store.
+  const refreshDiscussion = useCallback(async (id) => {
+    const token = await sessionToken();
+    if (!token) return;
+    const res = await fetchDiscussionApi(id, { token });
+    if (res.ok) mergeThread(res.data);
+    else if (res.status === 404) dropThread(id);
+  }, [mergeThread, dropThread]);
+
   /* ---------- species ---------- */
   // API rows replace the matching species in the store; others are kept as they are.
   const mergeSpecies = (rows) => setDb((prevDb) => {
@@ -1197,6 +1314,7 @@ function collectionMatches(a = [], b = []) {
     logout, login, signIn, changePassword, updateProfile, changeMyPassword,
     setPlantPhotos, addPlant, addRevisit, setPlantSpecies, setPlantLocationHidden,
     syncObservation, resubmit, reviewObservation, addComment,
+    startDiscussion, replyToDiscussion, updateDiscussion, deleteDiscussion, refreshDiscussion,
     saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, setSpeciesPublished, deleteSpecies, restoreSpecies, setSpeciesMedia,
     addUser, updateUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
@@ -1204,6 +1322,7 @@ function collectionMatches(a = [], b = []) {
     apiStatus, apiError, authToken, isSyncing, backendSpeciesCount,
     loadFromApi,
     pollFromBackend: () => loadFromApi(true),
+    nextPollDelay,
     refreshFromBackend: () => syncWithBackend(false),
     loginWithToken,
     getBackendSpeciesById,

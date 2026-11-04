@@ -3,6 +3,7 @@ import { supabaseAnon, supabaseAs, supabaseFresh } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
 import { withSignedUrls } from './field.js';
 import { protectSpecimen } from './distribution.js';
+import { dbLoad } from './dbLoad.js';
 
 // Everything else the apps used to do straight against Supabase: the start-up
 // load, accounts, QR tags, publishing, alerts, sensor thresholds and
@@ -35,6 +36,12 @@ const WORKSPACE = {
   audit_logs: (db) => db.from('audit_logs').select('*').order('changed_at', { ascending: false }),
   profiles: (db) => db.from('profiles').select('*'),
   zones: (db) => db.from('zones').select('*').order('id'),
+  // Discussion board: only the threads this user can read (RLS), and the
+  // people they can share with or mention (names and roles only).
+  discussions: (db) => db.from('discussions').select('*').order('last_post_at', { ascending: false }),
+  discussion_audience: (db) => db.from('discussion_audience').select('*'),
+  discussion_posts: (db) => db.from('discussion_posts').select('*').order('created_at'),
+  directory: (db) => db.rpc('discussion_directory'),
 };
 const CORE = ['qr_tags', 'specimens', 'observations'];
 
@@ -111,18 +118,92 @@ async function setSpecies(req, res, changes) {
   res.json(data);
 }
 
+// ---- Change detection for live updates (migration 20261105000000_table_versions)
+// Each write to a table bumps its counter in table_versions. The app sends back
+// the cursor from its last load; only lists whose table moved since then are
+// loaded again, so a poll when nothing changed is one tiny query.
+
+const FULL_LOAD_EVERY_MS = 12 * 60 * 60 * 1000; // photo links last a day: re-sign well before
+// Lists that have no table of their own, and the table that changes them.
+const SOURCE = { directory: 'profiles' };
+const sourceOf = (list) => SOURCE[list] ?? list;
+// A change to one table can change what another list should show.
+const ALSO_RELOAD = {
+  species: ['specimens'], // a species' status decides how exact its plants' locations are
+  specimens: ['species'], // ...so plants are always protected with fresh statuses
+  discussions: ['discussion_audience', 'discussion_posts'],
+  discussion_audience: ['discussions', 'discussion_posts'], // sharing decides who can see a thread
+};
+
+const encodeCursor = (c) => Buffer.from(JSON.stringify(c)).toString('base64url');
+function decodeCursor(text) {
+  try {
+    const c = JSON.parse(Buffer.from(String(text), 'base64url').toString('utf8'));
+    return c && typeof c.v === 'object' && c.v !== null && Number.isFinite(c.full) ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+// { table: version }, or null when the counters cannot be read (migration not
+// pushed yet): then every load is a full one, as before.
+async function readVersions(db) {
+  const { data, error } = await db.from('table_versions').select('table_name, version');
+  if (error || !Array.isArray(data)) return null;
+  return Object.fromEntries(data.map((r) => [r.table_name, Number(r.version)]));
+}
+
+// Which lists to load, given the cursor the app sent. null means all of them.
+function listsToLoad(versions, prev, user, now) {
+  const usable = versions && prev && prev.u === user.id && prev.r === user.role && now - prev.full < FULL_LOAD_EVERY_MS;
+  if (!usable) return null;
+  const tables = new Set([...Object.keys(versions), ...Object.keys(prev.v)]);
+  const moved = [...tables].filter((t) => (versions[t] ?? 0) !== (prev.v[t] ?? 0));
+  return Object.keys(WORKSPACE).filter((list) =>
+    moved.includes(sourceOf(list)) || moved.some((t) => ALSO_RELOAD[t]?.includes(list)));
+}
+
 export const staffHandlers = {
+  // The start-up load and every live-update poll. With ?cursor= from the last
+  // answer it sends only what changed: { partial: true, <changed lists>,
+  // cursor }, or { partial: true, unchanged: true, cursor } when nothing did.
+  // poll_after_ms tells the app how long to wait before asking again.
   'get /workspace': async (req, res) => {
     const db = supabaseAs(req.user);
     try {
-      const out = await loadWorkspace(db, Object.keys(WORKSPACE));
-      out.observation_photos = await withSignedUrls(db, out.observation_photos);
+      const now = Date.now();
+      // Read before loading, so a write in between shows up on the next poll.
+      const versions = await readVersions(db);
+      const prev = req.query.cursor ? decodeCursor(req.query.cursor) : null;
+      const only = listsToLoad(versions, prev, req.user, now);
+      const partial = only !== null;
+
+      const cursorFor = (failed = []) => {
+        const v = { ...(versions ?? {}) };
+        // A list that failed is asked for again next time.
+        for (const list of failed) v[sourceOf(list)] = partial ? (prev.v[sourceOf(list)] ?? -1) : -1;
+        return encodeCursor({ v, full: partial ? prev.full : now, u: req.user.id, r: req.user.role });
+      };
+
+      if (partial && only.length === 0) {
+        return res.json({ partial: true, unchanged: true, cursor: cursorFor(), poll_after_ms: dbLoad().poll_after_ms });
+      }
+
+      const names = only ?? Object.keys(WORKSPACE);
+      const loaded = await loadWorkspace(db, names);
+      if (names.includes('observation_photos')) loaded.observation_photos = await withSignedUrls(db, loaded.observation_photos);
       // RLS lets every signed-in user read every plant, so reduce endangered
       // spots here, as /distribution does (CTIP-71, threat T13).
-      const statusOf = new Map(out.species.map((s) => [s.id, s.conservation_status ?? null]));
-      out.specimens = out.specimens.map((s) =>
-        protectSpecimen(s, { role: req.user.role, userId: req.user.id, status: statusOf.get(s.species_id) }));
-      res.json(out);
+      if (names.includes('specimens')) {
+        const statusOf = new Map(loaded.species.map((s) => [s.id, s.conservation_status ?? null]));
+        loaded.specimens = loaded.specimens.map((s) =>
+          protectSpecimen(s, { role: req.user.role, userId: req.user.id, status: statusOf.get(s.species_id) }));
+      }
+
+      const out = partial
+        ? { partial: true, ...Object.fromEntries(names.map((n) => [n, loaded[n]])), unavailable: loaded.unavailable }
+        : { partial: false, ...loaded };
+      res.json({ ...out, cursor: cursorFor(loaded.unavailable), poll_after_ms: dbLoad().poll_after_ms });
     } catch (error) {
       dbError(res, error);
     }
