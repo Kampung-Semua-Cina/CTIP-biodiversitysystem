@@ -7,6 +7,8 @@ import MiniMap from "../components/MiniMap.jsx";
 import NewSpeciesButton from "../components/NewSpeciesButton.jsx";
 import SendTo from "../components/SendTo.jsx";
 import { Chip, Empty, Mono, Pills, Sci } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
+import { decisionPrompt } from "../decisionPrompt.jsx";
 import { useStore } from "../../../shared/store.js";
 import { nameOf, plantView } from "../../../shared/selectors.js";
 import { fmtDate, fmtDateTime } from "../../../shared/utils.js";
@@ -143,6 +145,7 @@ function ReviewDetail({ obs, onDecided }) {
   const history = db.reviews.filter((r) => r.observation_id === obs.id);
   const species = db.species.filter((s) => !s.is_deleted).sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
   const [hideChoice, setHideChoice] = useState(null); // null until the officer changes it
+  const [ask, confirmDialog] = useConfirm();
   const open = obs.status === "synced"; // only records waiting for review can be decided
 
   // Where this visit was recorded; older records only have the plant's position.
@@ -155,9 +158,15 @@ function ReviewDetail({ obs, onDecided }) {
   const alwaysHidden = hideRule.locked;
   const hideLocation = hideRule.on;
 
+  const publishSpecies = async () => {
+    if (!(await ask({ title: "Make species public", body: <p>Publish <i className="sci">{plant.species.scientific_name}</i> in the public catalogue? Everyone will be able to see it.</p>, confirmLabel: "Make public", word: "PUBLISH" }))) return;
+    setSpeciesPublished(plant.species.id, true);
+  };
+
   const decide = async (decision) => {
     if (decision !== "approve" && !comment.trim()) return notify("Add a note so the botanist knows why");
     if (decision === "approve" && !plant.species) return notify("Confirm the species before approving");
+    if (!(await ask(decisionPrompt(decision, plant.qr_id, { hidden: hideLocation, hasCoords, speciesPublished: plant.species?.is_published })))) return;
     setDeciding(true);
     if (decision === "approve" && !alwaysHidden && hideLocation !== !!rawPlant.endangered_override) {
       if (!(await setPlantLocationHidden(rawPlant.id, hideLocation))) return setDeciding(false);
@@ -169,6 +178,7 @@ function ReviewDetail({ obs, onDecided }) {
 
   return (
     <article className="glass pad rdetail" aria-label={`Record for ${plant.qr_id}`}>
+      {confirmDialog}
       <div className="rhead">
         <div>
           <h2>{plant.name}</h2>
@@ -226,7 +236,7 @@ function ReviewDetail({ obs, onDecided }) {
       {open && plant.species && !plant.species.is_published && (
         <div className="callout" role="status">
           <p><b>This species is not published.</b> Visitors will not see this plant until it is, even after you approve it.</p>
-          <p><button type="button" className="btn ghost" onClick={() => setSpeciesPublished(plant.species.id, true)}>Publish species</button></p>
+          <p><button type="button" className="btn ghost" onClick={publishSpecies}>Publish species</button></p>
         </div>
       )}
 

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Chip, PasswordInput } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import { useStore } from "../../../shared/store.js";
 import { ROLE_LABEL } from "../../../shared/permissions.js";
 import { PHOTO_TYPES, fmtDate } from "../../../shared/utils.js";
@@ -33,6 +34,12 @@ export default function Account() {
 
 function PhotoCard({ me }) {
   const { updateProfile, notify } = useStore();
+  const [ask, confirmDialog] = useConfirm();
+
+  const removePhoto = async () => {
+    if (!(await ask({ title: "Remove profile photo", body: "Remove your profile photo? Your initials will be shown instead.", confirmLabel: "Remove photo", danger: true }))) return;
+    updateProfile({ avatar_url: null });
+  };
 
   const pick = (e) => {
     const file = e.target.files[0];
@@ -61,7 +68,7 @@ function PhotoCard({ me }) {
               <input type="file" accept={PHOTO_TYPES.join(",")} onChange={pick} hidden />
             </label>
             {me.avatar_url && (
-              <button className="btn ghost" onClick={() => updateProfile({ avatar_url: null })}>
+              <button className="btn ghost" onClick={removePhoto}>
                 <Icon name="trash" size={16} /> Remove
               </button>
             )}
@@ -69,6 +76,7 @@ function PhotoCard({ me }) {
           <p className="mute small">JPG, PNG or WebP, up to 2 MB. Without a photo your initials are shown.</p>
         </div>
       </div>
+      {confirmDialog}
     </section>
   );
 }
@@ -115,10 +123,13 @@ function PasswordCard() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
+  const [ask, confirmDialog] = useConfirm();
 
   const save = async (e) => {
     e.preventDefault();
     if (next !== again) return notify("The new passwords do not match");
+    if (next === current) return notify("Choose a password different from your current one");
+    if (!(await ask({ title: "Change password", body: "You are about to change the password you sign in with. Use the new one from now on.", confirmLabel: "Change password", word: "CHANGE" }))) return;
     const res = await changeMyPassword(current, next);
     if (!res.ok) return notify(res.message);
     setCurrent("");
@@ -139,6 +150,7 @@ function PasswordCard() {
           <button className="btn" type="submit">Change password</button>
         </div>
       </form>
+      {confirmDialog}
     </section>
   );
 }

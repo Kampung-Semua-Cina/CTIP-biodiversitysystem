@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Icon from "./Icon.jsx";
 import { Modal } from "./Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import { useStore } from "../../../shared/store.js";
 import { CONSERVATION } from "../../../shared/data.js";
 import { label } from "../../../shared/utils.js";
@@ -14,6 +15,7 @@ export default function SpeciesForm({ species, onClose, onSaved, onManagePhotos,
   const [form, setForm] = useState(species);
   const [publish, setPublish] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [ask, confirmDialog] = useConfirm();
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const save = async (e) => {
@@ -23,6 +25,7 @@ export default function SpeciesForm({ species, onClose, onSaved, onManagePhotos,
     if (db.species.some((s) => !s.is_deleted && s.id !== form.id && s.scientific_name.toLowerCase() === name.toLowerCase())) {
       return notify("This species is already in the list");
     }
+    if (offerPublish && publish && !(await ask({ title: "Make species public", body: <p>Publish <i className="sci">{name}</i> in the public catalogue? Everyone will be able to see it.</p>, confirmLabel: "Save & make public", word: "PUBLISH" }))) return;
     setSaving(true);
     const r = await saveSpecies({ ...form, scientific_name: name, conservation_status: form.conservation_status || "not evaluated" });
     if (r.ok && offerPublish && publish) await setSpeciesPublished(r.species.id, true);
@@ -32,6 +35,7 @@ export default function SpeciesForm({ species, onClose, onSaved, onManagePhotos,
 
   return (
     <Modal title={form.id ? "Edit species" : "Add species"} onClose={onClose}>
+      {confirmDialog}
       <form onSubmit={save}>
         <label>Scientific name<input value={form.scientific_name} onChange={set("scientific_name")} required autoFocus={!form.id} /></label>
         <label>Common name<input value={form.common_name || ""} onChange={set("common_name")} /></label>

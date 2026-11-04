@@ -44,6 +44,8 @@ test("an officer creates a new species from the review screen and it is linked t
   await dialog.getByLabel("Scientific name").fill("Rafflesia keithii");
   await dialog.getByLabel("Family").fill("Rafflesiaceae");
   await dialog.getByRole("button", { name: "Save species" }).click();
+  await page.getByRole("textbox", { name: /Type PUBLISH/ }).fill("PUBLISH");
+  await page.getByRole("button", { name: "Save & make public" }).click();
 
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".rdetail select")).toHaveValue("44444444-4444-4444-8444-444444444444");
@@ -59,6 +61,8 @@ test("a vulnerable plant's location is hidden by default when it is approved", a
   const box = page.getByRole("checkbox", { name: /Hide the exact location/ });
   await expect(box).toBeChecked();
   await page.getByRole("button", { name: /Approve/ }).click();
+  await page.getByRole("textbox", { name: /Type PUBLISH/ }).fill("PUBLISH");
+  await page.getByRole("dialog").getByRole("button", { name: "Approve & publish" }).click();
   await expect.poll(() => state.writes.map((w) => w.path)).toContain(`/observations/${observation(1).id}/reviews`);
   const paths = state.writes.map((w) => w.path);
   expect(paths.indexOf(`/specimens/${specimen(1).id}`)).toBeLessThan(paths.indexOf(`/observations/${observation(1).id}/reviews`));
