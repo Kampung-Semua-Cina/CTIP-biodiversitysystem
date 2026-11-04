@@ -400,6 +400,7 @@ function collectionMatches(a = [], b = []) {
       if (!mounted) return;
       setUserId(null);
       setAuthTokenState(null);
+      setDb(seed); // F-13: drop the staff data when the session ends
       notify("Your session has ended. Please sign in again.");
       loadFromApi(true);
     });
@@ -501,7 +502,6 @@ function collectionMatches(a = [], b = []) {
   /* ---------- session & authentication ---------- */
   const logout = async () => {
     setAuthTokenState(null);
-    setDb(seed); // F-13: drop the staff data when the session ends
     setUserId(null);
     // F-13: forget the staff data (exact endangered locations) straight away,
     // so the next person on this browser or phone cannot see it without a reload.
