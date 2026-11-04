@@ -51,14 +51,6 @@ async function takePhoto() {
 // Pick photo(s) from device image gallery.
 async function pickFromGallery() {
   try {
-    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!lib.granted) {
-      const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!ask.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to choose images.');
-        return [];
-      }
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -298,7 +290,7 @@ function SetByHand({ typed, gps, qr, protect, onChange }) {
 }
 
 export function AddPlant({ nav, params = {} }) {
-  const { db, addPlant, generateTags } = useStore();
+  const { db, me, addPlant, generateTags } = useStore();
   const { c } = useTheme();
   const [qr, setQr] = useState(params.qr || '');
   const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
@@ -342,14 +334,6 @@ export function AddPlant({ nav, params = {} }) {
 
   const pickQrFromGallery = async () => {
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) {
-        const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!ask.granted) {
-          Alert.alert('Permission needed', 'Allow photo library access to choose images.');
-          return;
-        }
-      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 1,
@@ -424,9 +408,9 @@ export function AddPlant({ nav, params = {} }) {
   useEffect(() => {
     if (!qr) return;
     if (sp || looks || height || notes || photos.length > 0) {
-      saveDraft(qr, { proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
+      saveDraft(qr, { user_id: me?.id, proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
     }
-  }, [qr, sp, picked, looks, height, notes, photos, gps]);
+  }, [qr, me?.id, sp, picked, looks, height, notes, photos, gps]);
 
   if (showQr && qr) {
     return <TagQrView qr={qr} onBack={() => setShowQr(false)} />;
