@@ -248,4 +248,30 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
       'Scan.js must launch photo picker directly'
     );
   });
+
+  // -------------------------------------------------------------------------
+  // 5. Bug Fix: Local plant drafts from draftStore show up in My Records
+  // -------------------------------------------------------------------------
+  test('MyRecords: offline plant drafts from draftStore are discoverable and match search', async () => {
+    const draftTag = 'NIAH-TEST-DRAFT-99';
+    await saveDraft(draftTag, {
+      proposed_species: 'Nepenthes lowii',
+      notes: 'Pitcher plant on mountain ridge',
+      photos: [{ url: 'file:///photo1.jpg' }],
+    });
+
+    const drafts = await listDrafts();
+    const found = drafts.find((d) => d.qr_id === draftTag);
+    assert.ok(found, 'Local draft should be in listDrafts()');
+    assert.equal(found.proposed_species, 'Nepenthes lowii');
+
+    // draftMatches filtering works
+    const { draftMatches } = await import('../../shared/selectors.js');
+    assert.ok(draftMatches(found, 'lowii'), 'Draft matches query "lowii"');
+    assert.ok(draftMatches(found, 'DRAFT-99'), 'Draft matches query by tag substring');
+    assert.ok(!draftMatches(found, 'orchid'), 'Draft does not match irrelevant query');
+
+    // Clean up
+    await clearAllDrafts();
+  });
 });

@@ -1,7 +1,7 @@
 // apps/mobile/pages/Records.js
 // A botanist's own records, grouped by what needs doing, and one record in detail
 // (with the officer's note and "Resubmit" when it was returned).
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
@@ -14,6 +14,7 @@ import {
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
+import { listDrafts } from '../draftStore.js';
 
 const GROUPS = [
   { key: 'fix', title: 'Needs you', statuses: ['returned', 'draft'] },
@@ -36,7 +37,47 @@ export function MyRecords({ nav }) {
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('newest');
   const [q, setQ] = useState('');
+  const [localDrafts, setLocalDrafts] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    listDrafts().then((items) => {
+      if (active) setLocalDrafts(items || []);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [db]);
+
   const unfinished = unfinishedPlants(db, me?.id);
+
+  // Exclude tags that already have synced/approved/rejected observations by this user
+  const settledTags = new Set(
+    db.observations
+      .filter((o) => o.recorded_by === me?.id && (o.status === 'synced' || o.status === 'approved' || o.status === 'rejected'))
+      .map((o) => db.plants.find((p) => p.id === o.specimen_id)?.qr_id)
+      .filter(Boolean)
+  );
+
+  // Combine server unfinished plants with local device crash-safe drafts (CTIP-57)
+  const combinedUnfinished = [...unfinished];
+  for (const d of localDrafts) {
+    if (!d.qr_id || settledTags.has(d.qr_id)) continue;
+    const existingIdx = combinedUnfinished.findIndex((p) => p.qr_id === d.qr_id);
+    if (existingIdx >= 0) {
+      combinedUnfinished[existingIdx] = {
+        ...combinedUnfinished[existingIdx],
+        proposed_species: d.proposed_species || combinedUnfinished[existingIdx].proposed_species,
+        photos: d.photos?.length ? d.photos : combinedUnfinished[existingIdx].photos,
+      };
+    } else {
+      combinedUnfinished.unshift({
+        id: `draft-${d.qr_id}`,
+        qr_id: d.qr_id,
+        proposed_species: d.proposed_species || 'Unnamed plant',
+        photos: d.photos || [],
+        is_local_draft: true,
+      });
+    }
+  }
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id)
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
@@ -49,9 +90,13 @@ export function MyRecords({ nav }) {
     });
 
   const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
-  const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
+  const filteredUnfinished = combinedUnfinished.filter((p) => draftMatches(p, q));
 
-  const count = (g) => filteredMine.filter((o) => g.statuses.includes(o.status)).length;
+  const count = (g) => {
+    const obsCount = filteredMine.filter((o) => g.statuses.includes(o.status)).length;
+    if (g.key === 'fix') return obsCount + filteredUnfinished.length;
+    return obsCount;
+  };
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
   // A plant's later visits are labelled as revisits.
   const isRevisit = (o) => db.observations.some((x) => x.specimen_id === o.specimen_id && x.observed_at < o.observed_at);
@@ -67,7 +112,7 @@ export function MyRecords({ nav }) {
       <Pills
         value={filter}
         onChange={setFilter}
-        items={[{ key: 'all', label: `All ${filteredMine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
+        items={[{ key: 'all', label: `All ${filteredMine.length + filteredUnfinished.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
       />
       <SortBar items={SORT_RECORDS} value={sort} onChange={setSort} />
       {filteredUnfinished.length > 0 && (filter === 'all' || filter === 'fix') ? (
@@ -91,7 +136,8 @@ export function MyRecords({ nav }) {
                   gap: 12,
                 }}
               >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  {p.photos && p.photos[0]?.url ? <Thumb uri={p.photos[0]?.url} /> : null}
                   <View style={{ flex: 1, gap: 4 }}>
                     <Txt v="label" style={{ fontSize: 16 }}>{p.proposed_species || 'Unnamed plant'}</Txt>
                     <Mono size={13}>{p.qr_id}</Mono>
