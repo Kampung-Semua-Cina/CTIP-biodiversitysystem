@@ -85,9 +85,9 @@ export const routes = [
 
   // Sensors
   ['get', '/sensor-nodes', OFFICER_ADMIN],
-  ['post', '/sensor-nodes', OFFICER_ADMIN],
+  ['post', '/sensor-nodes', ADMIN], // registering nodes is the admin's (CTIP-48)
   ['get', '/sensor-nodes/:id', OFFICER_ADMIN],
-  ['patch', '/sensor-nodes/:id', OFFICER_ADMIN],
+  ['patch', '/sensor-nodes/:id', OFFICER_ADMIN], // officers: alert limits only (database trigger); open decision
   ['get', '/sensor-nodes/:id/telemetry', OFFICER_ADMIN],
   ['post', '/telemetry', SENSOR],
   ['get', '/sensor-nodes/:id/images', OFFICER_ADMIN],

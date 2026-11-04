@@ -542,7 +542,7 @@ Contract: both new paths; `deleted_at`, `deleted_by` on `Profile`; new `EmailLim
 # Since commit `7126118`: security fixes (conservation status, files that are not pictures)
 
 *Written 5 Nov 2026. Web app, mobile app (sorting only), shared code and one database
-migration. No API or contract change. Nothing below is committed yet.*
+migration. No API or contract change. Committed in `5c8f01e`.*
 
 Two findings from security testing:
 
@@ -685,4 +685,103 @@ photo: only the real photo is added.
 - **Mobile photo pickers** were not changed. Every one asks the phone for pictures only
   (`mediaTypes: ['images']` in `apps/mobile/pages/AddPlant.js` and `pages/Scan.js`), and the API
   refuses anything else.
+
+---
+
+# Since commit `5c8f01e`: sensor node access (who monitors, who manages)
+
+*Written 5 Nov 2026. API permissions, contract and one database migration. No change to the
+web or mobile pages. Nothing below is committed yet.*
+
+The agreed access to the IoT sensor nodes, and how the repository now matches it:
+
+| | Botanist | Officer | Admin |
+|---|---|---|---|
+| See nodes, live readings and history | No | Yes | Yes |
+| See webcam images | No | Yes | Yes |
+| Receive, acknowledge and resolve alerts | No | Yes | Yes |
+| Register, edit and deactivate nodes; manage device keys | No | No | Yes |
+| Choose which officers get alerts for each node | No | No | Yes |
+
+- **Botanists get no access** because each node sits next to an endangered plant, so its
+  position gives away the plant's exact spot. Botanists only see exact coordinates for plants
+  they registered themselves.
+- **Officers monitor** because they are the people who act on a disturbance (CTIP-77
+  notifications, CTIP-78 acknowledge and resolve). The final report should say this is an
+  extension for rapid response; the scope itself only requires the Admin.
+- **Only admins manage devices**: CTIP-48 ("Admin can register, edit and deactivate a sensor
+  node"), CLAUDE.md (IoT node registration under the System Administrator), and least
+  privilege, since device keys are credentials.
+
+## Before this goes live
+
+- [ ] Tell Amberlyn, then dry-run and push
+      `supabase/migrations/20261105200000_sensor_nodes_admin_manage.sql`.
+- [ ] **Two approvals on the PR:** `packages/api-contract/openapi.yaml` changed (team rule).
+- [ ] **Team decision: alert limits** ([below](#open-decision-who-may-change-a-nodes-alert-limits)).
+- [ ] Redeploy the API on Render after merging.
+
+## What already matched (checked 5 Nov 2026)
+
+| Requirement | Where it is enforced |
+|---|---|
+| Botanists cannot reach any sensor or alert route | Every route in `services/api/src/permissions.js` is officer/admin. The page check confirmed a botanist gets "You can't open this page" on `#/monitoring`. |
+| Botanists cannot read sensor data from the database | RLS on `sensor_nodes`, `telemetry`, `alerts`, `alert_notes`, `sensor_images` and the `sensor-images` bucket: officer and admin only |
+| No Monitoring menu for botanists | The `monitor` permission (`apps/shared/permissions.js`) is officer and admin only, on web and mobile. The plant page's Sensor tab only appears when the node loads, which RLS prevents for botanists. |
+| Alert notifications only reach officers and admins | `notify_on_alert_created()` sends to active officers and admins only. Botanists keep their notifications (`ANY_STAFF`) safely. |
+
+## What changed
+
+| Before | Now | Where |
+|---|---|---|
+| `POST /sensor-nodes` (register a node) allowed officers and admins | **Admins only**. The route still answers 501 (not built), so nothing stops working. | `services/api/src/permissions.js`, contract |
+| The database let officers insert, update and **delete** nodes (policy `nodes: staff`, for all actions) | Read: officers and admins. Register and delete: **admins only**. Change: admins anything, **officers only the alert limits** (`thresholds`), checked by a trigger that compares the whole row. | `supabase/migrations/20261105200000_sensor_nodes_admin_manage.sql` |
+| No test pinned the sensor access | A test lists every sensor and alert route: none may allow botanists, and registering nodes must be admin only | `services/api/test/rbac.test.js` |
+
+Fixing the API alone would have left the database open: the API runs each query as the user,
+but someone with an officer's token could change or delete a node straight through Supabase.
+The migration closes that, so the database is a second layer, as everywhere else.
+
+Writes with no signed-in user (the coming telemetry ingest setting `last_seen` or `status`,
+and migrations) are not limited by the new trigger.
+
+## Open decision: who may change a node's alert limits
+
+The Monitoring page has a form for each node's alert limits: the highest temperature and the
+lowest soil moisture before an alert is raised. It saves through `PATCH /sensor-nodes/:id`
+(`setThresholds` in `apps/shared/StoreProvider.js`, `apps/web/src/pages/SensorOverview.jsx`).
+**Officers and admins both use it today.** Earlier notes said this route still answered 501;
+it is built, so making it admin-only would now take something away from officers.
+
+Is setting alert limits "editing a node" (admin only), or part of monitoring (officers too)?
+
+| | Option A: admins only | Option B: officers keep it (current) |
+|---|---|---|
+| Fits | CTIP-48 read strictly ("edit a sensor node"), least privilege, the scope | How the officers work: the people who respond also tune when they are called |
+| Risk | Officers must ask an admin to change a limit | An officer could raise a limit so high that real disturbances raise no alert, and nobody would see who did it: `sensor_nodes` has no audit trigger today (only species, specimens, observations, alerts and profiles do). |
+| Work | Change `PATCH /sensor-nodes/:id` to `ADMIN` in `permissions.js`; drop `'officer'` from the `nodes: update` policy and the officer branch of `guard_sensor_node_update()` (new migration); show the form to admins only in `SensorOverview.jsx`; update the contract | None. Say in the final report and the threat model that officers may set alert limits. |
+
+**Until the team decides, Option B stands:** officers can change the limits, and nothing else
+about a node.
+
+Whichever is chosen, update `docs/security/threat-modelling.md`. Lines 44 and 56 say only the
+Admin reads alerts, which matches the scope, but the API also lets officers read and handle
+alerts. Add officers there if they keep alert access, and mention alert limits if Option B stays.
+
+## Still to build (not permissions)
+
+- **Device keys** per node: today one shared `X-Sensor-Key` from the API's `.env` (CTIP-48).
+- **Choosing which officers get alerts for each node:** only per-alert assignment exists
+  (`POST /alerts/:id/assign`, officers and admins). Per-node routing is not built.
+- `POST /sensor-nodes`, `GET /sensor-nodes/:id`, `/telemetry` and the webcam image routes still
+  answer 501.
+
+## Tests
+
+- API: **180/180 pass**, including the new sensor-access test in `rbac.test.js`. The existing
+  role test still checks every route: an officer now gets 403 on `POST /sensor-nodes`.
+- The contract lints with no errors.
+- **Not tested:** the migration against the database (not pushed yet). After the push, check:
+  - as an officer, saving alert limits on the Monitoring page still works
+  - as an officer, changing a node's status through Supabase directly is refused
 

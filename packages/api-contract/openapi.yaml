@@ -1371,7 +1371,7 @@ paths:
     post:
       tags: [Sensors]
       operationId: createSensorNode
-      summary: Register a sensor node (officer/admin)
+      summary: Register a sensor node (admin only, CTIP-48)
       requestBody:
         required: true
         content:
@@ -1402,6 +1402,10 @@ paths:
       tags: [Sensors]
       operationId: updateSensorNode
       summary: Update status or alert thresholds
+      description: >
+        Officers may change the alert limits (thresholds) only; anything else
+        about a node is the admin's. The database enforces this too (migration
+        20261105200000_sensor_nodes_admin_manage).
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:

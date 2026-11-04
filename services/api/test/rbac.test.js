@@ -128,3 +128,19 @@ test('unknown paths outside /v1 get a JSON 404', async () => {
   assert.equal(res.status, 404);
   assert.equal(res.body.code, 'NOT_FOUND');
 });
+
+// The agreed sensor access (CTIP-48, CTIP-77, CTIP-78), written out so a change to
+// permissions.js cannot quietly widen it: botanists nothing (a node gives away an
+// endangered plant's spot), officers monitor and handle alerts, admins also manage nodes.
+test('sensor and alert access: botanist none, officer monitors, only admin registers nodes', () => {
+  const who = (method, path) => routes.find(([m, p]) => m === method && p === path)?.[2];
+  assert.deepEqual(who('post', '/sensor-nodes'), ['admin']);
+  for (const [method, path] of [
+    ['get', '/sensor-nodes'], ['get', '/sensor-nodes/:id'], ['patch', '/sensor-nodes/:id'],
+    ['get', '/sensor-nodes/:id/telemetry'], ['get', '/sensor-nodes/:id/images'],
+    ['get', '/alerts'], ['get', '/alerts/:id'], ['post', '/alerts/:id/acknowledge'], ['post', '/alerts/:id/resolve'],
+  ]) {
+    const roles = who(method, path);
+    assert.ok(Array.isArray(roles) && !roles.includes('botanist'), `${method} ${path} must not allow botanists`);
+  }
+});
