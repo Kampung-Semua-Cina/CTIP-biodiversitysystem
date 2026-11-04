@@ -10,6 +10,7 @@ const notImplemented = (req, res) =>
 
 export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [], requireHttps = false, trustProxy = false }) {
   const app = express();
+    app.disable('x-powered-by'); // F-12: don't tell attackers we run Express
   app.set('trust proxy', trustProxy);
   if (requireHttps) app.use(httpsOnly());
   app.use(cors({ origin: corsOrigins }));
