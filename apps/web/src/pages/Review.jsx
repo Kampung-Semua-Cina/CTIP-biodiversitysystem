@@ -232,7 +232,13 @@ function ReviewDetail({ obs, onDecided }) {
 
       {open && hasCoords && (
         <label className="check hidespot">
-          <input type="checkbox" checked={hideLocation} disabled={alwaysHidden} onChange={(e) => setHideChoice(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={hideLocation}
+            disabled={alwaysHidden}
+            onChange={(e) => setHideChoice(e.target.checked)}
+            aria-label="Hide the exact location from the public"
+          />
           <span>
             <b>{HIDE_LOCATION_LABEL}</b>
             <small className="mute block">{alwaysHidden ? "" : "Saved when you approve. "}{hideRule.hint}</small>

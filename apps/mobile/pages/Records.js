@@ -5,11 +5,12 @@ import React, { useState } from 'react';
 import { View, Text } from 'react-native';
 
 import { useStore } from '../../shared/store.js';
-import { plantView, nameOf } from '../../shared/selectors.js';
+import { plantView, nameOf, unfinishedPlants, recordMatches, draftMatches } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
+import PlantSpotMap from '../components/PlantSpotMap.js';
 import {
-  Screen, Bar, TitleBlock, Pills, SortBar, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
+  Screen, Bar, TitleBlock, Pills, SortBar, SearchField, Section, Row, Thumb, Mono, Txt, Sci, DotLabel, Notice, KV, Button, Area, Avatar, Empty, Field,
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
@@ -34,6 +35,8 @@ export function MyRecords({ nav }) {
   const { c } = useTheme();
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('newest');
+  const [q, setQ] = useState('');
+  const unfinished = unfinishedPlants(db, me?.id);
   const mine = db.observations
     .filter((o) => o.recorded_by === me?.id)
     .map((o) => ({ ...o, plant: plantView(db, db.plants.find((p) => p.id === o.specimen_id)) }))
@@ -44,7 +47,11 @@ export function MyRecords({ nav }) {
       if (sort === 'tag') return (a.plant?.qr_id || '').localeCompare(b.plant?.qr_id || '');
       return b.observed_at.localeCompare(a.observed_at);
     });
-  const count = (g) => mine.filter((o) => g.statuses.includes(o.status)).length;
+
+  const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
+  const filteredUnfinished = unfinished.filter((p) => draftMatches(p, q));
+
+  const count = (g) => filteredMine.filter((o) => g.statuses.includes(o.status)).length;
   const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
   // A plant's later visits are labelled as revisits.
   const isRevisit = (o) => db.observations.some((x) => x.specimen_id === o.specimen_id && x.observed_at < o.observed_at);
@@ -52,15 +59,62 @@ export function MyRecords({ nav }) {
   return (
     <Screen gap={18}>
       <TitleBlock title="My records" sub={me?.full_name} />
+      <SearchField
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search records by plant, species or tag"
+      />
       <Pills
         value={filter}
         onChange={setFilter}
-        items={[{ key: 'all', label: `All ${mine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
+        items={[{ key: 'all', label: `All ${filteredMine.length}` }, ...GROUPS.filter((g) => count(g)).map((g) => ({ key: g.key, label: `${g.title === 'Needs you' ? 'To fix' : g.title} ${count(g)}` }))]}
       />
       <SortBar items={SORT_RECORDS} value={sort} onChange={setSort} />
-      {mine.length === 0 ? <Empty icon="file">No records yet. Scan an unused tag to add your first plant.</Empty> : null}
+      {filteredUnfinished.length > 0 && (filter === 'all' || filter === 'fix') ? (
+        <View style={{ gap: 12, marginBottom: 8 }}>
+          <Notice
+            tone="warning"
+            icon="file"
+            title="Not sent yet"
+            body={`${filteredUnfinished.length === 1 ? 'This plant was' : 'These plants were'} saved as a draft, but the record did not reach the server. Finish and send to put it in the review queue.`}
+          />
+          <View style={{ gap: 14 }}>
+            {filteredUnfinished.map((p) => (
+              <View
+                key={p.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: c.warningLine || c.line,
+                  backgroundColor: c.surface,
+                  gap: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Txt v="label" style={{ fontSize: 16 }}>{p.proposed_species || 'Unnamed plant'}</Txt>
+                    <Mono size={13}>{p.qr_id}</Mono>
+                  </View>
+                  <DotLabel status="draft" label="Draft" />
+                </View>
+                <Button
+                  label="Finish and send"
+                  icon="send"
+                  size={14}
+                  height={42}
+                  onPress={() => nav.go('add', { qr: p.qr_id })}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {filteredMine.length === 0 && filteredUnfinished.length === 0 ? (
+        <Empty icon="file">{q.trim() ? `No records match "${q.trim()}".` : 'No records yet. Scan an unused tag to add your first plant.'}</Empty>
+      ) : null}
       {groups.map((g, gi) => {
-        const rows = mine.filter((o) => g.statuses.includes(o.status));
+        const rows = filteredMine.filter((o) => g.statuses.includes(o.status));
         return (
           <Section key={g.key} title={g.title} top={gi > 0} gap={0}>
             {rows.map((o, i) => (
@@ -189,10 +243,12 @@ export function RecordDetail({ nav, params = {} }) {
           ['Height', o.height_cm ? `${o.height_cm} cm` : '-'],
           ['Appearance', o.morphology || '-'],
           ['Notes', o.notes || '-'],
-          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(plant.lat, plant.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{plant.lat != null ? accuracy(o.gps_accuracy_m ?? plant.gps_accuracy_m) : ''}</Text></Text>],
+          ['Location', <Text key="l" style={{ fontFamily: font('mono', 500), fontSize: 14, color: c.ink }}>{coords(o.lat ?? plant?.lat, o.lng ?? plant?.lng)} <Text style={{ fontFamily: font('text', 400), color: c.ink2 }}>{(o.lat ?? plant?.lat) != null ? accuracy(o.gps_accuracy_m ?? plant?.gps_accuracy_m) : ''}</Text></Text>],
           ['Version', `${o.version}`],
         ]} />
       </Section>
+
+      <PlantSpotMap title="Observed location" lat={o.lat ?? plant?.lat} lng={o.lng ?? plant?.lng} plant={plant} />
 
       {returned ? <Area label="Reply to the officer" optional value={message} onChangeText={setMessage} placeholder="What did you change?" rows={2} /> : null}
       {o.status === 'approved' ? <Button label="Open plant page" kind="secondary" onPress={() => nav.go('tag', { qr: plant.qr_id })} /> : null}

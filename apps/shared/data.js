@@ -18,6 +18,14 @@ export const BLANK_SPECIES = {
 // Statuses whose exact locations are hidden from visitors. Matches the API (distribution.js).
 export const THREATENED = ["endangered", "critically endangered"];
 
+/**
+ * Returns true if the given conservation status represents a threatened species
+ * whose location is always locked to hidden (endangered, critically endangered).
+ * Normalizes input by trimming and lowercasing for case-insensitive protection matching.
+ */
+export const isThreatened = (status) =>
+  THREATENED.includes(String(status || "").trim().toLowerCase());
+
 // One rule and one wording for hiding a plant's exact location, on the website and
 // in the app. The GPS reading is always kept for officers; only the public view
 // changes, and the plant's details and photos stay visible.
@@ -25,8 +33,9 @@ export const THREATENED = ["endangered", "critically endangered"];
 // `choice` is what the officer ticked on this screen (null until they change it).
 export const HIDE_LOCATION_LABEL = "Hide the exact location from the public";
 export function hideLocationRule(status, override, choice = null) {
-  const locked = THREATENED.includes(status);
-  const byDefault = status === "vulnerable";
+  const norm = String(status || "").trim().toLowerCase();
+  const locked = isThreatened(norm);
+  const byDefault = norm === "vulnerable";
   const first = locked ? "Always on for endangered species. " : byDefault ? "On by default for vulnerable species. " : "";
   return {
     locked,

@@ -2,7 +2,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, UUID } from './validate.js';
-import { detectImageType, EXTENSIONS } from './images.js';
+import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 import { protectSpecimen } from './distribution.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
@@ -78,14 +78,14 @@ const findObservation = (db, req) => visibleTo(
   req.user,
 ).maybeSingle();
 
-// The bucket also takes HEIC (iPhone camera); detectImageType covers the other three.
+// HEIC (iPhone camera) is recognised only so it can be refused with a clear message:
+// stripMetadata cannot remove its location (CTIP-110). detectImageType covers the other three.
 function photoType(buf) {
   const known = detectImageType(buf);
   if (known) return known;
   const brand = buf.length >= 12 && buf.toString('latin1', 4, 8) === 'ftyp' ? buf.toString('latin1', 8, 12) : '';
   return ['heic', 'heix', 'mif1', 'msf1'].includes(brand) ? 'image/heic' : null;
 }
-const PHOTO_EXT = { ...EXTENSIONS, 'image/heic': 'heic' };
 
 const receive = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES, files: 1, fields: 5 } })
   .single('file');
@@ -260,7 +260,9 @@ export const fieldHandlers = {
     }
     if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
     const type = photoType(req.file.buffer);
-    if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG, WebP or HEIC');
+    if (!type || type === 'image/heic') {
+      return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP. HEIC photos can carry their location, so they are not accepted.');
+    }
     const photoId = req.body?.id ?? crypto.randomUUID();
     if (!UUID.test(photoId)) return fail(res, 422, 'VALIDATION_ERROR', 'id must be a UUID');
     const notes = PhotoNotes.safeParse({ caption: req.body?.caption, traits: [req.body?.traits ?? []].flat() });
@@ -275,16 +277,17 @@ export const fieldHandlers = {
     if (already.error) return dbError(res, already.error);
     if (already.data) return res.status(200).json((await withSignedUrls(db, [already.data]))[0]);
 
-    const key = `${obs.data.id}/${photoId}.${PHOTO_EXT[type]}`;
+    const key = `${obs.data.id}/${photoId}.${EXTENSIONS[type]}`;
     // upsert: a retry after the file landed but the record did not writes the same path again.
-    const stored = await db.storage.from(PHOTO_BUCKET).upload(key, req.file.buffer, { contentType: type, upsert: true });
+    const cleanBuffer = stripMetadata(req.file.buffer, type);
+    const stored = await db.storage.from(PHOTO_BUCKET).upload(key, cleanBuffer, { contentType: type, upsert: true });
     if (stored.error) return fail(res, 502, 'STORAGE_ERROR', stored.error.message);
 
     const { data, error } = await db
       .from('observation_photos')
       .insert({
         id: photoId, observation_id: obs.data.id, s3_bucket: PHOTO_BUCKET, s3_key: key,
-        content_type: type, size_bytes: req.file.size, upload_status: 'uploaded',
+        content_type: type, size_bytes: cleanBuffer.length, upload_status: 'uploaded',
         caption: notes.data.caption ?? null, traits: notes.data.traits,
       })
       .select(PHOTO_COLUMNS)
