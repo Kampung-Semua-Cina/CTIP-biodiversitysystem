@@ -2,6 +2,11 @@
 -- New profiles start inactive; a restrictive "active users only" policy on every
 -- table (except profiles) and on Storage blocks inactive and deactivated users.
 -- The admin invite (POST /profiles) already sets is_active = true. Safe to run twice.
+--
+-- First written as 20261104120000, but that version is already taken on the live
+-- database (discussion_board, from rick-extra-CTIP-security-fix), so the CLI would
+-- have skipped this file. It also covers the discussion and table_versions tables
+-- that branch added; tables that do not exist yet are skipped.
 
 alter table public.profiles alter column is_active set default false;
 
@@ -26,7 +31,8 @@ declare
   t text;
 begin
   foreach t in array array[
-    'alert_notes', 'alerts', 'audit_logs', 'notifications',
+    'alert_notes', 'alerts', 'audit_logs', 'discussion_audience',
+    'discussion_posts', 'discussions', 'notifications', 'table_versions',
     'observation_comments', 'observation_photos', 'observation_reviews',
     'observations', 'qr_tags', 'sensor_images', 'sensor_nodes', 'species',
     'species_media', 'specimens', 'telemetry', 'zones'
