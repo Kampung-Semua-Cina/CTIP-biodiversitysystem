@@ -14,15 +14,36 @@ import {
   Field, Segmented, Empty,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
-import { clearAllDrafts } from '../draftStore.js';
+import { clearAllDrafts, listDrafts } from '../draftStore.js';
 
 export function StaffMore({ nav }) {
   const { me, role, logout } = useStore();
   const handleSignOut = async () => {
+    let drafts = [];
     try {
-      await clearAllDrafts();
+      drafts = await listDrafts();
     } catch {}
-    await logout();
+
+    const doSignOut = async () => {
+      try {
+        await clearAllDrafts();
+      } catch {}
+      await logout();
+    };
+
+    if (drafts && drafts.length > 0) {
+      const count = drafts.length;
+      Alert.alert(
+        'Unsaved Plant Drafts',
+        `You have ${count === 1 ? '1 unsent plant draft' : `${count} unsent plant drafts`}. Signing out will discard drafts to protect data on shared devices. Do you want to sign out?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Discard & Sign out', style: 'destructive', onPress: doSignOut },
+        ]
+      );
+    } else {
+      await doSignOut();
+    }
   };
   const { c } = useTheme();
   const tools = [

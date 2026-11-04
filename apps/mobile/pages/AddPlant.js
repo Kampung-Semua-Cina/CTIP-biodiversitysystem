@@ -51,14 +51,6 @@ async function takePhoto() {
 // Pick photo(s) from device image gallery.
 async function pickFromGallery() {
   try {
-    const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!lib.granted) {
-      const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!ask.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to choose images.');
-        return [];
-      }
-    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -342,14 +334,6 @@ export function AddPlant({ nav, params = {} }) {
 
   const pickQrFromGallery = async () => {
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) {
-        const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!ask.granted) {
-          Alert.alert('Permission needed', 'Allow photo library access to choose images.');
-          return;
-        }
-      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 1,

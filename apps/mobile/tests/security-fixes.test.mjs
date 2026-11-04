@@ -3,8 +3,9 @@
 // 1. Users page crash safety when accounts have missing/null name or role
 // 2. Security: allowBackup set to false in app.json
 // 3. Security: Unused permissions (microphone, draw over apps, storage) blocked in app.json
-// 4. Security: minSdkVersion raised to Android 11 (API 30)
-// 5. Security: In-progress plant drafts wiped on sign-out
+// 4. Security: minSdkVersion raised to Android 11 (API 30) via expo-build-properties
+// 5. Security: In-progress plant drafts wiped on user sign-out without destroying drafts on session expiration
+// 6. Bug fix: Photo gallery picker launches directly without requesting blocked storage permissions
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,8 +14,8 @@ import { fileURLToPath } from 'node:url';
 
 import { ROLE_LABEL } from '../../shared/permissions.js';
 import { fuzzyMatch } from '../../shared/fuzzy.js';
-import { saveDraft, getDraft, clearAllDrafts } from '../draftStore.js';
-import { onSignOut, signOutApi, setAuthToken, getAuthToken } from '../../shared/api.js';
+import { saveDraft, getDraft, listDrafts, clearAllDrafts } from '../draftStore.js';
+import { signOutApi, setAuthToken, getAuthToken, clearAuthToken } from '../../shared/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,18 +154,11 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
     );
   });
 
-  test('Security: Android minSdk is upgraded to Android 11 (API 30)', () => {
+  test('Security: Android minSdk is upgraded to Android 11 (API 30) via expo-build-properties', () => {
     const appJsonPath = path.join(rootDir, 'app.json');
     const appConfig = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
 
-    // Configured in android block
-    assert.equal(
-      appConfig.expo?.android?.minSdkVersion,
-      30,
-      'expo.android.minSdkVersion must be 30 (Android 11)'
-    );
-
-    // Configured in expo-build-properties plugin
+    // Configured in expo-build-properties plugin (valid Expo configuration)
     const buildPropsPlugin = (appConfig.expo?.plugins || []).find(
       (p) => Array.isArray(p) && p[0] === 'expo-build-properties'
     );
@@ -174,12 +168,19 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
       30,
       'expo-build-properties must set android.minSdkVersion to 30 (Android 11)'
     );
+
+    // Redundant top-level android.minSdkVersion must not be present
+    assert.equal(
+      appConfig.expo?.android?.minSdkVersion,
+      undefined,
+      'android.minSdkVersion under android object should be omitted in favour of expo-build-properties'
+    );
   });
 
   // -------------------------------------------------------------------------
-  // 3. Security: Plant drafts cleared on sign-out
+  // 3. Security & Safety: Plant drafts cleared on user sign-out, not on session drop
   // -------------------------------------------------------------------------
-  test('Security: plant drafts are purged on sign-out', async () => {
+  test('Security & Safety: plant drafts are purged on intentional sign-out', async () => {
     const testTag = 'TEST-TAG-CLEAR-123';
     await saveDraft(testTag, {
       proposed_species: 'Nepenthes rajah',
@@ -190,12 +191,15 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
       gps: { lat: 3.81, lng: 113.78 },
     });
 
-    // Ensure draft is saved
+    // Ensure draft is saved and discoverable
     const saved = await getDraft(testTag);
     assert.ok(saved, 'Draft must be saved');
     assert.equal(saved.proposed_species, 'Nepenthes rajah');
 
-    // Perform sign-out cleanup
+    const drafts = await listDrafts();
+    assert.ok(drafts.some((d) => d.qr_id === testTag), 'Draft must appear in listDrafts()');
+
+    // Perform intentional sign-out cleanup
     await clearAllDrafts();
 
     // Verify draft is wiped
@@ -203,25 +207,45 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
     assert.equal(wiped, null, 'Draft must be null after clearAllDrafts');
   });
 
-  test('Security: signOutApi invokes onSignOut listener to clear drafts', async () => {
-    let listenerCalled = false;
-    const unsub = onSignOut(async () => {
-      listenerCalled = true;
-      await clearAllDrafts();
-    });
+  test('CTIP-57 Safety: session expiration or clearAuthToken does NOT wipe offline field drafts', async () => {
+    const tag = 'TAG-PERSIST-OFFLINE-789';
+    await saveDraft(tag, { proposed_species: 'Shorea albida', notes: 'Peat swamp tree in progress' });
+    assert.ok(await getDraft(tag), 'Draft should be saved');
 
-    try {
-      const tag = 'TAG-SIGNOUT-HOOK-456';
-      await saveDraft(tag, { proposed_species: 'Ficus', notes: 'Secret tree' });
-      assert.ok(await getDraft(tag));
+    // Simulate unexpected auth token invalidation / expiration in the background
+    clearAuthToken();
 
-      // Trigger sign out
-      await signOutApi();
+    // In-progress field draft must still be preserved for the botanist!
+    const preserved = await getDraft(tag);
+    assert.ok(preserved, 'Draft must NOT be wiped by background session expiration');
+    assert.equal(preserved.proposed_species, 'Shorea albida');
 
-      assert.equal(listenerCalled, true, 'onSignOut listener must be called on signOutApi');
-      assert.equal(await getDraft(tag), null, 'Draft must be cleared after signOutApi');
-    } finally {
-      unsub();
-    }
+    // Clean up
+    await clearAllDrafts();
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. Bug Fix: Photo gallery picker does not request legacy storage permissions
+  // -------------------------------------------------------------------------
+  test('Photo picker: AddPlant.js and Scan.js call launchImageLibraryAsync directly without requestMediaLibraryPermissionsAsync', () => {
+    const addPlantSrc = fs.readFileSync(path.join(rootDir, 'pages', 'AddPlant.js'), 'utf8');
+    const scanSrc = fs.readFileSync(path.join(rootDir, 'pages', 'Scan.js'), 'utf8');
+
+    assert.ok(
+      !addPlantSrc.includes('requestMediaLibraryPermissionsAsync'),
+      'AddPlant.js must not request media library permissions on Android 11/12'
+    );
+    assert.ok(
+      !scanSrc.includes('requestMediaLibraryPermissionsAsync'),
+      'Scan.js must not request media library permissions on Android 11/12'
+    );
+    assert.ok(
+      addPlantSrc.includes('launchImageLibraryAsync'),
+      'AddPlant.js must launch photo picker directly'
+    );
+    assert.ok(
+      scanSrc.includes('launchImageLibraryAsync'),
+      'Scan.js must launch photo picker directly'
+    );
   });
 });

@@ -15,26 +15,6 @@ export function getStorageAdapter() {
   return customStorage;
 }
 
-const signOutListeners = new Set();
-
-export function onSignOut(callback) {
-  if (typeof callback === "function") {
-    signOutListeners.add(callback);
-    return () => signOutListeners.delete(callback);
-  }
-  return () => {};
-}
-
-function triggerSignOutListeners() {
-  for (const listener of signOutListeners) {
-    try {
-      Promise.resolve(listener()).catch((err) => console.warn("[signOut listener error]", err));
-    } catch (err) {
-      console.warn("[signOut listener error]", err);
-    }
-  }
-}
-
 // Storage accessor that safely works in browser and falls back in non-browser environments
 const storage = {
   get(key) {
@@ -132,13 +112,6 @@ export function setAuthToken(token) {
 
 export function clearAuthToken() {
   setSession(null);
-  for (const listener of signOutListeners) {
-    try {
-      Promise.resolve(listener()).catch((err) => console.warn("[signOut listener error]", err));
-    } catch (err) {
-      console.warn("[signOut listener error]", err);
-    }
-  }
 }
 
 // What the access token says about itself (exp, sub, email). Not checked here:
@@ -205,13 +178,6 @@ export async function freshAuthToken({ force = false } = {}) {
       // Lost the race with another tab: its new session is still good.
       if (sessionFromOtherTab()) return getSession().access_token;
       setSession(null);
-  for (const listener of signOutListeners) {
-    try {
-      Promise.resolve(listener()).catch((err) => console.warn("[signOut listener error]", err));
-    } catch (err) {
-      console.warn("[signOut listener error]", err);
-    }
-  }
       endedListeners.forEach((fn) => fn());
       return null;
     }
@@ -382,18 +348,10 @@ export async function signInApi(email, password) {
   return res;
 }
 
-
 /** POST /v1/auth/sign-out with the current token, then forgets the session. Never fails. */
 export async function signOutApi() {
   const token = getAuthToken();
   setSession(null);
-  for (const listener of signOutListeners) {
-    try {
-      Promise.resolve(listener()).catch((err) => console.warn("[signOut listener error]", err));
-    } catch (err) {
-      console.warn("[signOut listener error]", err);
-    }
-  }
   if (token) await apiFetch("/auth/sign-out", { method: "POST", token, timeout: 4000 });
 }
 
