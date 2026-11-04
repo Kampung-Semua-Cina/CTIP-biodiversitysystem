@@ -14,9 +14,16 @@ import {
   Field, Segmented, Empty,
 } from '../components/Bits.js';
 import { shortDate } from '../components/format.js';
+import { clearAllDrafts } from '../draftStore.js';
 
 export function StaffMore({ nav }) {
   const { me, role, logout } = useStore();
+  const handleSignOut = async () => {
+    try {
+      await clearAllDrafts();
+    } catch {}
+    await logout();
+  };
   const { c } = useTheme();
   const tools = [
     { icon: 'user', label: 'Account settings', go: 'account' },
@@ -48,10 +55,10 @@ export function StaffMore({ nav }) {
           opacity: pressed ? 0.75 : 1,
         }]}
       >
-        <Avatar name={me?.full_name} size={48} />
+        <Avatar name={me?.full_name || me?.email || 'User'} size={48} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Txt v="label" style={{ fontSize: 17 }}>{me?.full_name}</Txt>
-          <Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{ROLE_LABEL[role]} · {me?.email}</Txt>
+          <Txt v="label" style={{ fontSize: 17 }}>{me?.full_name || me?.email || 'User'}</Txt>
+          <Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{(ROLE_LABEL[role] || role || 'Member')} · {me?.email}</Txt>
         </View>
         <Txt v="caption" color={c.accent} style={{ fontFamily: font('text', 600) }}>Edit</Txt>
       </Pressable>
@@ -60,7 +67,7 @@ export function StaffMore({ nav }) {
       </Section>
       <AppearanceSection />
       <VersionLine />
-      <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={logout} />
+      <Button label="Sign out" kind="dangerText" icon="logout" height={48} size={15} onPress={handleSignOut} />
     </Screen>
   );
 }
@@ -94,20 +101,20 @@ export function Users({ nav }) {
   const needle = q.trim().toLowerCase();
   const rows = db.profiles
     .filter((p) => (filter === 'all' ? true : filter === 'off' ? !p.is_active : p.role === filter && p.is_active))
-    .filter((p) => !needle || fuzzyMatch(`${p.full_name} ${p.email} ${p.role}`, needle))
+    .filter((p) => !needle || fuzzyMatch(`${p.full_name || ''} ${p.email || ''} ${p.role || ''}`, needle))
     ;
   const sorted = [...rows].sort((a, b) => {
-    if (sort === 'name') return a.full_name.localeCompare(b.full_name);
-    if (sort === 'nameDesc') return b.full_name.localeCompare(a.full_name);
-    if (sort === 'role') return (a.role || '').localeCompare(b.role || '') || a.full_name.localeCompare(b.full_name);
+    if (sort === 'name') return (a.full_name || '').localeCompare(b.full_name || '');
+    if (sort === 'nameDesc') return (b.full_name || '').localeCompare(a.full_name || '');
+    if (sort === 'role') return (a.role || '').localeCompare(b.role || '') || (a.full_name || '').localeCompare(b.full_name || '');
     if (sort === 'email') return (a.email || '').localeCompare(b.email || '');
-    return (b.is_active - a.is_active) || a.full_name.localeCompare(b.full_name);
+    return ((b.is_active ? 1 : 0) - (a.is_active ? 1 : 0)) || (a.full_name || '').localeCompare(b.full_name || '');
   });
   const off = db.profiles.filter((p) => !p.is_active).length;
 
   const setActive = (p) => {
     if (!p.is_active) return updateUser(p.id, { is_active: true });
-    Alert.alert(`Deactivate ${p.full_name}?`, 'They will not be able to sign in. Their records stay.', [
+    Alert.alert(`Deactivate ${p.full_name || p.email || 'this user'}?`, 'They will not be able to sign in. Their records stay.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Deactivate', style: 'destructive', onPress: () => updateUser(p.id, { is_active: false }) },
     ]);
@@ -148,16 +155,16 @@ export function Users({ nav }) {
         {sorted.length === 0 ? <Empty icon="users">No one matches.</Empty> : null}
         {sorted.map((p, i) => (
           <View key={p.id}>
-            <Row serif={false} left={<Avatar name={p.full_name} size={44} muted={!p.is_active} />} title={`${p.full_name}${p.id === me?.id ? ' (you)' : ''}`}
+            <Row serif={false} left={<Avatar name={p.full_name || p.email || 'Member'} size={44} muted={!p.is_active} />} title={`${p.full_name || p.email || 'Unnamed member'}${p.id === me?.id ? ' (you)' : ''}`}
               sub={<Txt v="small" color={c.ink2} style={{ fontFamily: font('text', 400) }}>{p.email}</Txt>}
-              right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{ROLE_LABEL[p.role].split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
+              right={p.is_active ? <Text style={{ fontFamily: font('text', 700), fontSize: 13, color: c.ink2 }}>{((ROLE_LABEL[p.role] || p.role || 'Member')).split(' ').pop().replace(/^\w/, (m) => m.toUpperCase())}</Text> : <DotLabel tone="neutral" label="Deactivated" />}
               // You cannot change your own role or lock yourself out, same as the website.
               onPress={p.id === me?.id ? undefined : () => setOpenId(openId === p.id ? null : p.id)}
               last={i === sorted.length - 1 && openId !== p.id} />
             {openId === p.id ? (
               <View style={{ gap: 10, padding: 14, marginBottom: 8, borderRadius: 14, backgroundColor: c.bg }}>
                 <Txt v="label">Role</Txt>
-                <Segmented value={p.role} onChange={(role) => updateUser(p.id, { role })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
+                <Segmented value={p.role || 'botanist'} onChange={(role) => updateUser(p.id, { role })} items={[{ key: 'botanist', label: 'Botanist' }, { key: 'officer', label: 'Officer' }, { key: 'admin', label: 'Admin' }]} />
                 <Button label={p.is_active ? 'Deactivate account' : 'Turn account back on'} kind={p.is_active ? 'dangerText' : 'secondary'} height={44} size={15} onPress={() => setActive(p)} />
               </View>
             ) : null}

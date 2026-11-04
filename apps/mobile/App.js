@@ -4,11 +4,21 @@
 import React from 'react';
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { setStorageAdapter, setApiBaseUrl, restoreSession } from '../shared/api.js';
+import { setStorageAdapter, setApiBaseUrl, restoreSession, onSignOut } from '../shared/api.js';
 import StoreProvider from '../shared/StoreProvider.js';
 import { ThemeProvider, FONT_FILES } from './components/Theme.js';
 import AppNavigator from './navigation/AppNavigator.js';
 import { secureStorage } from './secureStorage.js';
+import { clearAllDrafts } from './draftStore.js';
+
+// Clear plant drafts on sign-out to prevent leak across users on shared devices
+onSignOut(async () => {
+  try {
+    await clearAllDrafts();
+  } catch (err) {
+    console.warn('[DraftStore] Failed to clear drafts on sign-out:', err);
+  }
+});
 
 // Persist user sessions securely in Keystore/Keychain across mobile app restarts (CTIP-119)
 setStorageAdapter(secureStorage);

@@ -237,3 +237,36 @@ export async function listDrafts() {
 
   return Array.from(memoryStore.values());
 }
+
+/**
+ * Clear all drafts from the encrypted SQLite database, AsyncStorage, and memory.
+ * Invoked on sign-out so in-progress plant drafts do not remain on shared devices.
+ */
+export async function clearAllDrafts() {
+  try {
+    const db = await getDb();
+    if (db) {
+      db.runSync('DELETE FROM drafts;');
+    }
+  } catch (err) {
+    console.warn('[DraftStore SQLite ClearAll Error]', err?.message || err);
+  }
+
+  try {
+    const storage = await getAsyncStorage();
+    if (storage && typeof storage.getAllKeys === 'function') {
+      const keys = await storage.getAllKeys();
+      const draftKeys = (keys || []).filter((k) => k.startsWith(STORAGE_PREFIX));
+      if (draftKeys.length > 0 && typeof storage.multiRemove === 'function') {
+        await storage.multiRemove(draftKeys);
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  memoryStore.clear();
+  return true;
+}
+
+export const clearDrafts = clearAllDrafts;
