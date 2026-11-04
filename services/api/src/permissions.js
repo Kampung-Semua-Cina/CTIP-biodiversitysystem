@@ -80,9 +80,9 @@ export const routes = [
 
   // Sensors
   ['get', '/sensor-nodes', OFFICER_ADMIN],
-  ['post', '/sensor-nodes', OFFICER_ADMIN],
+  ['post', '/sensor-nodes', ADMIN], // register a node: admin only (CTIP-48)
   ['get', '/sensor-nodes/:id', OFFICER_ADMIN],
-  ['patch', '/sensor-nodes/:id', OFFICER_ADMIN],
+  ['patch', '/sensor-nodes/:id', ADMIN], // edit a node or its thresholds: admin only (CTIP-48)
   ['get', '/sensor-nodes/:id/telemetry', OFFICER_ADMIN],
   ['post', '/telemetry', SENSOR],
   ['get', '/sensor-nodes/:id/images', OFFICER_ADMIN],
