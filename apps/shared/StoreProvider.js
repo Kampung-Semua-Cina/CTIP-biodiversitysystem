@@ -35,6 +35,8 @@ import {
   updateMeApi,
   createProfileApi,
   updateProfileApi,
+  deleteProfileApi,
+  restoreProfileApi,
   findSpecimenByQrApi,
   createSpecimenApi,
   updateSpecimenApi,
@@ -69,6 +71,9 @@ const API_CHECK_MS = 30000;
 const BASE_POLL_MS = 5000;
 const MAX_POLL_MS = 60000;
 const MISSES_FOR_DOWN = 2;
+// How long a pop-up message stays on screen (web and mobile). Was 2.6 s, too short
+// to read the longer messages, such as the email limit's wait time.
+const TOAST_MS = 5600;
 
 // The token to send: renewed through the API when it is about to expire.
 const sessionToken = () => freshAuthToken();
@@ -123,7 +128,7 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const notify = useCallback((message) => {
     clearTimeout(timer.current);
     setToast(message);
-    timer.current = setTimeout(() => setToast(""), 2600);
+    timer.current = setTimeout(() => setToast(""), TOAST_MS);
   }, []);
 
 
@@ -531,8 +536,10 @@ function collectionMatches(a = [], b = []) {
       if (token) res = noteOffline(await fn(...args, { token }));
     }
     if (res.ok) return res;
-    const fields = res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
-    const detail = res.message || res.code;
+    // A refused form says why for each field ("Gmail addresses have 6 to 30 ..."), not only which.
+    const reasons = res.details?.fields?.map((f) => f.message).filter(Boolean).join(" ");
+    const fields = reasons ? "" : res.details?.fields?.map((f) => f.path).filter(Boolean).join(", ");
+    const detail = (reasons && res.code === "VALIDATION_ERROR" ? reasons : null) || res.message || res.code;
     const offlineMsg = (detail && detail !== "Cannot reach the API server" && detail !== "Cannot reach API server")
       ? `${API_DOWN} (${detail})`
       : API_DOWN;
@@ -1208,8 +1215,10 @@ function collectionMatches(a = [], b = []) {
       return { ok: false, message: "This email already has an account" };
     }
     const res = await callApi(createProfileApi, { full_name: full_name.trim(), email: cleanEmail, role: newRole, ...(password ? { password } : {}) });
-    if (!res.ok) return { ok: false, message: res.message };
-    notify(res.data.invited ? `Invitation sent to ${cleanEmail}` : `Account created for ${cleanEmail}`);
+    if (!res.ok) return { ok: false, message: res.message, code: res.code, fields: res.details?.fields || [] };
+    // The account exists, but Supabase's email limit stopped the invitation (admins get a notification too).
+    if (res.data.email_limit) notify(res.data.email_limit.message);
+    else notify(res.data.invited ? `Invitation sent to ${cleanEmail}` : `Account created for ${cleanEmail}`);
     await loadFromApi(true);
     return { ok: true, id: res.data.id, invited: res.data.invited };
   };
@@ -1219,6 +1228,23 @@ function collectionMatches(a = [], b = []) {
     if (!res.ok) return notify(`Failed to update user: ${res.message}`);
     notify("User updated");
     await loadFromApi(true);
+  };
+
+  // Deleted accounts are off at once and can be restored for 30 days.
+  const deleteUser = async (id) => {
+    const res = await callApi(deleteProfileApi, id);
+    if (!res.ok) { notify(`Could not delete the user: ${res.message}`); return false; }
+    notify(`User deleted. You can restore them until ${new Date(res.data.remove_at).toLocaleDateString()}.`);
+    await loadFromApi(true);
+    return true;
+  };
+
+  const restoreUser = async (id) => {
+    const res = await callApi(restoreProfileApi, id);
+    if (!res.ok) { notify(`Could not restore the user: ${res.message}`); return false; }
+    notify("User restored. Turn the account on when they should sign in again.");
+    await loadFromApi(true);
+    return true;
   };
 
   /* ---------- monitoring ---------- */
@@ -1316,7 +1342,7 @@ function collectionMatches(a = [], b = []) {
     syncObservation, resubmit, reviewObservation, addComment,
     startDiscussion, replyToDiscussion, updateDiscussion, deleteDiscussion, refreshDiscussion,
     saveSpecies, loadStaffSpecies, loadReviewQueue, togglePublish, setSpeciesPublished, deleteSpecies, restoreSpecies, setSpeciesMedia,
-    addUser, updateUser,
+    addUser, updateUser, deleteUser, restoreUser,
     ackAlert, resolveAlert, assignAlert, addAlertNote, setThresholds,
     markRead, markAllRead, generateTags, retireTag, deleteTag,
     apiStatus, apiError, authToken, isSyncing, backendSpeciesCount,

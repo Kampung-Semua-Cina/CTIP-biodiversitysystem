@@ -156,7 +156,7 @@ Reproduced with test data only, not the live database.
 # Since the last commit (`175c2d5`): discussion board and faster live updates
 
 *Written 4 Nov 2026. Web app, mobile app (polling only), API, contract and two database
-migrations. Nothing below is committed yet.*
+migrations. Committed in `ca507a4`.*
 
 Two pieces of work:
 
@@ -293,3 +293,246 @@ Summary only; see [docs/architecture/live-updates.md](../architecture/live-updat
 | Two broken photos on tag NIAH-0002 (rejected record, 26 Oct) | Plant page, dashboard | The two `observation_photos` rows hold a temporary browser address (`blob:http://localhost:5173/...`) instead of a file path. They were saved before the apps went through the API. | Delete the two rows (`90939609-…`, `e3101523-…`), with the team's OK, since it is shared data |
 | `href="#"` links | Every map | Leaflet's zoom in / zoom out buttons | Nothing; this is how Leaflet works |
 
+---
+
+# Since commit `ca507a4`: deleting users, the email limit and clearer form errors
+
+*Written 5 Nov 2026. Web app (Users page), API, contract and one database migration.
+Nothing below is committed yet.*
+
+Four pieces of work on the admin **Users** page (`#/users`) and the account emails
+behind it, and one change for every page:
+
+1. **Two tables, and delete with 30 days to undo.** Users are split into *Active* and
+   *Not active*. A trash icon deletes a user; for 30 days the account can be restored.
+2. **Supabase's email limit is reported.** When Supabase refuses to send an email, every
+   admin gets a notification saying so and roughly how long to wait.
+3. **Bug fix: a failed attempt to create an account no longer uses up the email limit.**
+4. **The form says why a value is wrong**, e.g. why `1@gmail.com` cannot be used.
+5. **Pop-up messages stay on screen 3 seconds longer** (5.6 s instead of 2.6 s).
+
+## Before this goes live
+
+- [ ] Tell Amberlyn, then dry-run and push `supabase/migrations/20261105120000_user_soft_delete.sql`:
+      `npx supabase db push --dry-run` should list only this file, then `npx supabase db push`.
+      Until then deleting a user fails (no `deleted_at` column) and no email-limit notification is made.
+- [ ] Optional: turn on **pg_cron** (Database > Extensions) *before* pushing, so accounts past
+      their 30 days are removed daily. Without it they are removed when an admin opens the app
+      (see [How the final removal runs](#how-the-final-removal-runs)).
+- [ ] **Two approvals on the PR:** `packages/api-contract/openapi.yaml` changed (team rule).
+- [ ] Restart local APIs and redeploy Render after merging.
+- [ ] If the project's email limit is ever raised (custom SMTP), set `EMAIL_RATE_LIMIT_PER_HOUR`
+      on Render and in `services/api/.env` to match. It is only used to work out the wait.
+- [ ] **Decide** about "Confirm email" (Authentication > Providers > Email). While it is on, one
+      invitation sends **two** emails (confirmation + invitation), so only one person can be
+      invited per hour. See [section 2](#2-supabases-email-limit).
+- [ ] After the push, try delete and restore on a throwaway account. They were not run against
+      the shared database.
+- [ ] Update CLAUDE.md: the API now has **79 routes** (was 77).
+
+## 1. Users page: Active and Not active, delete and restore
+
+### What admins see
+
+| Table | Who is in it | What can be done |
+|---|---|---|
+| **Active** | Accounts that can sign in | Change role, turn off, delete (trash icon) |
+| **Not active** | Turned-off accounts, and deleted ones waiting out their 30 days | Turned off: turn on, or delete. Deleted: **Restore** |
+
+- Search and sort (name, newest, role, email) apply to both tables.
+- A deleted account shows a **Deleted** label, the date it will be removed for good, and the
+  days left. Deleted accounts are listed first, soonest to be removed at the top.
+- Nobody gets a trash icon on their own row.
+
+### Deleting
+
+The trash icon opens a confirm screen that needs **`DELETE`** typed. It explains what happens:
+
+| When | What happens |
+|---|---|
+| **Straight away** | The account is turned off, so the person cannot sign in or use anything. It moves to *Not active*. |
+| **Within 30 days** | An admin can press **Restore**. The account comes back turned **off**; switch it on when the person should sign in again. |
+| **After 30 days** | The sign-in account is removed for good. Their **plants, visits, photos and reviews stay**, shown as by a former member. **Discussion threads they started are removed.** |
+
+Field records are safe because every record points to its author with `on delete set null`.
+Discussion threads use `on delete cascade` on their owner, so they go with the account.
+
+**Refused**, with the reason:
+
+| Case | Answer |
+|---|---|
+| Deleting yourself | 422 |
+| Deleting the last active admin | 409 `LAST_ADMIN` |
+| Deleting an account that is already deleted | 409 `ALREADY_DELETED` |
+| Turning on a deleted account without restoring it | 409 `USER_DELETED` |
+| Restoring an account that is not deleted | 409 `NOT_DELETED` |
+| Anyone but an admin | 403 |
+
+### How the final removal runs
+
+`purge_deleted_users()` removes every account deleted more than 30 days ago. It runs:
+
+- **daily at 03:17**, if pg_cron was turned on when the migration was pushed, and
+- whenever an **admin** opens the app or the user list, at most **once an hour** per API.
+
+**Not yet confirmed:** it removes the account from Supabase's own user table (`auth.users`).
+Supabase may not allow that from a database function. If it refuses, that account is skipped,
+stays turned off for good, and a warning goes to the database log. This will only show after a
+real 30-day wait.
+
+### Database (`20261105120000_user_soft_delete.sql`)
+
+| Part | What it does |
+|---|---|
+| `profiles.deleted_at`, `profiles.deleted_by` | When and by whom the account was deleted |
+| Check `profiles_deleted_is_inactive` | A deleted account is always turned off |
+| `guard_profile_self_edit()` (updated) | Only admins may set or clear `deleted_at` / `deleted_by` |
+| `purge_deleted_users()` | Removes accounts past their 30 days. Admins or a scheduled job only. |
+| pg_cron job `purge-deleted-users` | Created only if pg_cron is already on |
+| `notify_email_rate_limit()` | Tells every active admin about the email limit (section 2). Admins only. |
+| New notification type `email_rate_limit` | |
+
+## 2. Supabase's email limit
+
+### What it is
+
+Supabase Auth sends the account emails: the confirmation when an account is created
+("Confirm email" on), the invitation, and password resets. With Supabase's built-in email
+sender the **whole project** may send only **2 emails an hour**, whoever asks for them (Render,
+anyone's local API, the Supabase dashboard). Over that, Supabase refuses with
+`over_email_send_rate_limit` ("email rate limit exceeded") and the email is simply not sent.
+
+Before this change the site hid it: a refused invitation still said "Account created", and a
+refused password reset said nothing at all. The limit can only be raised by setting up custom
+SMTP (Authentication > SMTP Settings), after which it is changed under Authentication > Rate Limits.
+
+### What happens now
+
+| Where | What the person sees |
+|---|---|
+| Invite member, invitation refused | The account is created; the admin sees why the invitation was not sent and how long to wait |
+| Create account, refused ("Confirm email" on) | 429 `EMAIL_RATE_LIMIT`; the account is not created; the same message |
+| **Every active admin** | A notification: *"Email limit reached (2/2 per hour). The invitation to x@y.com was not sent. Supabase allows 2 emails an hour. Try again in about 38 minutes."* At most one every 10 minutes. Clicking it opens `#/users`. |
+| Forgot password form | *"The email limit is reached (2/2 per hour). Try again in up to 60 minutes. No reset email was sent."* The limit is for the whole project, so this says nothing about whether an address has an account. |
+
+### How the wait is worked out
+
+Supabase does not say when the next email will be allowed. The API remembers when **it** had
+emails sent (`services/api/src/emailLimit.js`) and counts from the oldest one in the last hour.
+Emails sent by another copy of the API (Render, someone's laptop) are not known to it, so with
+nothing on record the answer is "up to 60 minutes". The limit it assumes is
+`EMAIL_RATE_LIMIT_PER_HOUR` (2 by default).
+
+## 3. Bug fixed: failed account creations used up the email limit
+
+**Seen:** two unsuccessful attempts to create an account, and the limit was reached.
+
+**Cause:** the API asked Supabase to create the account first and checked for problems after.
+Supabase sends its email the moment it creates an account, so the email was spent even when
+the attempt then failed:
+
+- **Address already registered:** with "Confirm email" on, Supabase does not refuse it. It
+  hides the existing account behind a made-up user and may resend that person's confirmation.
+  The API then treated it as new and also sent an invitation: both of the hour's emails, for an
+  attempt that should have failed.
+- **Username taken, or the profile could not be saved:** the confirmation email had already
+  gone out, and trying again sent another.
+
+**Fix** (`post /profiles` in `services/api/src/staff.js`):
+
+1. Before Supabase is asked, the address and username are checked against every account,
+   ignoring upper and lower case. Turned-off and deleted accounts count. A deleted account's
+   address answers *"belongs to a deleted account. Restore it from Not active instead."*
+2. Supabase's made-up "already registered" user (it has no sign-in identities) is recognised:
+   409 `EMAIL_TAKEN`, and no invitation is sent.
+3. The invitation is sent only after the account is fully saved. If the profile cannot be saved
+   the answer is 502 `PROFILE_NOT_SAVED` with "do not create it again", so a retry does not
+   send another email.
+4. Only emails sent for a successful creation are counted, so "x/2" and the wait reflect real emails.
+
+## 4. The form says why a value is wrong
+
+The Invite member form checks its fields **before** the confirm screen. A field that cannot be
+used is outlined in red with the reason underneath, the cursor moves to the first one, and
+nothing is sent, so no email is used. A reason disappears as the field is fixed; the email is
+also checked when you leave the field.
+
+| Field | Examples of what it explains |
+|---|---|
+| Email | No `@` or more than one; spaces; a dot at the start or two in a row; a domain that is not real (`name@localhost`); common typos (*"gmial.com" looks like a typo. Did you mean gmail.com?*); **Gmail's own rule**: `1@gmail.com` → *Gmail addresses have 6 to 30 letters or numbers before the @; "1" has 1.* |
+| Temporary password | Fewer than 8 characters (*"it has 3"*); a space at the start or end. Left blank, an invitation is sent instead. |
+| Name | Required |
+
+- The rules are in `apps/shared/accountRules.js`. The API checks the same rules in its own copy,
+  `services/api/src/accountRules.js`, because the API is deployed without `apps/`. A test fails
+  if the two copies differ, so change both together.
+- If an address passes these checks and Supabase still refuses it, the answer is 422
+  `INVALID_EMAIL` (*"Supabase refused … Check the spelling, or use another address"*). A password
+  Supabase finds too weak gives 422 `WEAK_PASSWORD` in plain words (for example, *"it has
+  appeared in a known data leak"*). Both show under their field.
+- **Everywhere in the app**, a form the API refuses now shows the reasons (*"Gmail addresses
+  have…"*) instead of only the field names (*"Request body failed validation (email)"*)
+  (`callApi` in `apps/shared/StoreProvider.js`).
+
+## 5. Pop-up messages stay on screen longer
+
+The short message at the bottom of the screen ("User deleted…", "Invitation sent…", the
+email limit's wait time) now stays for **5.6 seconds instead of 2.6**. The longer messages
+added here could not be read in time.
+
+- One setting, `TOAST_MS` in `apps/shared/StoreProvider.js`, so it applies to the website
+  **and** the mobile app.
+- A new message still replaces the one on screen straight away, and starts its own 5.6 seconds.
+- The web browser tests only wait for a message to appear, so none of them is affected.
+
+## 6. API changes
+
+| Route | Who | Notes |
+|---|---|---|
+| `DELETE /v1/profiles/:id` | admin | Soft delete; answers the profile and `remove_at` |
+| `POST /v1/profiles/:id/restore` | admin | Undo within 30 days; the account stays turned off |
+| `POST /v1/profiles` | admin | Checks before Supabase; new answers `USERNAME_TAKEN`, `INVALID_EMAIL`, `WEAK_PASSWORD`, `PROFILE_NOT_SAVED`, 429 `EMAIL_RATE_LIMIT`; `email_limit` in the answer when only the invitation was refused |
+| `PATCH /v1/profiles/:id` | admin | 409 `USER_DELETED` when turning on a deleted account |
+| `POST /v1/auth/password-reset` | public | 429 `EMAIL_RATE_LIMIT` with the wait |
+
+Contract: both new paths; `deleted_at`, `deleted_by` on `Profile`; new `EmailLimit` schema and
+`EmailRateLimit` response; `email_rate_limit` notification type.
+
+## 7. Files
+
+| Area | Files |
+|---|---|
+| Database | `supabase/migrations/20261105120000_user_soft_delete.sql` (new) |
+| API | `src/emailLimit.js`, `src/accountRules.js` (new); `src/staff.js`, `src/session.js`, `src/permissions.js`; `.env.example` (`EMAIL_RATE_LIMIT_PER_HOUR`) |
+| Contract | `packages/api-contract/openapi.yaml` |
+| Shared | `apps/shared/accountRules.js` (new); `apps/shared/StoreProvider.js` (also the pop-up time), `apps/shared/api.js` |
+| Web | `src/pages/Admin.jsx`, `src/pages/AlertsNotice.jsx`, `src/App.css` |
+| Tests | `services/api/test/users.test.js`, `services/api/test/accountRules.test.js` (new) |
+
+## 8. Tests
+
+- API: **179/179 pass** (`npm run api:test`), 26 new:
+  - `users.test.js` (21): delete and restore, the safeguards, final removal at most hourly,
+    the email limit (invitation, account creation, password reset, the wait), a failed
+    creation sends no email (address or username in use, deleted account, Supabase's hidden
+    user, profile not saved), a successful invitation counts 2 emails, and invalid details
+    refused with their reason before Supabase is asked
+  - `accountRules.test.js` (5): every email, password and name reason, and that the two copies match
+- Shared: 57/57 pass. Web lint and `vite build` pass. The contract lints with no errors.
+  Re-run after the pop-up change: shared tests, lint and build still pass.
+- **In a browser, as the admin:**
+  - The Users page shows both tables with live data (Active 6, Not active 4). The delete
+    confirm screen opens with the right wording; it was cancelled, so no account was changed.
+  - Invite member with `1@gmail.com`, a 3-character password and no name shows all three
+    reasons and sends **no** request to the API. A typo (`gmial.com`) is caught on leaving the field.
+- **Not tested:** delete and restore against the shared database (needs the migration), the
+  removal after 30 days (needs a real 30-day wait; see the `auth.users` note above), and a
+  real email-limit refusal from Supabase (tested with a fake Supabase).
+
+## 9. Known limits
+
+- The wait is an **estimate**: each API only knows the emails it sent itself.
+- The Users page reads `deleted_at` from the start-up load; before the migration, nobody shows as deleted.
+- A deleted user's notifications, and discussion threads they started, are removed with the
+  account after 30 days.
+- The mobile app has no Users page, so none of this applies there.

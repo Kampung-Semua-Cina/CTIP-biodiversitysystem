@@ -527,6 +527,9 @@ export const updateMeApi = (changes, { token } = {}) => send("PATCH", "/me", cha
 // Accounts (Admin)
 export const createProfileApi = (profile, { token } = {}) => send("POST", "/profiles", profile, token);
 export const updateProfileApi = (id, changes, { token } = {}) => send("PATCH", `/profiles/${enc(id)}`, changes, token);
+// Soft delete: the account is off at once and can be restored for 30 days.
+export const deleteProfileApi = (id, { token } = {}) => send("DELETE", `/profiles/${enc(id)}`, undefined, token);
+export const restoreProfileApi = (id, { token } = {}) => send("POST", `/profiles/${enc(id)}/restore`, undefined, token);
 
 // Plants and observations
 export const findSpecimenByQrApi = (qrId, { token } = {}) => apiFetch(`/specimens/by-qr/${enc(qrId)}`, { token });

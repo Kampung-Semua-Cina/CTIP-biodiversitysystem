@@ -34,6 +34,8 @@ export const routes = [
   ['get', '/profiles', ADMIN],
   ['post', '/profiles', ADMIN],
   ['patch', '/profiles/:id', ADMIN],
+  ['delete', '/profiles/:id', ADMIN], // soft delete, removed for good after 30 days
+  ['post', '/profiles/:id/restore', ADMIN],
 
   // QR tags
   ['get', '/qr-tags', ANY_STAFF],

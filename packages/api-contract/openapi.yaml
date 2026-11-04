@@ -216,7 +216,11 @@ paths:
                 properties:
                   sent: { type: boolean, const: true }
         '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { $ref: '#/components/responses/TooManyAttempts' }
+        '429':
+          description: TOO_MANY_ATTEMPTS from this address, or EMAIL_RATE_LIMIT (Supabase's email limit for the whole project; details holds an EmailLimit)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   # ------------------------------------------------------------------ Public
   /public/species:
@@ -511,9 +515,27 @@ paths:
                   - type: object
                     properties:
                       invited: { type: boolean }
+                      email_limit:
+                        description: Only when the invitation email was refused by the email limit
+                        allOf:
+                          - $ref: '#/components/schemas/EmailLimit'
+                          - type: object
+                            properties:
+                              message: { type: string }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/EmailRateLimit' }
+        '502':
+          description: >
+            PROFILE_NOT_SAVED: the sign-in account was made but its profile was
+            not saved, so no invitation was sent. Do not create it again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '409':
-          description: EMAIL_TAKEN
+          description: >
+            EMAIL_TAKEN or USERNAME_TAKEN. Checked before Supabase is asked
+            (deleted and turned-off accounts included), so a refused attempt
+            sends no email and uses none of the email limit
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -546,6 +568,52 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------------- QR Tags
+
+    delete:
+      tags: [Profiles]
+      operationId: deleteProfile
+      summary: Delete a user (admin), with 30 days to restore
+      description: >
+        Sets `deleted_at` and turns the account off at once, so the person
+        cannot sign in. Within 30 days `POST /profiles/{id}/restore` undoes
+        it. After that the sign-in account is removed for good; their field
+        records are kept without an author, and discussion threads they
+        started are removed. You cannot delete yourself or the last active admin.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Deleted (restorable until `remove_at`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Profile'
+                  - type: object
+                    properties:
+                      remove_at: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /profiles/{id}/restore:
+    post:
+      tags: [Profiles]
+      operationId: restoreProfile
+      summary: Undo a delete within 30 days (admin)
+      description: The account stays turned off until an admin turns it on.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /qr-tags:
     get:
       tags: [QR Tags]
@@ -1967,6 +2035,14 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    EmailRateLimit:
+      description: >
+        EMAIL_RATE_LIMIT: Supabase's email limit for the project is reached and
+        no email was sent. `details` is an EmailLimit with the wait. Admins also
+        get an `email_rate_limit` notification.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     TooManyAttempts:
       description: TOO_MANY_ATTEMPTS (wait a few minutes)
       content:
@@ -2052,7 +2128,8 @@ components:
     NotificationType:
       type: string
       enum: [review_returned, review_approved, review_rejected, comment_reply, alert_assigned, alert_created,
-             observation_submitted, observation_resubmitted, discussion_shared, discussion_post, discussion_mention]
+             observation_submitted, observation_resubmitted, discussion_shared, discussion_post, discussion_mention,
+             email_rate_limit]
 
     # ---------- profiles
     Profile:
@@ -2063,8 +2140,18 @@ components:
         email: { type: string, format: email }
         role: { $ref: '#/components/schemas/Role' }
         is_active: { type: boolean }
+        deleted_at: { type: [string, 'null'], format: date-time, description: Set while deleted; removed for good 30 days later }
+        deleted_by: { type: [string, 'null'], format: uuid }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    EmailLimit:
+      type: object
+      properties:
+        limit: { type: integer, description: 'Emails allowed per hour (EMAIL_RATE_LIMIT_PER_HOUR, 2 by default)' }
+        sent_last_hour: { type: integer, description: Emails this API sent in the last hour }
+        wait_minutes: { type: integer, description: How long until the next email should be allowed }
+        estimated: { type: boolean, description: 'true when nothing is on record, so wait_minutes is the longest it can be (60)' }
 
     ProfileUpdate:
       type: object

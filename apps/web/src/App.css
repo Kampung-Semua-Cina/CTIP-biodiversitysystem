@@ -965,6 +965,12 @@ label.inline { display: flex !important; align-items: center; gap: var(--s-2); m
 .post.mine { background: var(--acc-soft); border-color: var(--acc-line); }
 .post header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: var(--s-1); }
 .post p { margin: 0; white-space: pre-wrap; }
+/* A form field's reason it cannot be used, shown under it */
+.fielderr { display: block; max-width: 34ch; margin-top: var(--s-1); color: var(--bad); font-size: var(--t-small-size); font-weight: 600; line-height: 1.35; }
+.site input[aria-invalid="true"], .site select[aria-invalid="true"], .site textarea[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+.invite { align-items: flex-start !important; }
+.invite > .btn { margin-top: 26px; }
+
 /* Discussion board: who can read it, who it goes to, and @mentions */
 .topic.unread { border-color: var(--acc-line); background: var(--acc-soft); }
 .topichead { gap: var(--s-2); }

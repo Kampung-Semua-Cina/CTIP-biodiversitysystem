@@ -4,6 +4,8 @@ import { parseBody, UUID } from './validate.js';
 import { withSignedUrls } from './field.js';
 import { protectSpecimen } from './distribution.js';
 import { dbLoad } from './dbLoad.js';
+import { emailProblem, passwordProblem, nameProblem, weakPasswordMessage } from './accountRules.js';
+import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } from './emailLimit.js';
 
 // Everything else the apps used to do straight against Supabase: the start-up
 // load, accounts, QR tags, publishing, alerts, sensor thresholds and
@@ -73,11 +75,18 @@ const ProfileUpdate = z.strictObject({
   is_active: z.boolean().optional(),
 }).refine((b) => Object.keys(b).length > 0, 'Send at least one field to change');
 
+// Each refusal says why (accountRules.js), e.g. "Gmail addresses have 6 to 30
+// letters or numbers before the @" for 1@gmail.com, and Supabase is never
+// asked about an address that cannot work.
+const reasonOf = (check) => (value, ctx) => {
+  const problem = check(value);
+  if (problem) ctx.addIssue({ code: 'custom', message: problem });
+};
 const ProfileCreate = z.strictObject({
-  email: z.string().trim().toLowerCase().pipe(z.email()),
+  email: z.string().trim().toLowerCase().superRefine(reasonOf(emailProblem)),
   // Left out: a random one is set and the person gets an email to choose their own.
-  password: z.string().min(8).max(200).optional(),
-  full_name: z.string().trim().min(1).max(200),
+  password: z.string().superRefine(reasonOf(passwordProblem)).optional(),
+  full_name: z.string().superRefine(reasonOf(nameProblem)).transform((n) => n.trim()),
   role: z.enum(ROLES),
   username: z.string().trim().toLowerCase().regex(/^[a-z0-9._]{3,20}$/).optional(),
 });
@@ -135,6 +144,9 @@ const ALSO_RELOAD = {
   discussion_audience: ['discussions', 'discussion_posts'], // sharing decides who can see a thread
 };
 
+// For ilike: match the text exactly, with % and _ taken literally.
+const escapeLike = (text) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 const encodeCursor = (c) => Buffer.from(JSON.stringify(c)).toString('base64url');
 function decodeCursor(text) {
   try {
@@ -161,6 +173,35 @@ function listsToLoad(versions, prev, user, now) {
   const moved = [...tables].filter((t) => (versions[t] ?? 0) !== (prev.v[t] ?? 0));
   return Object.keys(WORKSPACE).filter((list) =>
     moved.includes(sourceOf(list)) || moved.some((t) => ALSO_RELOAD[t]?.includes(list)));
+}
+
+// ---- Deleted users (migration 20261105120000_user_soft_delete)
+export const DELETE_GRACE_DAYS = 30;
+
+// Accounts deleted more than 30 days ago are removed for good. Runs at most
+// once an hour per API, on an admin's request (the database function checks
+// the role too). A daily database job does the same when pg_cron is on.
+let lastPurge = 0;
+async function purgeDeletedUsersSoon(db, now = Date.now()) {
+  if (now - lastPurge < 60 * 60 * 1000) return;
+  lastPurge = now;
+  const { data, error } = await db.rpc('purge_deleted_users');
+  if (error) console.warn('purge_deleted_users:', error.message);
+  else if (data) console.log(`purge_deleted_users: removed ${data} account(s) deleted over ${DELETE_GRACE_DAYS} days ago`);
+}
+export const resetPurgeClock = () => { lastPurge = 0; };
+
+// Supabase refused an email: tell every admin (in the bell) how long to wait.
+// Never stops the request: before the migration the function does not exist.
+async function reportEmailLimit(req, what) {
+  const info = emailLimitInfo();
+  if (req.user?.role === 'admin') {
+    const { error } = await supabaseAs(req.user).rpc('notify_email_rate_limit', {
+      p_limit: info.limit, p_wait_minutes: info.wait_minutes, p_what: what,
+    });
+    if (error) console.warn('notify_email_rate_limit:', error.message);
+  }
+  return info;
 }
 
 export const staffHandlers = {
@@ -200,6 +241,7 @@ export const staffHandlers = {
           protectSpecimen(s, { role: req.user.role, userId: req.user.id, status: statusOf.get(s.species_id) }));
       }
 
+      if (req.user.role === 'admin') await purgeDeletedUsersSoon(db);
       const out = partial
         ? { partial: true, ...Object.fromEntries(names.map((n) => [n, loaded[n]])), unavailable: loaded.unavailable }
         : { partial: false, ...loaded };
@@ -281,6 +323,7 @@ export const staffHandlers = {
   },
 
   'get /profiles': async (req, res) => {
+    await purgeDeletedUsersSoon(supabaseAs(req.user));
     const { data, error } = await supabaseAs(req.user).from('profiles').select('*').order('created_at');
     if (error) return dbError(res, error);
     res.json(data);
@@ -289,9 +332,32 @@ export const staffHandlers = {
   // Admin creates an account. Supabase Auth makes the user (and the profile,
   // trigger handle_new_user); the admin's own session then sets the role.
   // Without a password it is an invitation: the person sets theirs from the email.
+  //
+  // Supabase sends an email as soon as it creates the account ("Confirm email"
+  // on), and the invitation is a second one; only 2 an hour are allowed. So
+  // everything that can make this fail is checked before Supabase is asked,
+  // and the invitation goes only once the account is fully saved. A failed
+  // attempt then sends no email and uses none of the limit.
   'post /profiles': async (req, res) => {
     const body = parseBody(ProfileCreate, req, res);
     if (!body) return;
+    const db = supabaseAs(req.user);
+
+    // 1. Before any email: is the address or username already in use?
+    //    Deleted and turned-off accounts count; they still hold the address.
+    const sameEmail = await db.from('profiles').select('id, deleted_at').ilike('email', escapeLike(body.email)).limit(1);
+    if (sameEmail.error) return dbError(res, sameEmail.error);
+    if (sameEmail.data.length) {
+      return fail(res, 409, 'EMAIL_TAKEN', sameEmail.data[0].deleted_at
+        ? 'This email belongs to a deleted account. Restore it from Not active instead.'
+        : 'This email already has an account');
+    }
+    if (body.username) {
+      const sameName = await db.from('profiles').select('id').ilike('username', escapeLike(body.username)).limit(1);
+      if (sameName.error) return dbError(res, sameName.error);
+      if (sameName.data.length) return fail(res, 409, 'USERNAME_TAKEN', 'This username is already taken');
+    }
+
     const auth = supabaseFresh().auth;
     const invite = !body.password;
     const { data: created, error: authError } = await auth.signUp({
@@ -307,21 +373,52 @@ export const staffHandlers = {
       if (authError.code === 'user_already_exists' || /already registered/i.test(authError.message)) {
         return fail(res, 409, 'EMAIL_TAKEN', 'This email already has an account');
       }
+      // Passed our checks but Supabase still refused it (e.g. a domain it blocks).
+      if (authError.code === 'email_address_invalid' || /email address .* is invalid/i.test(authError.message)) {
+        return fail(res, 422, 'INVALID_EMAIL', `Supabase refused ${body.email}: it does not accept this address. Check the spelling, or use another address.`);
+      }
+      if (authError.code === 'weak_password') {
+        return fail(res, 422, 'WEAK_PASSWORD', weakPasswordMessage(authError.reasons));
+      }
+      // "Confirm email" is on, so creating the account sends an email, and the limit is reached.
+      if (isEmailRateLimit(authError)) {
+        const info = await reportEmailLimit(req, `The account for ${body.email}`);
+        return res.status(429).json({ code: 'EMAIL_RATE_LIMIT', message: `${emailLimitMessage(info)} The account for ${body.email} was not created.`, details: info });
+      }
       return fail(res, 422, 'VALIDATION_ERROR', authError.message);
     }
     const id = created.user?.id;
     if (!id) return fail(res, 502, 'AUTH_ERROR', 'Supabase did not return the new user');
+    // 2. With "Confirm email" on, Supabase hides an address that already has a
+    //    sign-in account: no error, a made-up user with no identities. (It may
+    //    resend that person's confirmation email; nothing else is sent here.)
+    if (Array.isArray(created.user.identities) && created.user.identities.length === 0) {
+      return fail(res, 409, 'EMAIL_TAKEN', 'This email already has a sign-in account');
+    }
+    if (created.user.confirmation_sent_at) recordEmailSent(); // a real new account got its confirmation email
+
     const fields = { full_name: body.full_name, email: body.email, role: body.role, is_active: true };
     if (body.username) fields.username = body.username;
-    const { data, error } = await supabaseAs(req.user).from('profiles').update(fields).eq('id', id).select('*').maybeSingle();
+    const { data, error } = await db.from('profiles').update(fields).eq('id', id).select('*').maybeSingle();
     if (error) return dbError(res, error);
+    // 3. Not saved: say so, and send no invitation to an account that is not ready.
+    if (!data) {
+      return fail(res, 502, 'PROFILE_NOT_SAVED',
+        `The sign-in account for ${body.email} was made, but its profile could not be saved. Find it under Not active or ask a developer; do not create it again.`);
+    }
     let invited = false;
+    let emailLimit;
     if (invite) {
       const sent = await auth.resetPasswordForEmail(body.email);
       if (sent.error) console.warn('invitation email not sent:', sent.error.message);
+      if (!sent.error) recordEmailSent();
+      if (isEmailRateLimit(sent.error)) {
+        const info = await reportEmailLimit(req, `The invitation to ${body.email}`);
+        emailLimit = { ...info, message: `${emailLimitMessage(info)} The account was created, but the invitation email was not sent.` };
+      }
       invited = !sent.error;
     }
-    res.status(201).json({ ...(data ?? { id, ...fields }), invited });
+    res.status(201).json({ ...data, invited, ...(emailLimit ? { email_limit: emailLimit } : {}) });
   },
 
   'patch /profiles/:id': async (req, res) => {
@@ -331,10 +428,53 @@ export const staffHandlers = {
     if (req.params.id === req.user.id && (body.role || body.is_active === false)) {
       return fail(res, 422, 'VALIDATION_ERROR', 'You cannot change your own role or turn off your own account');
     }
+    if (body.is_active === true) {
+      const current = await supabaseAs(req.user).from('profiles').select('deleted_at').eq('id', req.params.id).maybeSingle();
+      if (current.error) return dbError(res, current.error);
+      if (current.data?.deleted_at) return fail(res, 409, 'USER_DELETED', 'This account is deleted. Restore it before turning it on.');
+    }
     const { data, error } = await supabaseAs(req.user).from('profiles').update(body)
       .eq('id', req.params.id).select('*').maybeSingle();
     if (error) return dbError(res, error);
     if (!data) return fail(res, 404, 'NOT_FOUND', 'User not found');
+    res.json(data);
+  },
+
+  // Soft delete: switched off at once, removed for good after 30 days.
+  'delete /profiles/:id': async (req, res) => {
+    if (!UUID.test(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'User not found');
+    if (req.params.id === req.user.id) return fail(res, 422, 'VALIDATION_ERROR', 'You cannot delete your own account');
+    const db = supabaseAs(req.user);
+    const target = await db.from('profiles').select('id, role, is_active, deleted_at').eq('id', req.params.id).maybeSingle();
+    if (target.error) return dbError(res, target.error);
+    if (!target.data) return fail(res, 404, 'NOT_FOUND', 'User not found');
+    if (target.data.deleted_at) return fail(res, 409, 'ALREADY_DELETED', 'This account is already deleted');
+    if (target.data.role === 'admin' && target.data.is_active) {
+      const admins = await db.from('profiles').select('id').eq('role', 'admin').eq('is_active', true);
+      if (admins.error) return dbError(res, admins.error);
+      if (admins.data.length <= 1) return fail(res, 409, 'LAST_ADMIN', 'You cannot delete the last active admin');
+    }
+    const deletedAt = new Date();
+    const { data, error } = await db.from('profiles')
+      .update({ deleted_at: deletedAt.toISOString(), deleted_by: req.user.id, is_active: false })
+      .eq('id', req.params.id).select('*').maybeSingle();
+    if (error) return dbError(res, error);
+    if (!data) return fail(res, 404, 'NOT_FOUND', 'User not found');
+    const removeAt = new Date(deletedAt.getTime() + DELETE_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    res.json({ ...data, remove_at: removeAt.toISOString() });
+  },
+
+  // Undo a delete within the 30 days. The account stays switched off until an admin turns it on.
+  'post /profiles/:id/restore': async (req, res) => {
+    if (!UUID.test(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'User not found');
+    const db = supabaseAs(req.user);
+    const target = await db.from('profiles').select('id, deleted_at').eq('id', req.params.id).maybeSingle();
+    if (target.error) return dbError(res, target.error);
+    if (!target.data) return fail(res, 404, 'NOT_FOUND', 'User not found (it may have been removed for good)');
+    if (!target.data.deleted_at) return fail(res, 409, 'NOT_DELETED', 'This account is not deleted');
+    const { data, error } = await db.from('profiles').update({ deleted_at: null, deleted_by: null })
+      .eq('id', req.params.id).select('*').maybeSingle();
+    if (error) return dbError(res, error);
     res.json(data);
   },
 
