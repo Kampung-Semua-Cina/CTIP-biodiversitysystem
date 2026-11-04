@@ -290,7 +290,7 @@ function SetByHand({ typed, gps, qr, protect, onChange }) {
 }
 
 export function AddPlant({ nav, params = {} }) {
-  const { db, addPlant, generateTags } = useStore();
+  const { db, me, addPlant, generateTags } = useStore();
   const { c } = useTheme();
   const [qr, setQr] = useState(params.qr || '');
   const unusedTags = (db.tags || []).filter((t) => t.status === 'unused');
@@ -408,9 +408,9 @@ export function AddPlant({ nav, params = {} }) {
   useEffect(() => {
     if (!qr) return;
     if (sp || looks || height || notes || photos.length > 0) {
-      saveDraft(qr, { proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
+      saveDraft(qr, { user_id: me?.id, proposed_species: sp, picked_species: picked, height_cm: height, morphology: looks, notes, photos, gps });
     }
-  }, [qr, sp, picked, looks, height, notes, photos, gps]);
+  }, [qr, me?.id, sp, picked, looks, height, notes, photos, gps]);
 
   if (showQr && qr) {
     return <TagQrView qr={qr} onBack={() => setShowQr(false)} />;

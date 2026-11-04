@@ -14,7 +14,7 @@ import {
 } from '../components/Bits.js';
 import { shortDate, dateTime, coords, accuracy } from '../components/format.js';
 import { usePolling } from '../hooks/usePolling.js';
-import { listDrafts } from '../draftStore.js';
+import { listDraftsFor } from '../draftStore.js';
 
 const GROUPS = [
   { key: 'fix', title: 'Needs you', statuses: ['returned', 'draft'] },
@@ -41,11 +41,11 @@ export function MyRecords({ nav }) {
 
   useEffect(() => {
     let active = true;
-    listDrafts().then((items) => {
+    listDraftsFor(me?.id).then((items) => {
       if (active) setLocalDrafts(items || []);
     }).catch(() => {});
     return () => { active = false; };
-  }, [db]);
+  }, [db, me?.id]);
 
   const unfinished = unfinishedPlants(db, me?.id);
 
@@ -92,12 +92,11 @@ export function MyRecords({ nav }) {
   const filteredMine = mine.filter((o) => recordMatches(o, o.plant, q));
   const filteredUnfinished = combinedUnfinished.filter((p) => draftMatches(p, q));
 
-  const count = (g) => {
-    const obsCount = filteredMine.filter((o) => g.statuses.includes(o.status)).length;
-    if (g.key === 'fix') return obsCount + filteredUnfinished.length;
-    return obsCount;
-  };
-  const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && count(g) > 0);
+  // Unsent drafts count towards "To fix", but they are shown in the "Not sent yet" box
+  // above the groups, so a group is only drawn when it has records of its own.
+  const obsCount = (g) => filteredMine.filter((o) => g.statuses.includes(o.status)).length;
+  const count = (g) => obsCount(g) + (g.key === 'fix' ? filteredUnfinished.length : 0);
+  const groups = GROUPS.filter((g) => (filter === 'all' || filter === g.key) && obsCount(g) > 0);
   // A plant's later visits are labelled as revisits.
   const isRevisit = (o) => db.observations.some((x) => x.specimen_id === o.specimen_id && x.observed_at < o.observed_at);
 

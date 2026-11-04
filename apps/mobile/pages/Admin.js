@@ -34,11 +34,11 @@ export function StaffMore({ nav }) {
     if (drafts && drafts.length > 0) {
       const count = drafts.length;
       Alert.alert(
-        'Unsaved Plant Drafts',
-        `You have ${count === 1 ? '1 unsent plant draft' : `${count} unsent plant drafts`}. Signing out will discard drafts to protect data on shared devices. Do you want to sign out?`,
+        'Unsent plant drafts',
+        `This phone has ${count === 1 ? '1 unsent plant draft' : `${count} unsent plant drafts`}. Signing out deletes them, so they do not stay on a shared phone. Sign out anyway?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Discard & Sign out', style: 'destructive', onPress: doSignOut },
+          { text: 'Delete and sign out', style: 'destructive', onPress: doSignOut },
         ]
       );
     } else {

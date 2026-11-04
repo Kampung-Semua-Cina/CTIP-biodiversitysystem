@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ROLE_LABEL } from '../../shared/permissions.js';
 import { fuzzyMatch } from '../../shared/fuzzy.js';
-import { saveDraft, getDraft, listDrafts, clearAllDrafts } from '../draftStore.js';
+import { saveDraft, getDraft, listDrafts, listDraftsFor, clearAllDrafts } from '../draftStore.js';
 import { signOutApi, setAuthToken, getAuthToken, clearAuthToken } from '../../shared/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -272,6 +272,20 @@ describe('Mobile Bug Fixes & Security Hardening Suite', () => {
     assert.ok(!draftMatches(found, 'orchid'), 'Draft does not match irrelevant query');
 
     // Clean up
+    await clearAllDrafts();
+  });
+
+  test('MyRecords: a shared phone lists each user only their own drafts', async () => {
+    await saveDraft('NIAH-TEST-A', { user_id: 'user-a', proposed_species: 'Rafflesia' });
+    await saveDraft('NIAH-TEST-B', { user_id: 'user-b', proposed_species: 'Nepenthes' });
+    await saveDraft('NIAH-TEST-OLD', { proposed_species: 'Saved before user_id existed' });
+
+    assert.deepEqual((await listDraftsFor('user-a')).map((d) => d.qr_id), ['NIAH-TEST-A']);
+    assert.deepEqual((await listDraftsFor('user-b')).map((d) => d.qr_id), ['NIAH-TEST-B']);
+    assert.deepEqual(await listDraftsFor(undefined), [], 'nobody signed in sees no drafts');
+    // Sign-out still sees (and deletes) every draft on the phone.
+    assert.equal((await listDrafts()).length, 3);
+
     await clearAllDrafts();
   });
 });

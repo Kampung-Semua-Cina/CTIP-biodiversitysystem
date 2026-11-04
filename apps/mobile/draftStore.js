@@ -99,6 +99,7 @@ export async function saveDraft(qr_id, draft) {
   if (!qr_id) return false;
   const payload = {
     qr_id,
+    user_id: draft.user_id || null, // who started it, so My Records shows people only their own drafts
     proposed_species: draft.proposed_species || draft.sp || '',
     morphology: draft.morphology || draft.looks || '',
     height_cm: draft.height_cm || draft.height || '',
@@ -239,6 +240,17 @@ export async function listDrafts() {
 }
 
 /**
+ * The drafts one user started on this device. Drafts are kept per tag, and a phone
+ * can be shared, so My Records must not list (and let someone send) another
+ * person's draft. Drafts saved before user_id was added have no owner and are
+ * left out; they still open when their tag is scanned.
+ */
+export async function listDraftsFor(userId) {
+  if (!userId) return [];
+  return (await listDrafts()).filter((d) => d.user_id === userId);
+}
+
+/**
  * Clear all drafts from the encrypted SQLite database, AsyncStorage, and memory.
  * Invoked on sign-out so in-progress plant drafts do not remain on shared devices.
  */
@@ -268,5 +280,3 @@ export async function clearAllDrafts() {
   memoryStore.clear();
   return true;
 }
-
-export const clearDrafts = clearAllDrafts;
