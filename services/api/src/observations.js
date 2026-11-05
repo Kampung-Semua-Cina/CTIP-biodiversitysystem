@@ -53,6 +53,47 @@ async function findObservation(req) {
   ).maybeSingle();
 }
 
+// After an approval: a species with no photos yet gets the record's first photo
+// as its cover. Best effort, step by step: it stops quietly at the first thing
+// missing, because the decision itself is already saved.
+async function coverFromFirstPhoto(db, observationId, userId) {
+  const { data: obs } = await db.from('observations').select('id, specimen_id').eq('id', observationId).maybeSingle();
+  if (!obs?.specimen_id) return;
+  const { data: spec } = await db.from('specimens').select('id, species_id').eq('id', obs.specimen_id).maybeSingle();
+  const speciesId = spec?.species_id;
+  if (!speciesId) return;
+  const { count } = await db.from('species_media').select('id', { count: 'exact', head: true }).eq('species_id', speciesId);
+  if (count) return; // it already has photos
+
+  const { data: photos } = await db.from('observation_photos')
+    .select('id, s3_bucket, s3_key, caption')
+    .eq('observation_id', observationId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  const photo = photos?.[0];
+  if (!photo) return;
+  const { data: file } = await db.storage.from(photo.s3_bucket || 'observation-photos').download(photo.s3_key);
+  if (!file) return;
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const type = detectImageType(buf) || 'image/jpeg';
+  const mediaId = crypto.randomUUID();
+  const key = `${speciesId}/${mediaId}.${EXTENSIONS[type] || 'jpg'}`;
+  const uploaded = await db.storage.from('species-media')
+    .upload(key, stripMetadata(buf, type), { contentType: type, upsert: true });
+  if (uploaded.error) return;
+  await db.from('species_media').insert({
+    id: mediaId,
+    species_id: speciesId,
+    s3_bucket: 'species-media',
+    s3_key: key,
+    caption: photo.caption || 'Field observation photo',
+    is_primary: true,
+    sort_order: 0,
+    uploaded_by: userId,
+  });
+}
+
 export const observationHandlers = {
   // Review queue: GET /observations?status=pending. Botanist: their own, any status.
   'get /observations': async (req, res) => {
@@ -117,45 +158,7 @@ export const observationHandlers = {
     }
     if (body.decision === 'approve') {
       try {
-        const db = supabaseAs(req.user);
-        const { data: obs } = await db.from('observations').select('id, specimen_id').eq('id', req.params.id).maybeSingle();
-        if (obs?.specimen_id) {
-          const { data: spec } = await db.from('specimens').select('id, species_id').eq('id', obs.specimen_id).maybeSingle();
-          if (spec?.species_id) {
-            const { count } = await db.from('species_media').select('id', { count: 'exact', head: true }).eq('species_id', spec.species_id);
-            if (!count) {
-              const { data: photos } = await db.from('observation_photos')
-                .select('id, s3_bucket, s3_key, caption')
-                .eq('observation_id', req.params.id)
-                .order('created_at', { ascending: true })
-                .limit(1);
-              if (photos && photos.length > 0) {
-                const ph = photos[0];
-                const { data: dlBlob } = await db.storage.from(ph.s3_bucket || 'observation-photos').download(ph.s3_key);
-                if (dlBlob) {
-                  const buf = Buffer.from(await dlBlob.arrayBuffer());
-                  const type = detectImageType(buf) || 'image/jpeg';
-                  const mediaId = crypto.randomUUID();
-                  const targetKey = `${spec.species_id}/${mediaId}.${EXTENSIONS[type] || 'jpg'}`;
-                  const stripped = stripMetadata(buf, type);
-                  const uploadRes = await db.storage.from('species-media').upload(targetKey, stripped, { contentType: type, upsert: true });
-                  if (!uploadRes.error) {
-                    await db.from('species_media').insert({
-                      id: mediaId,
-                      species_id: spec.species_id,
-                      s3_bucket: 'species-media',
-                      s3_key: targetKey,
-                      caption: ph.caption || 'Field observation photo',
-                      is_primary: true,
-                      sort_order: 0,
-                      uploaded_by: req.user.id,
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
+        await coverFromFirstPhoto(supabaseAs(req.user), req.params.id, req.user.id);
       } catch (autoErr) {
         console.warn('[API] Auto-sync species media notice:', autoErr);
       }
