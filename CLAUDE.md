@@ -318,7 +318,7 @@ Progress, no mark = To Do.
 |---|---|---|
 | **A. Mobile app UI** | Patrick | CTIP-42 app shell & login R, CTIP-15 QR scan, CTIP-55 photos P, CTIP-56 GPS P, CTIP-57 crash-safe draft P, CTIP-58 submit with retry, CTIP-45 submission status P, CTIP-31 map ✓, CTIP-70 clustering & filters P, CTIP-71 hide endangered coordinates ✓, CTIP-51 innovation (optional) |
 | **B. Mobile data & offline** | Albian | CTIP-26 species search via API R, CTIP-27 QR generation R, CTIP-63 pre-fill from species R, CTIP-117 mobile UI polish R, CTIP-118 prototype leftovers removed R (all merged 30 Oct). Offline, **last**: CTIP-44, 83, 84, 16, 66, 67, 68, CTIP-116 offline QR tag |
-| **C. Backend API & database** | Nicole (API), Amberlyn | Nicole: CTIP-46, 54, 85, 86, 87, 88, 89 ✓. Amberlyn: CTIP-32 report export P. Capture flow CTIP-103 to 106 ✓ (unassigned). **Unassigned:** CTIP-108 remaining specimen and observation routes |
+| **C. Backend API & database** | Nicole (API), Amberlyn | Nicole: CTIP-46, 54, 85, 86, 87, 88, 89 ✓. Amberlyn: CTIP-32 report export P. Capture flow CTIP-103 to 106 ✓ (unassigned). **Unassigned:** CTIP-108 remaining specimen and observation routes R |
 | **D. Web knowledge system** | Ricardo | CTIP-43 login ✓, CTIP-28 species ✓, CTIP-64 photos ✓, CTIP-65 soft delete ✓, CTIP-29 review queue ✓, CTIP-69 approve/reject ✓, CTIP-30 search ✓, CTIP-33 visitor QR page R (merged 30 Oct, #36), CTIP-109 zone filter |
 | **E. IoT & anomaly detection** | Norman | CTIP-17, 48, 59, 60, 61 ✓ in Jira (no code on `main` yet). To do: CTIP-47 simulator, CTIP-62 webcam images, CTIP-38 threshold rules, CTIP-75 statistical model, CTIP-76 node silent, CTIP-77 notifications, CTIP-78 acknowledge/resolve |
 | **F. Security architecture** | Nicole | CTIP-14 auth & RBAC ✓, CTIP-35 encryption R, CTIP-107 mobile SQLite encryption ✓, CTIP-50 remediation. Admin tools (Amberlyn): CTIP-34 user list P, CTIP-72 roles & approval P, CTIP-73 deactivate P. **Unassigned, In Review:** CTIP-102 secret key removed, CTIP-113 demo switcher removed, CTIP-114 auth through API. **Unassigned, To Do:** CTIP-110 strip location from observation photos, CTIP-111 QR tag policy as a migration, CTIP-112 six species photos missing from Storage, CTIP-119 mobile session in SecureStore |
@@ -412,11 +412,11 @@ and Patrick's mobile fixes (#40, no story).
   `POST /v1/auth/sign-in`; the store loads with `GET /v1/workspace` (staff) or
   `GET /v1/public/workspace` (visitors). The sample data in
   `apps/shared/data.js` is now an empty seed, except the leftovers listed below.
-- **API** (`services/api`): 71 routes, all with token and role checks; **56
-  built**, about 124 API tests and 39 shared tests in CI. The 15 that still answer 501:
-  - `GET /species/:id/media`, `GET /specimens`, `GET /specimens/:id`,
-    `PATCH /observations/:id`, `DELETE /observations/:id`,
-    `POST /observations/:id/photos/:photoId/confirm` (CTIP-108)
+- **API** (`services/api`): 79 routes, all with token and role checks; **69
+  built** (CTIP-108 added the specimen list and detail, draft edit and delete,
+  and photo confirm), about 190 API tests and 53 shared tests in CI. The 10 that
+  still answer 501:
+  - `GET /species/:id/media`
   - `POST /sync` (offline, last)
   - Sensors: `POST /sensor-nodes`, `GET /sensor-nodes/:id`,
     `GET /sensor-nodes/:id/telemetry`, `POST /telemetry`, both
