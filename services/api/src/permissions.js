@@ -15,6 +15,10 @@ export const routes = [
   ['post', '/auth/sign-out', PUBLIC], // token optional: ends that session if sent
   ['post', '/auth/password-reset', PUBLIC],
   ['post', '/me/password', ANY_STAFF],
+  // Two-step sign-in with an authenticator app (VA-70). Reached with the
+  // password-only session, so the code can be set up and checked.
+  ['post', '/auth/mfa/enroll', ANY_STAFF],
+  ['post', '/auth/mfa/verify', ANY_STAFF],
 
   // Health check for the apps' "API down" notice: no database call
   ['get', '/health', PUBLIC],

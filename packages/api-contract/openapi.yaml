@@ -126,10 +126,21 @@ paths:
                 password: { type: string, minLength: 1, maxLength: 200 }
       responses:
         '200':
-          description: Signed in
+          description: |
+            Password correct. `mfa` says what comes next (VA-70): `none` signed
+            in; `verify` send the 6-digit code to POST /auth/mfa/verify; `setup`
+            officers and admins must first set up an authenticator app
+            (POST /auth/mfa/enroll). Until then the session only reaches the two
+            MFA routes; every other route answers 403 MFA_REQUIRED.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Session' }
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Session' }
+                  - type: object
+                    required: [mfa]
+                    properties:
+                      mfa: { type: string, enum: [none, verify, setup] }
         '401':
           description: INVALID_CREDENTIALS (wrong email or password)
           content:
@@ -424,6 +435,78 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/mfa/enroll:
+    post:
+      tags: [Auth]
+      operationId: enrollMfa
+      summary: Start setting up an authenticator app (two-step sign-in)
+      description: |
+        Works with the password-only session from sign-in. Answers a QR code and
+        set-up key for the authenticator app; send its first code to
+        POST /auth/mfa/verify to finish. Refused once an app is set up (a lost
+        phone is reset by an admin in Supabase).
+      responses:
+        '201':
+          description: Scan the QR code, then verify
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [factor_id, qr_code, secret]
+                properties:
+                  factor_id: { type: string, format: uuid }
+                  qr_code: { type: string, description: 'An SVG image as a data: URL, for an <img> src' }
+                  secret: { type: string, description: Set-up key to type in by hand }
+                  uri: { type: string, description: 'The otpauth:// link inside the QR code' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: MFA_ALREADY_SET_UP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502': { $ref: '#/components/responses/AuthUnavailable' }
+
+  /auth/mfa/verify:
+    post:
+      tags: [Auth]
+      operationId: verifyMfa
+      summary: Check the 6-digit code and get a session that passes two-step sign-in
+      description: |
+        At most 10 codes per caller address every 5 minutes; more get 429.
+        Uses the person's set-up app, or the one just enrolled. Store the
+        returned session in place of the password-only one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              additionalProperties: false
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Code correct. The new session's token says aal2.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401':
+          description: WRONG_CODE, or the token is missing or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: MFA_NOT_SET_UP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyAttempts' }
+        '502': { $ref: '#/components/responses/AuthUnavailable' }
 
   /me/password:
     post:
@@ -2020,7 +2103,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: Logged in but your role is not allowed to do this
+      description: "FORBIDDEN: your role is not allowed to do this. ACCOUNT_NOT_ACTIVE: not approved yet. MFA_REQUIRED: an officer or admin has not done the 6-digit step (VA-70)"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

@@ -13,7 +13,7 @@ export function requireAuth(verify) {
     }
     try {
       const claims = await verify(token);
-      req.user = { id: claims.sub, email: claims.email, role: claims.user_role ?? null, token };
+      req.user = { id: claims.sub, email: claims.email, role: claims.user_role ?? null, aal: claims.aal ?? 'aal1', token };
       next();
     } catch (err) {
       if (err instanceof errors.JWTExpired) {
@@ -34,5 +34,15 @@ export function allow(...roles) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Your role is not allowed to do this!' });
     }
     next();
+  };
+}
+
+// 403 unless an officer or admin finished the second sign-in step (VA-70): their
+// token must say aal2. `roles` are the roles that need it; `setupRoute` lets the
+// two MFA routes through so the step can be done at all.
+export function requireMfa(roles, setupRoute = false) {
+  return (req, res, next) => {
+    if (setupRoute || !roles.includes(req.user?.role) || req.user.aal === 'aal2') return next();
+    return res.status(403).json({ code: 'MFA_REQUIRED', message: 'Sign in again and enter the 6-digit code from your authenticator app.' });
   };
 }

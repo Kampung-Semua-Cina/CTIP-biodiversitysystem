@@ -14,6 +14,8 @@ import {
   onSessionEnded,
   takeSessionFromUrl,
   signInApi,
+  mfaEnrollApi,
+  mfaVerifyApi,
   signOutApi,
   passwordResetApi,
   changePasswordApi,
@@ -206,6 +208,16 @@ function collectionMatches(a = [], b = []) {
     // Not loaded: keep what we had. An empty plant list would show every tag as unused.
     if (!res.ok) {
       if (res.offline) markMiss();
+      // VA-70: a password-only session (the 6-digit step was never finished):
+      // sign out, so the person signs in again and gets the code step.
+      if (res.code === "MFA_REQUIRED") {
+        sessionEpoch.current += 1;
+        setUserId(null);
+        setAuthTokenState(null);
+        await signOutApi();
+        notify("Sign in again and enter the 6-digit code from your authenticator app.");
+        return { ok: false, message: res.message }; // the next load shows the visitor view
+      }
       console.warn("loadFromApi:", res.message || res.code);
       return { ok: false, message: res.offline ? API_DOWN : res.message };
     }
@@ -652,10 +664,39 @@ function collectionMatches(a = [], b = []) {
     const res = noteOffline(await signInApi(cleanEmail, password));
     if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message || "Sign in failed" };
     const id = res.data.user?.id;
+    // VA-70: the 6-digit step comes first ("verify"), or setting up the
+    // authenticator app ("setup"). The page shows it, then calls mfaVerify().
+    if (res.data.mfa === "verify" || res.data.mfa === "setup") return { ok: true, id, mfa: res.data.mfa, first: false };
     setAuthTokenState(res.data.access_token);
     setUserId(id);
     await loadFromApi(true);
     return { ok: true, id, first: false };
+  };
+
+  // VA-70: a QR code and set-up key for a new authenticator app.
+  const mfaEnroll = async () => {
+    const res = noteOffline(await mfaEnrollApi());
+    if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
+    return { ok: true, qr: res.data.qr_code, secret: res.data.secret };
+  };
+
+  // VA-70: the 6-digit code. On success the new (aal2) session is stored and
+  // the staff data loads, as after a normal sign-in.
+  const mfaVerify = async (code) => {
+    const clean = String(code || "").replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(clean)) return { ok: false, message: "Enter the 6-digit code from your authenticator app" };
+    const res = noteOffline(await mfaVerifyApi(clean));
+    if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
+    const id = res.data.user?.id;
+    setAuthTokenState(res.data.access_token);
+    setUserId(id);
+    await loadFromApi(true);
+    return { ok: true, id };
+  };
+
+  // Left the 6-digit step without finishing: forget the password-only session.
+  const mfaCancel = async () => {
+    await signOutApi();
   };
 
   const signIn = (id) => setUserId(id);
@@ -1356,6 +1397,7 @@ function collectionMatches(a = [], b = []) {
   const value = {
     db, me, role, toast, notify,
     logout, login, signIn, changePassword, updateProfile, changeMyPassword,
+    mfaEnroll, mfaVerify, mfaCancel,
     setPlantPhotos, addPlant, addRevisit, setPlantSpecies, setPlantLocationHidden,
     syncObservation, resubmit, reviewObservation, addComment,
     startDiscussion, replyToDiscussion, updateDiscussion, deleteDiscussion, refreshDiscussion,
