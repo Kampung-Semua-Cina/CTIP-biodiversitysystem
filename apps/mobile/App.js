@@ -4,7 +4,7 @@
 import React from 'react';
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { setStorageAdapter, setApiBaseUrl, restoreSession } from '../shared/api.js';
+import { setStorageAdapter, restoreSession } from '../shared/api.js';
 import StoreProvider from '../shared/StoreProvider.js';
 import { ThemeProvider, FONT_FILES } from './components/Theme.js';
 import AppNavigator from './navigation/AppNavigator.js';
@@ -13,8 +13,7 @@ import { secureStorage } from './secureStorage.js';
 // Persist user sessions securely in Keystore/Keychain across mobile app restarts (CTIP-119)
 setStorageAdapter(secureStorage);
 
-// Explicitly configure API base URL for the mobile app
-setApiBaseUrl(process.env.EXPO_PUBLIC_API_URL || 'https://ctip-biodiversitysystem.onrender.com');
+// The API address is set once, in index.js (configureApiAddress in apiAddress.js).
 
 // Pre-warm secure session restoration in parallel with font loading for fast app initialisation
 restoreSession().catch(() => {});

@@ -13,7 +13,7 @@ import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera'
 import * as ImagePicker from 'expo-image-picker';
 
 import { useStore } from '../../shared/store.js';
-import { plantView } from '../../shared/selectors.js';
+import { extractTag, lookupTag } from '../../shared/selectors.js';
 import { useTheme, font } from '../components/Theme.js';
 import Icon from '../components/Icon.js';
 import { Sheet, Button, Txt, Mono, Sci, DotLabel, Thumb, IconButton } from '../components/Bits.js';
@@ -22,32 +22,12 @@ import { shortDate } from '../components/format.js';
 const CAMERA_TEXT = '#eef4e4';
 const CAMERA_MUTED = '#b4c9ab';
 
-// Pull "NIAH-0007" out of whatever the QR holds (a bare ID or a link to the plant page).
-export function extractTag(raw) {
-  const match = String(raw || '').toUpperCase().match(/NIAH-\d{4}/);
-  return match ? match[0] : String(raw || '').trim().toUpperCase();
-}
-
-// What a scanned ID refers to. Supabase: GET /tags/{qrId} once the apps use the API.
-export function lookupTag(db, id) {
-  const cleanId = String(id || '').trim().toUpperCase();
-  if (!cleanId || !db) return { kind: 'unknown', id: cleanId };
-  const plants = db.plants || [];
-  const tags = db.tags || [];
-  const plant = plants.find((p) => p && p.qr_id && String(p.qr_id).toUpperCase() === cleanId && !p.is_deleted);
-  if (plant) return { kind: 'used', id: cleanId, plant: plantView(db, plant) };
-  const tag = tags.find((t) => t && t.qr_id && String(t.qr_id).toUpperCase() === cleanId);
-  if (tag?.status === 'unused') return { kind: 'unused', id: cleanId, tag };
-  if (tag?.status === 'retired') return { kind: 'retired', id: cleanId, tag };
-  return { kind: 'unknown', id: cleanId };
-}
-
 export default function Scan({ nav, params = {} }) {
-  const { db, role, me } = useStore();
+  const { db, role } = useStore();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
-  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code), me?.id) : null);
+  const [result, setResult] = useState(params.code ? lookupTag(db, extractTag(params.code)) : null);
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState('');
 
@@ -55,7 +35,7 @@ export default function Scan({ nav, params = {} }) {
 
   const handle = (raw) => {
     if (result) return; // ignore repeat reads while a result is showing
-    const r = lookupTag(db, extractTag(raw), me?.id);
+    const r = lookupTag(db, extractTag(raw));
     // A visitor who scans a published plant goes straight to its page.
     if (r.kind === 'used' && role !== 'botanist') return nav.replace('tag', { qr: r.id });
     setTyping(false);

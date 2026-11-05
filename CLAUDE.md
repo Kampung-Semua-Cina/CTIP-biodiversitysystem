@@ -557,10 +557,9 @@ checks the role itself).
   clever code, and explain non-obvious choices in comments or PR descriptions.
 - Everyone is on Windows. Use PowerShell-compatible commands. `python`, not
   `python3`. Venv activation is `.venv\Scripts\Activate.ps1`.
-- The mobile API address is set twice: `index.js` calls `configureApiAddress()`
-  (`apiAddress.js`) and `App.js` calls `setApiBaseUrl()`. Both read
-  `EXPO_PUBLIC_API_URL`, and `getApiBaseUrl()` adds `/v1` if it is missing, so
-  change both together or remove one.
+- The mobile API address is set in one place: `index.js` calls
+  `configureApiAddress()` (`apiAddress.js`), which reads `EXPO_PUBLIC_API_URL`
+  and adds `/v1`. (`App.js` used to set it a second time; removed in CTIP-49.)
 - **Both apps talk to the live Render API by default**, even in local dev: the
   web dev server proxies `/v1` to Render, and the mobile app falls back to
   `https://ctip-biodiversitysystem.onrender.com/v1`. To test API changes locally,
