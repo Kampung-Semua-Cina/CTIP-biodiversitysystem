@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { supabaseAnon, supabaseAs, supabaseFresh } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { withSignedUrls } from './field.js';
 import { protectSpecimen } from './distribution.js';
+import { publicMediaUrl } from './photoLinks.js';
 import { dbLoad } from './dbLoad.js';
 import { emailProblem, passwordProblem, nameProblem, weakPasswordMessage } from './accountRules.js';
 import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } from './emailLimit.js';
@@ -11,12 +12,8 @@ import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } 
 // load, accounts, QR tags, publishing, alerts, sensor thresholds and
 // notifications. Queries run as the signed-in user, so RLS still applies.
 
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
-const dbError = (res, error) => fail(res, 500, 'DB_ERROR', error.message);
 const ROLES = ['botanist', 'officer', 'admin'];
 
-const publicMediaUrl = (db, m) =>
-  (/^https?:/i.test(m.s3_key) ? m.s3_key : db.storage.from(m.s3_bucket || 'species-media').getPublicUrl(m.s3_key).data.publicUrl);
 
 // The start-up load. Each list is what RLS lets this user see, the same rows
 // the apps read before. Without plants, tags or observations the apps would

@@ -4,6 +4,8 @@ import { supabaseAs } from './supabase.js';
 import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS, receiveFile } from './images.js';
 import { protectSpecimen } from './distribution.js';
+import { OBS_COLUMNS, findObservation } from './observationAccess.js';
+import { isFullLink, isWebLink } from './photoLinks.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
 // observations of it, adds photos and comments, and sends records for review.
@@ -16,8 +18,6 @@ import { protectSpecimen } from './distribution.js';
 
 const SPECIMEN_COLUMNS = `id, qr_id, species_id, proposed_species_name, registered_by, lat, lng,
   gps_accuracy_m, endangered_override, is_deleted, created_at, updated_at`;
-const OBS_COLUMNS = `id, specimen_id, recorded_by, observed_at, height_cm, morphology, notes, lat, lng,
-  gps_accuracy_m, status, version, device_id, last_synced_at, created_at, updated_at`;
 const PHOTO_COLUMNS = 'id, observation_id, s3_bucket, s3_key, content_type, size_bytes, upload_status, caption, traits, created_at';
 const COMMENT_COLUMNS = 'id, observation_id, author_id, body, created_at';
 
@@ -68,13 +68,6 @@ const PhotoNotes = z.strictObject({
 
 const isDuplicate = (error, constraint) => error?.code === '23505' && error.message.includes(constraint);
 const obsNotFound = (res) => fail(res, 404, 'NOT_FOUND', 'Observation not found');
-
-// Botanists only ever see what they recorded (RLS says the same).
-const visibleTo = (query, user) => (user.role === 'botanist' ? query.eq('recorded_by', user.id) : query);
-const findObservation = (db, req) => visibleTo(
-  db.from('observations').select(OBS_COLUMNS).eq('id', req.params.id).eq('is_deleted', false),
-  req.user,
-).maybeSingle();
 
 // The observation named in the URL, or null after answering 500 or 404.
 async function observationOr404(db, req, res) {
@@ -332,12 +325,12 @@ export const fieldHandlers = {
 // Field photos are private: each row gets a link that works for a day.
 // Rows saved by older app builds may hold a full link instead of a Storage path.
 export async function withSignedUrls(db, rows) {
-  const paths = rows.map((r) => r.s3_key).filter((k) => k && !/^[a-z]+:/i.test(k));
+  const paths = rows.map((r) => r.s3_key).filter((k) => k && !isFullLink(k));
   const signed = new Map();
   if (paths.length) {
     const { data, error } = await db.storage.from(PHOTO_BUCKET).createSignedUrls(paths, SIGNED_FOR);
     if (error) console.warn('observation photo links not signed:', error.message);
     for (const item of data ?? []) if (item?.signedUrl) signed.set(item.path, item.signedUrl);
   }
-  return rows.map((r) => ({ ...r, url: signed.get(r.s3_key) ?? (/^https?:/i.test(r.s3_key) ? r.s3_key : null) }));
+  return rows.map((r) => ({ ...r, url: signed.get(r.s3_key) ?? (isWebLink(r.s3_key) ? r.s3_key : null) }));
 }

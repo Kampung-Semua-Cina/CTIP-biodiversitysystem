@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
+import { OBS_COLUMNS, visibleTo, findObservation } from './observationAccess.js';
 import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 
@@ -8,8 +9,6 @@ import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 // so RLS shows botanists only their own observations; the handlers also
 // filter by recorded_by for botanists, as a second guard.
 
-const COLUMNS = `id, specimen_id, recorded_by, observed_at, height_cm, morphology, notes, lat, lng,
-  gps_accuracy_m, status, version, device_id, last_synced_at, created_at, updated_at`;
 const REVIEW_COLUMNS = 'id, observation_id, reviewer_id, observation_version, decision, comment, created_at';
 
 const STATUSES = ['draft', 'queued', 'synced', 'returned', 'approved', 'rejected'];
@@ -42,16 +41,6 @@ const RPC_ERRORS = {
 };
 
 const notFound = (res) => fail(res, 404, 'NOT_FOUND', 'Observation not found');
-
-// Botanists only ever see what they recorded.
-const visibleTo = (query, user) => (user.role === 'botanist' ? query.eq('recorded_by', user.id) : query);
-
-async function findObservation(req) {
-  return visibleTo(
-    supabaseAs(req.user).from('observations').select(COLUMNS).eq('id', req.params.id).eq('is_deleted', false),
-    req.user,
-  ).maybeSingle();
-}
 
 // After an approval: a species with no photos yet gets the record's first photo
 // as its cover. Best effort, step by step: it stops quietly at the first thing
@@ -103,7 +92,7 @@ export const observationHandlers = {
     }
     const { status, specimen_id, page, limit } = query.data;
     let q = visibleTo(
-      supabaseAs(req.user).from('observations').select(COLUMNS, { count: 'exact' }).eq('is_deleted', false),
+      supabaseAs(req.user).from('observations').select(OBS_COLUMNS, { count: 'exact' }).eq('is_deleted', false),
       req.user,
     );
     if (status) q = q.eq('status', status);
@@ -118,7 +107,7 @@ export const observationHandlers = {
 
   'get /observations/:id': async (req, res) => {
     if (!UUID.test(req.params.id)) return notFound(res);
-    const { data, error } = await findObservation(req);
+    const { data, error } = await findObservation(supabaseAs(req.user), req);
     if (error) return dbError(res, error);
     if (!data) return notFound(res);
     res.json(data);
@@ -127,7 +116,7 @@ export const observationHandlers = {
   // Every decision with reviewer and time. Botanists see why theirs was returned or rejected.
   'get /observations/:id/reviews': async (req, res) => {
     if (!UUID.test(req.params.id)) return notFound(res);
-    const obs = await findObservation(req);
+    const obs = await findObservation(supabaseAs(req.user), req);
     if (obs.error) return dbError(res, obs.error);
     if (!obs.data) return notFound(res);
     const { data, error } = await supabaseAs(req.user)

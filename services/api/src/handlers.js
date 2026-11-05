@@ -1,5 +1,6 @@
 import { supabaseAnon, supabaseAs } from './supabase.js';
 import { fail, dbError, UUID } from './validate.js';
+import { publicMediaUrl } from './photoLinks.js';
 import { speciesHandlers, applySearch, parsePublicList } from './species.js';
 import { distributionHandlers } from './distribution.js';
 import { speciesMediaHandlers } from './speciesMedia.js';
@@ -12,15 +13,10 @@ import { protectSpecimen } from './distribution.js';
 import { tooMany } from './rateLimit.js';
 import { dbLoad } from './dbLoad.js';
 
-// Public link for a species photo. Rows saved by older web builds may hold a
-// full link instead of a Storage path.
-const mediaUrl = (db, { s3_bucket, s3_key }) =>
-  /^https?:/i.test(s3_key) ? s3_key : db.storage.from(s3_bucket).getPublicUrl(s3_key).data.publicUrl;
-
 // The species' cover photo: the one marked primary, else the first by sort order.
 export function coverUrl(db, media = []) {
   const cover = media.find((m) => m.is_primary) ?? [...media].sort((a, b) => a.sort_order - b.sort_order)[0];
-  return cover ? mediaUrl(db, cover) : null;
+  return cover ? publicMediaUrl(db, cover) : null;
 }
 
 // One published species with its gallery, visitor fields only (listed one by
@@ -40,7 +36,7 @@ async function loadPublicSpecies(db, id) {
   if (error) throw error;
   if (!species) return null;
   const { species_media, ...fields } = species;
-  const media = species_media.map(({ s3_bucket, s3_key, ...m }) => ({ ...m, url: mediaUrl(db, { s3_bucket, s3_key }) }));
+  const media = species_media.map(({ s3_bucket, s3_key, ...m }) => ({ ...m, url: publicMediaUrl(db, { s3_bucket, s3_key }) }));
   return { ...fields, primary_image_url: coverUrl(db, species_media), media };
 }
 

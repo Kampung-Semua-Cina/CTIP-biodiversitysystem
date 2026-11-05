@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseFresh } from './supabase.js';
-import { parseBody } from './validate.js';
+import { parseBody, fail } from './validate.js';
 import { tooMany as overLimit, resetRateLimits } from './rateLimit.js';
 import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } from './emailLimit.js';
 
@@ -9,8 +9,6 @@ import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } 
 // the API calls Supabase Auth for them with the publishable key. The apps keep
 // the access and refresh tokens they get back and send the access token on
 // every other request, exactly as before.
-
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
 
 const email = z.string().trim().toLowerCase().pipe(z.email());
 const SignIn = z.strictObject({ email, password: z.string().min(1).max(200) });
