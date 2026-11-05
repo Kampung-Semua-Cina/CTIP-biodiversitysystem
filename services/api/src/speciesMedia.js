@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS, receiveFile } from './images.js';
+import { isFullLink } from './photoLinks.js';
 
 // Species photo upload (CTIP-85). The file comes to the API, which checks its
 // real type and size, removes location metadata, and stores it in Supabase
@@ -109,7 +110,7 @@ export const speciesMediaHandlers = {
     if (error) return dbError(res, error);
     if (!data) return mediaNotFound(res);
     // Older rows may hold a full link instead of a Storage path; there is no file of ours to remove.
-    if (data.s3_bucket === BUCKET && !/^[a-z]+:/i.test(data.s3_key)) {
+    if (data.s3_bucket === BUCKET && !isFullLink(data.s3_key)) {
       const removed = await db.storage.from(BUCKET).remove([data.s3_key]);
       if (removed.error) console.warn('species photo file not removed:', data.s3_key, removed.error.message);
     }

@@ -5,6 +5,7 @@ import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS, receiveFile } from './images.js';
 import { protectSpecimen } from './distribution.js';
 import { OBS_COLUMNS, findObservation } from './observationAccess.js';
+import { isFullLink, isWebLink } from './photoLinks.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
 // observations of it, adds photos and comments, and sends records for review.
@@ -324,12 +325,12 @@ export const fieldHandlers = {
 // Field photos are private: each row gets a link that works for a day.
 // Rows saved by older app builds may hold a full link instead of a Storage path.
 export async function withSignedUrls(db, rows) {
-  const paths = rows.map((r) => r.s3_key).filter((k) => k && !/^[a-z]+:/i.test(k));
+  const paths = rows.map((r) => r.s3_key).filter((k) => k && !isFullLink(k));
   const signed = new Map();
   if (paths.length) {
     const { data, error } = await db.storage.from(PHOTO_BUCKET).createSignedUrls(paths, SIGNED_FOR);
     if (error) console.warn('observation photo links not signed:', error.message);
     for (const item of data ?? []) if (item?.signedUrl) signed.set(item.path, item.signedUrl);
   }
-  return rows.map((r) => ({ ...r, url: signed.get(r.s3_key) ?? (/^https?:/i.test(r.s3_key) ? r.s3_key : null) }));
+  return rows.map((r) => ({ ...r, url: signed.get(r.s3_key) ?? (isWebLink(r.s3_key) ? r.s3_key : null) }));
 }
