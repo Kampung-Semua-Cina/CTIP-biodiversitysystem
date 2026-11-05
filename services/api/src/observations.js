@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 
 // Observation review (CTIP-86): the officer's review queue (CTIP-29) and the
@@ -41,8 +41,7 @@ const RPC_ERRORS = {
   CTSP0: [422, 'SPECIES_REQUIRED'],
 };
 
-const notFound = (res) => res.status(404).json({ code: 'NOT_FOUND', message: 'Observation not found' });
-const dbError = (res, error) => res.status(500).json({ code: 'DB_ERROR', message: error.message });
+const notFound = (res) => fail(res, 404, 'NOT_FOUND', 'Observation not found');
 
 // Botanists only ever see what they recorded.
 const visibleTo = (query, user) => (user.role === 'botanist' ? query.eq('recorded_by', user.id) : query);
@@ -54,12 +53,53 @@ async function findObservation(req) {
   ).maybeSingle();
 }
 
+// After an approval: a species with no photos yet gets the record's first photo
+// as its cover. Best effort, step by step: it stops quietly at the first thing
+// missing, because the decision itself is already saved.
+async function coverFromFirstPhoto(db, observationId, userId) {
+  const { data: obs } = await db.from('observations').select('id, specimen_id').eq('id', observationId).maybeSingle();
+  if (!obs?.specimen_id) return;
+  const { data: spec } = await db.from('specimens').select('id, species_id').eq('id', obs.specimen_id).maybeSingle();
+  const speciesId = spec?.species_id;
+  if (!speciesId) return;
+  const { count } = await db.from('species_media').select('id', { count: 'exact', head: true }).eq('species_id', speciesId);
+  if (count) return; // it already has photos
+
+  const { data: photos } = await db.from('observation_photos')
+    .select('id, s3_bucket, s3_key, caption')
+    .eq('observation_id', observationId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  const photo = photos?.[0];
+  if (!photo) return;
+  const { data: file } = await db.storage.from(photo.s3_bucket || 'observation-photos').download(photo.s3_key);
+  if (!file) return;
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const type = detectImageType(buf) || 'image/jpeg';
+  const mediaId = crypto.randomUUID();
+  const key = `${speciesId}/${mediaId}.${EXTENSIONS[type] || 'jpg'}`;
+  const uploaded = await db.storage.from('species-media')
+    .upload(key, stripMetadata(buf, type), { contentType: type, upsert: true });
+  if (uploaded.error) return;
+  await db.from('species_media').insert({
+    id: mediaId,
+    species_id: speciesId,
+    s3_bucket: 'species-media',
+    s3_key: key,
+    caption: photo.caption || 'Field observation photo',
+    is_primary: true,
+    sort_order: 0,
+    uploaded_by: userId,
+  });
+}
+
 export const observationHandlers = {
   // Review queue: GET /observations?status=pending. Botanist: their own, any status.
   'get /observations': async (req, res) => {
     const query = ListQuery.safeParse(req.query);
     if (!query.success) {
-      return res.status(422).json({ code: 'VALIDATION_ERROR', message: 'Bad status, specimen_id, page or limit' });
+      return fail(res, 422, 'VALIDATION_ERROR', 'Bad status, specimen_id, page or limit');
     }
     const { status, specimen_id, page, limit } = query.data;
     let q = visibleTo(
@@ -113,50 +153,12 @@ export const observationHandlers = {
     });
     if (error) {
       const known = RPC_ERRORS[error.code];
-      if (known) return res.status(known[0]).json({ code: known[1], message: error.message });
+      if (known) return fail(res, known[0], known[1], error.message);
       return dbError(res, error);
     }
     if (body.decision === 'approve') {
       try {
-        const db = supabaseAs(req.user);
-        const { data: obs } = await db.from('observations').select('id, specimen_id').eq('id', req.params.id).maybeSingle();
-        if (obs?.specimen_id) {
-          const { data: spec } = await db.from('specimens').select('id, species_id').eq('id', obs.specimen_id).maybeSingle();
-          if (spec?.species_id) {
-            const { count } = await db.from('species_media').select('id', { count: 'exact', head: true }).eq('species_id', spec.species_id);
-            if (!count) {
-              const { data: photos } = await db.from('observation_photos')
-                .select('id, s3_bucket, s3_key, caption')
-                .eq('observation_id', req.params.id)
-                .order('created_at', { ascending: true })
-                .limit(1);
-              if (photos && photos.length > 0) {
-                const ph = photos[0];
-                const { data: dlBlob } = await db.storage.from(ph.s3_bucket || 'observation-photos').download(ph.s3_key);
-                if (dlBlob) {
-                  const buf = Buffer.from(await dlBlob.arrayBuffer());
-                  const type = detectImageType(buf) || 'image/jpeg';
-                  const mediaId = crypto.randomUUID();
-                  const targetKey = `${spec.species_id}/${mediaId}.${EXTENSIONS[type] || 'jpg'}`;
-                  const stripped = stripMetadata(buf, type);
-                  const uploadRes = await db.storage.from('species-media').upload(targetKey, stripped, { contentType: type, upsert: true });
-                  if (!uploadRes.error) {
-                    await db.from('species_media').insert({
-                      id: mediaId,
-                      species_id: spec.species_id,
-                      s3_bucket: 'species-media',
-                      s3_key: targetKey,
-                      caption: ph.caption || 'Field observation photo',
-                      is_primary: true,
-                      sort_order: 0,
-                      uploaded_by: req.user.id,
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
+        await coverFromFirstPhoto(supabaseAs(req.user), req.params.id, req.user.id);
       } catch (autoErr) {
         console.warn('[API] Auto-sync species media notice:', autoErr);
       }

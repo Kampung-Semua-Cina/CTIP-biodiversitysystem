@@ -1,3 +1,25 @@
+import { fail } from './validate.js';
+
+// Runs a multer single-file `upload` on the request. True when req.file holds
+// the file; false after answering 413 (too large) or 422 (no file, bad form).
+export async function receiveFile(upload, req, res) {
+  try {
+    await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
+  } catch (err) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      fail(res, 413, 'FILE_TOO_LARGE', 'Photos can be at most 10 MB');
+    } else {
+      fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    }
+    return false;
+  }
+  if (!req.file) {
+    fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    return false;
+  }
+  return true;
+}
+
 // Image checks for uploads. The file type comes from the file's own first
 // bytes, not from its name or the Content-Type the client claims.
 export function detectImageType(buf) {

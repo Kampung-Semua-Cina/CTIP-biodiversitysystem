@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { UUID } from './validate.js';
+import { fail, dbError, UUID } from './validate.js';
 
 // Distribution map data (CTIP-88, feeds CTIP-31 and CTIP-71). Threat T13:
 // the exact spot of an endangered plant must never reach someone who is not
@@ -81,7 +81,7 @@ export const distributionHandlers = {
   'get /distribution': async (req, res) => {
     const query = DistributionQuery.safeParse(req.query);
     if (!query.success) {
-      return res.status(422).json({ code: 'VALIDATION_ERROR', message: 'species_id must be a UUID; family is text' });
+      return fail(res, 422, 'VALIDATION_ERROR', 'species_id must be a UUID; family is text');
     }
     const { species_id, family } = query.data;
     let q = supabaseAs(req.user)
@@ -97,7 +97,7 @@ export const distributionHandlers = {
       .order('observed_at', { ascending: false });
     if (species_id) q = q.eq('specimens.species_id', species_id);
     const { data, error } = await q;
-    if (error) return res.status(500).json({ code: 'DB_ERROR', message: error.message });
+    if (error) return dbError(res, error);
 
     const latest = new Map();
     for (const obs of data) if (!latest.has(obs.specimens.id)) latest.set(obs.specimens.id, obs);
