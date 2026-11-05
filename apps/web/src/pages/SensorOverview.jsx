@@ -13,7 +13,7 @@ const latest = (rows) => rows[rows.length - 1];
 // Sensor nodes, their readings, and the alerts they raise (officers and admins).
 // Order on the page: summary, open alerts, nodes, readings for the chosen node, alert history.
 export default function SensorOverview() {
-  const { db, setThresholds, notify } = useStore();
+    const { db, role, setThresholds, notify } = useStore();
   const [nodeId, setNodeId] = useState(db.nodes?.[0]?.id || null);
   const [tab, setTab] = useState("acknowledged");
   const [ask, confirmDialog] = useConfirm();
@@ -101,11 +101,11 @@ export default function SensorOverview() {
           {node.thresholds && (
             <details className="limits">
               <summary>Alert limits for {node.name} · {node.thresholds.temp_max}°C max, {node.thresholds.moisture_min}% soil min</summary>
-              <form key={node.id} className="row wrap" onSubmit={saveLimits}>
+                            {role === "admin" ? (<form key={node.id} className="row wrap" onSubmit={saveLimits}>
                 <label>Temperature max (°C)<input name="temp_max" type="number" step="0.5" defaultValue={node.thresholds.temp_max} /></label>
                 <label>Soil moisture min (%)<input name="moisture_min" type="number" step="1" defaultValue={node.thresholds.moisture_min} /></label>
                 <button className="btn ghost" type="submit"><Icon name="check" size={18} /> Save limits</button>
-              </form>
+                            </form>) : <p className="mute small">Only an admin can change these limits.</p>}
             </details>
           )}
         </section>

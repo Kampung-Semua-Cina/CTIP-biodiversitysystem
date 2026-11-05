@@ -64,14 +64,6 @@ export default function Scan({ nav, params = {} }) {
 
   const pickFromGallery = async () => {
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) {
-        const ask = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!ask.granted) {
-          Alert.alert('Permission needed', 'Allow photo library access to choose images.');
-          return;
-        }
-      }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (!result.canceled && result.assets?.length) {
         const asset = result.assets[0];

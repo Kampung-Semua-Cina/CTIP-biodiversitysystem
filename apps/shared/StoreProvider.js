@@ -106,6 +106,10 @@ export default function StoreProvider({ children, deviceId = "mobile" }) {
   const misses = useRef(0); // API answers missed in a row
   const loadsStarted = useRef(0);
   const newestLoadShown = useRef(0);
+  // Goes up on sign-out and when the session ends (F-13). A load that was already
+  // on its way for the previous user is then dropped, so it cannot bring their
+  // staff data back after it was cleared.
+  const sessionEpoch = useRef(0);
 
   // The role always comes from the signed-in user's profile (loaded through the
   // API); nobody signed in is a visitor. The prototype role switch that could
@@ -188,10 +192,13 @@ function collectionMatches(a = [], b = []) {
   // lists that changed (or nothing), which are merged over the last load.
   const loadFromApi = useCallback(async (quiet = true) => {
     const started = ++loadsStarted.current;
+    const epoch = sessionEpoch.current;
     const token = await sessionToken();
     const owner = token ? tokenClaims(token)?.sub || null : null;
     const prev = owner && lastWorkspace.current?.owner === owner ? lastWorkspace.current : null;
     const res = await fetchWorkspace({ token, cursor: prev?.cursor });
+    // Signed out while this was loading: it holds the previous user's data (F-13).
+    if (epoch !== sessionEpoch.current) return { ok: true };
     // A later load has already answered: this one is out of date, so drop it.
     // Otherwise a slow poll could undo a decision saved a moment ago.
     if (started < newestLoadShown.current) return { ok: true };
@@ -473,6 +480,9 @@ function collectionMatches(a = [], b = []) {
       if (!mounted) return;
       setUserId(null);
       setAuthTokenState(null);
+      lastWorkspace.current = null;
+      sessionEpoch.current += 1;
+      setDb(seed); // F-13: drop the staff data when the session ends
       notify("Your session has ended. Please sign in again.");
       loadFromApi(true);
     });
@@ -559,8 +569,13 @@ function collectionMatches(a = [], b = []) {
     lastWorkspace.current = null;
     setAuthTokenState(null);
     setUserId(null);
+    // F-13: forget the staff data (exact endangered locations) straight away,
+    // so the next person on this browser or phone cannot see it without a reload.
+    sessionEpoch.current += 1;
+    setDb(seed);
     await signOutApi();
     notify("Signed out");
+    loadFromApi(true); // load the visitor view again
   };
 
   const loginWithToken = async (token) => {
