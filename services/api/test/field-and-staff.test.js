@@ -40,6 +40,11 @@ async function fakeSupabase(input, init = {}) {
 
   if (url.pathname.startsWith('/storage/v1/object/sign/')) {
     const { paths } = JSON.parse(init.body);
+    if (!paths) { // one file: answers only for a file that was uploaded
+      const key = decodeURIComponent(url.pathname.replace('/storage/v1/object/sign/observation-photos/', ''));
+      if (!stored.includes(key)) return json(400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
+      return json(200, { signedURL: `/object/sign/observation-photos/${key}?token=t` });
+    }
     return json(200, paths.map((path) => ({ path, signedURL: `/object/sign/observation-photos/${path}?token=t`, error: null })));
   }
   if (url.pathname.startsWith('/storage/v1/object/observation-photos/') && method === 'POST') {
@@ -60,6 +65,9 @@ async function fakeSupabase(input, init = {}) {
     if (op === 'eq') return `${row[k]}` === want;
     if (op === 'neq') return `${row[k]}` !== want;
     if (op === 'ilike') return `${row[k]}`.toLowerCase() === want.toLowerCase();
+    if (op === 'in') return want.replace(/^\(|\)$/g, '').split(',').map((s) => s.replace(/"/g, '')).includes(`${row[k]}`);
+    if (op === 'is' && want === 'null') return row[k] == null;
+    if (op === 'not' && want === 'is.null') return row[k] != null;
     return true;
   });
 
@@ -83,15 +91,18 @@ async function fakeSupabase(input, init = {}) {
   } else {
     rows = db[table].filter(matches);
   }
+  const total = rows.length;
+  const offset = Number(url.searchParams.get('offset') ?? 0);
   const limit = url.searchParams.get('limit');
-  if (limit) rows = rows.slice(0, Number(limit));
-  rows = rows.map((r) => ({ ...r }));
+  rows = rows.slice(offset, limit ? offset + Number(limit) : undefined).map((r) => ({ ...r }));
 
-  if (new Headers(init.headers).get('Accept') === 'application/vnd.pgrst.object+json') {
+  const headers = new Headers(init.headers);
+  if (headers.get('Accept') === 'application/vnd.pgrst.object+json') {
     if (rows.length !== 1) return json(406, { code: 'PGRST116', message: 'Cannot coerce the result to a single JSON object' });
     return json(200, rows[0]);
   }
-  return json(200, rows);
+  const counted = headers.get('Prefer')?.includes('count=exact');
+  return json(200, rows, counted ? { 'Content-Range': `${offset}-${offset + rows.length - 1}/${total}` } : {});
 }
 
 beforeEach((t) => {
@@ -542,4 +553,149 @@ test('health: answers without asking the database', async (t) => {
   assert.equal(res.body.ok, true);
   assert.ok(res.body.db.poll_after_ms >= 5000);
   assert.equal(calls.length, 0);
+});
+
+/* ---------- CTIP-108: plant list and detail, draft edits, photo confirm ---------- */
+
+// Uses EXACT and species() from the endangered locations section above.
+// Plants here get their own tag, an officer as registrant and an increasing
+// created_at, so lists have a known order.
+const specimen = (fields = {}) => {
+  const row = { id: crypto.randomUUID(), qr_id: `NIAH-${db.specimens.length + 1}`, species_id: null,
+    registered_by: users.officer, ...EXACT, gps_accuracy_m: 4, endangered_override: false, is_deleted: false,
+    created_at: new Date(Date.now() + db.specimens.length).toISOString(), ...fields };
+  db.specimens.push(row);
+  return row;
+};
+
+test('GET /specimens: endangered spots reduced for a botanist, own plants and staff exact, deleted left out', async () => {
+  const rare = species('Endangered');
+  const common = species('Least concern');
+  const theirs = specimen({ species_id: rare.id });
+  const mine = specimen({ species_id: rare.id, registered_by: users.botanist });
+  const plain = specimen({ species_id: common.id });
+  specimen({ is_deleted: true });
+
+  const res = await request(app).get('/v1/specimens').set(as('botanist'));
+  assert.equal(res.status, 200);
+  assert.equal(res.body.meta.total, 3);
+  const byId = Object.fromEntries(res.body.data.map((s) => [s.id, s]));
+  assert.equal(byId[theirs.id].location_reduced, true);
+  assert.notEqual(byId[theirs.id].lat, EXACT.lat);
+  assert.equal(byId[mine.id].location_reduced, false);
+  assert.equal(byId[mine.id].lat, EXACT.lat);
+  assert.equal(byId[plain.id].location_reduced, false);
+
+  const staff = await request(app).get('/v1/specimens').set(as('officer'));
+  assert.equal(staff.body.data.find((s) => s.id === theirs.id).lat, EXACT.lat);
+});
+
+test('GET /specimens: filters, paging and bad parameters', async () => {
+  const sp = species('Least concern');
+  const linked = specimen({ species_id: sp.id });
+  const open = specimen();
+  const unresolved = await request(app).get('/v1/specimens?unresolved=true').set(as('officer'));
+  assert.deepEqual(unresolved.body.data.map((s) => s.id), [open.id]);
+  const bySpecies = await request(app).get(`/v1/specimens?species_id=${sp.id}`).set(as('officer'));
+  assert.deepEqual(bySpecies.body.data.map((s) => s.id), [linked.id]);
+  const paged = await request(app).get('/v1/specimens?page=2&limit=1').set(as('officer'));
+  assert.deepEqual(paged.body.meta, { page: 2, limit: 1, total: 2 });
+  assert.equal(paged.body.data.length, 1);
+  assert.equal((await request(app).get('/v1/specimens?species_id=nope').set(as('officer'))).status, 422);
+  assert.equal((await request(app).get('/v1/specimens?limit=500').set(as('officer'))).status, 422);
+});
+
+test('GET /specimens/:id: protected like the list; a species the user cannot read fails closed; deleted is 404', async () => {
+  const rare = species('critically endangered');
+  const one = specimen({ species_id: rare.id });
+  const hidden = specimen({ species_id: crypto.randomUUID() }); // species not readable by this user
+  const gone = specimen({ is_deleted: true });
+
+  const res = await request(app).get(`/v1/specimens/${one.id}`).set(as('botanist'));
+  assert.equal(res.status, 200);
+  assert.equal(res.body.location_reduced, true);
+  assert.equal((await request(app).get(`/v1/specimens/${hidden.id}`).set(as('botanist'))).body.location_reduced, true);
+  assert.equal((await request(app).get(`/v1/specimens/${one.id}`).set(as('admin'))).body.lat, EXACT.lat);
+  assert.equal((await request(app).get(`/v1/specimens/${gone.id}`).set(as('officer'))).status, 404);
+  assert.equal((await request(app).get(`/v1/specimens/${crypto.randomUUID()}`).set(as('officer'))).status, 404);
+  assert.equal((await request(app).get('/v1/specimens/not-a-uuid').set(as('officer'))).status, 404);
+});
+
+test('PATCH /observations/:id: the owner edits a draft with the version they saw; the version moves on', async () => {
+  const draft = observation({ status: 'draft', notes: 'old' });
+  const res = await request(app).patch(`/v1/observations/${draft.id}`).set(as('botanist'))
+    .send({ version: 1, notes: 'new notes', height_cm: 30, lat: null, lng: null, gps_accuracy_m: null });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.notes, 'new notes');
+  assert.equal(res.body.version, 2);
+  assert.equal(res.body.lat, null);
+
+  const stale = await request(app).patch(`/v1/observations/${draft.id}`).set(as('botanist')).send({ version: 1, notes: 'late' });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, 'VERSION_CONFLICT');
+  assert.equal(draft.notes, 'new notes');
+});
+
+test('PATCH /observations/:id: sent records, other people and bad bodies are refused', async () => {
+  const sent = observation({ status: 'synced' });
+  const draft = observation({ status: 'draft' });
+  const someoneElses = observation({ status: 'draft', recorded_by: crypto.randomUUID() });
+
+  const wrong = await request(app).patch(`/v1/observations/${sent.id}`).set(as('botanist')).send({ version: 1, notes: 'x' });
+  assert.equal(wrong.status, 409);
+  assert.equal(wrong.body.code, 'WRONG_STATUS');
+  const officer = await request(app).patch(`/v1/observations/${draft.id}`).set(as('officer')).send({ version: 1, notes: 'x' });
+  assert.equal(officer.status, 403);
+  assert.equal((await request(app).patch(`/v1/observations/${someoneElses.id}`).set(as('botanist')).send({ version: 1, notes: 'x' })).status, 404);
+  assert.equal((await request(app).patch(`/v1/observations/${draft.id}`).set(as('botanist')).send({ version: 1 })).status, 422);
+  assert.equal((await request(app).patch(`/v1/observations/${draft.id}`).set(as('botanist')).send({ notes: 'no version' })).status, 422);
+  assert.equal((await request(app).patch(`/v1/observations/${draft.id}`).set(as('botanist')).send({ version: 1, status: 'approved' })).status, 422);
+  assert.equal(draft.status, 'draft');
+  assert.equal(draft.version, 1);
+});
+
+test('DELETE /observations/:id: the owner soft-deletes an unsent record; version checked when sent', async () => {
+  const draft = observation({ status: 'queued', version: 3 });
+  const stale = await request(app).delete(`/v1/observations/${draft.id}?version=2`).set(as('botanist'));
+  assert.equal(stale.status, 409);
+  assert.equal(draft.is_deleted, false);
+  const res = await request(app).delete(`/v1/observations/${draft.id}?version=3`).set(as('botanist'));
+  assert.equal(res.status, 204);
+  assert.equal(draft.is_deleted, true);
+  assert.equal(db.observations.length, 1); // still there for the audit log
+  assert.equal((await request(app).delete(`/v1/observations/${draft.id}`).set(as('botanist'))).status, 404);
+
+  const sent = observation({ status: 'synced' });
+  assert.equal((await request(app).delete(`/v1/observations/${sent.id}`).set(as('botanist'))).status, 409);
+  const other = observation({ status: 'draft' });
+  assert.equal((await request(app).delete(`/v1/observations/${other.id}`).set(as('admin'))).status, 403);
+  assert.equal(other.is_deleted, false);
+});
+
+test('photo confirm: an uploaded photo is returned as it is; a pending one is marked uploaded once its file is there', async () => {
+  const obs = observation({ status: 'draft' });
+  const photo = (fields) => {
+    const row = { id: crypto.randomUUID(), observation_id: obs.id, s3_bucket: 'observation-photos',
+      s3_key: `${obs.id}/${crypto.randomUUID()}.jpg`, upload_status: 'pending', ...fields };
+    db.observation_photos.push(row);
+    return row;
+  };
+  const done = photo({ upload_status: 'uploaded' });
+  const arrived = photo();
+  stored.push(arrived.s3_key);
+  const missing = photo();
+  const confirm = (p, who = 'botanist') => request(app).post(`/v1/observations/${obs.id}/photos/${p.id}/confirm`).set(as(who));
+
+  const already = await confirm(done);
+  assert.equal(already.status, 200);
+  assert.equal(already.body.upload_status, 'uploaded');
+  assert.ok(already.body.url);
+  const ok = await confirm(arrived, 'officer');
+  assert.equal(ok.status, 200);
+  assert.equal(arrived.upload_status, 'uploaded');
+  const notYet = await confirm(missing);
+  assert.equal(notYet.status, 404);
+  assert.equal(notYet.body.code, 'UPLOAD_NOT_FOUND');
+  assert.equal(missing.upload_status, 'pending');
+  assert.equal((await confirm({ id: crypto.randomUUID() })).status, 404);
 });
