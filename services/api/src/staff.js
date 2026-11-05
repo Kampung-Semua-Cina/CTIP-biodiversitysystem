@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAnon, supabaseAs, supabaseFresh } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { withSignedUrls } from './field.js';
 import { protectSpecimen } from './distribution.js';
 import { dbLoad } from './dbLoad.js';
@@ -11,8 +11,6 @@ import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } 
 // load, accounts, QR tags, publishing, alerts, sensor thresholds and
 // notifications. Queries run as the signed-in user, so RLS still applies.
 
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
-const dbError = (res, error) => fail(res, 500, 'DB_ERROR', error.message);
 const ROLES = ['botanist', 'officer', 'admin'];
 
 const publicMediaUrl = (db, m) =>

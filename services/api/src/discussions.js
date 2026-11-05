@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 
 // Discussion board (#/discussion). Threads work like email: the owner shares
 // one with people and/or role groups and makes it public or private. Who can
@@ -9,8 +9,6 @@ import { parseBody, UUID } from './validate.js';
 // request; a thread the caller cannot read answers 404, never 403, so the
 // answer says nothing about threads that are not theirs.
 
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
-const dbError = (res, error) => fail(res, 500, 'DB_ERROR', error.message);
 const notFound = (res) => fail(res, 404, 'NOT_FOUND', 'Discussion not found');
 
 const ROLES = ['botanist', 'officer', 'admin'];
