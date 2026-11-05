@@ -13,7 +13,7 @@ const app = createApp({
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
   requireHttps: process.env.REQUIRE_HTTPS === 'true',
   trustProxy,
-  // VA-70: officers and admins need the 6-digit code. MFA_OFF=true only for a
+  // VA-70: every staff member needs the 6-digit code. MFA_OFF=true only for a
   // local test database where nobody can set it up; never on Render.
   mfaRoles: process.env.MFA_OFF === 'true' ? [] : MFA_ROLES,
 });

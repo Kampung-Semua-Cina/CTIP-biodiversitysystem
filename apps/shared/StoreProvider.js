@@ -677,7 +677,7 @@ function collectionMatches(a = [], b = []) {
   const mfaEnroll = async () => {
     const res = noteOffline(await mfaEnrollApi());
     if (!res.ok) return { ok: false, message: res.offline ? API_DOWN : res.message };
-    return { ok: true, qr: res.data.qr_code, secret: res.data.secret };
+    return { ok: true, qr: res.data.qr_code, secret: res.data.secret, uri: res.data.uri };
   };
 
   // VA-70: the 6-digit code. On success the new (aal2) session is stored and

@@ -9,8 +9,8 @@ import { requireHttps as httpsOnly } from './https.js';
 const notImplemented = (req, res) =>
   res.status(501).json({ code: 'NOT_IMPLEMENTED', message: `${req.method} ${req.path} is not built yet` });
 
-// mfaRoles: roles whose token must say aal2 (VA-70). server.js passes officer and
-// admin; the older tests leave it empty, and test/mfa.test.js checks the rule.
+// mfaRoles: roles whose token must say aal2 (VA-70). server.js passes every staff
+// role (botanist, officer, admin); the older tests leave it empty, and test/mfa.test.js checks the rule.
 export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [], requireHttps = false, trustProxy = false, mfaRoles = [] }) {
   const app = express();
   app.disable('x-powered-by'); // F-12: don't tell attackers we run Express

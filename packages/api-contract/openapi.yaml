@@ -2103,7 +2103,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: "FORBIDDEN: your role is not allowed to do this. ACCOUNT_NOT_ACTIVE: not approved yet. MFA_REQUIRED: an officer or admin has not done the 6-digit step (VA-70)"
+      description: "FORBIDDEN: your role is not allowed to do this. ACCOUNT_NOT_ACTIVE: not approved yet. MFA_REQUIRED: a staff member has not done the 6-digit step (VA-70)"
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

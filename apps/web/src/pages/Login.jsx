@@ -10,7 +10,7 @@ import { PasswordInput } from "../components/Bits.jsx";
 // signed in (StoreProvider reads the session from the address), where the
 // person chooses a new password. #/login?expired=1: the link was used or too old.
 // After a first sign-in with the default password, staff are asked to choose a new one.
-// Two-step sign-in (VA-70): after the password, officers and admins type the
+// Two-step sign-in (VA-70): after the password, every staff member types the
 // 6-digit code from their authenticator app ("mfa"). The first time, they scan
 // a QR code to set the app up ("mfa-setup").
 export default function Login() {
@@ -178,7 +178,7 @@ export default function Login() {
         <form onSubmit={checkCode}>
           <h1>Set up two-step sign-in</h1>
           <p className="mute">
-            Officers and admins need a 6-digit code as well as their password. Install an authenticator app on your phone
+            Every staff account needs a 6-digit code as well as its password. Install an authenticator app on your phone
             (for example Google Authenticator or Microsoft Authenticator), then scan this code with it.
           </p>
           <div style={{ display: "flex", justifyContent: "center", margin: "12px 0" }}>

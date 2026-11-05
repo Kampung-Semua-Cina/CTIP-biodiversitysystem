@@ -2,6 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { MFA_ROLES } from '../src/mfa.js';
 import { resetAttemptLimits, ATTEMPT_LIMIT } from '../src/session.js';
 
 // Two-step sign-in (VA-70). A fake Supabase Auth answers the calls the API
@@ -16,15 +17,16 @@ const people = {
   'officer-aal2': { sub: ids.officer, user_role: 'officer', aal: 'aal2' },
   'admin-aal1': { sub: crypto.randomUUID(), user_role: 'admin', aal: 'aal1' },
   'botanist-aal1': { sub: ids.botanist, user_role: 'botanist', aal: 'aal1' },
+  'botanist-aal2': { sub: ids.botanist, user_role: 'botanist', aal: 'aal2' },
 };
 const verify = async (token) => {
   if (!people[token]) throw new Error('bad token');
   return people[token];
 };
 const handlers = { 'get /me': (req, res) => res.json({ id: req.user.id, role: req.user.role }) };
-const app = createApp({ verify, mfaRoles: ['officer', 'admin'] });
+const app = createApp({ verify, mfaRoles: MFA_ROLES });
 const appNoMfa = createApp({ verify, handlers });
-const appWithMe = createApp({ verify, handlers, mfaRoles: ['officer', 'admin'] });
+const appWithMe = createApp({ verify, handlers, mfaRoles: MFA_ROLES });
 
 // A JWT-shaped token with the given claims (the API only reads user_role from it).
 const jwt = (claims) => ['e30', Buffer.from(JSON.stringify(claims)).toString('base64url'), 'sig'].join('.');
@@ -72,16 +74,20 @@ beforeEach(() => {
   resetAttemptLimits();
 });
 
-test('officer and admin with a password-only token: every normal route answers 403 MFA_REQUIRED', async () => {
-  for (const token of ['officer-aal1', 'admin-aal1']) {
+test('every role must use MFA', () => {
+  assert.deepEqual([...MFA_ROLES].sort(), ['admin', 'botanist', 'officer']);
+});
+
+test('botanist, officer and admin with a password-only token: every normal route answers 403 MFA_REQUIRED', async () => {
+  for (const token of ['botanist-aal1', 'officer-aal1', 'admin-aal1']) {
     const res = await request(appWithMe).get('/v1/me').set('Authorization', `Bearer ${token}`);
     assert.equal(res.status, 403);
     assert.equal(res.body.code, 'MFA_REQUIRED');
   }
 });
 
-test('officer with an aal2 token and a botanist without one get through', async () => {
-  for (const token of ['officer-aal2', 'botanist-aal1']) {
+test('officer and botanist with an aal2 token get through', async () => {
+  for (const token of ['officer-aal2', 'botanist-aal2']) {
     const res = await request(appWithMe).get('/v1/me').set('Authorization', `Bearer ${token}`);
     assert.equal(res.status, 200, token);
   }
@@ -92,7 +98,7 @@ test('with no mfaRoles (older tests, MFA_OFF) nothing changes', async () => {
   assert.equal(res.status, 200);
 });
 
-test('sign-in says what comes next: setup for an officer with no app, verify once set up, none for a botanist', async () => {
+test('sign-in says what comes next: setup with no app (botanists too), verify once set up', async () => {
   let res = await request(app).post('/v1/auth/sign-in').send({ email: 'officer@x.my', password: 'pw' });
   assert.equal(res.status, 200);
   assert.equal(res.body.mfa, 'setup');
@@ -100,7 +106,7 @@ test('sign-in says what comes next: setup for an officer with no app, verify onc
   res = await request(app).post('/v1/auth/sign-in').send({ email: 'officer@x.my', password: 'pw' });
   assert.equal(res.body.mfa, 'verify');
   res = await request(app).post('/v1/auth/sign-in').send({ email: 'botanist@x.my', password: 'pw' });
-  assert.equal(res.body.mfa, 'none');
+  assert.equal(res.body.mfa, 'setup');
 });
 
 test('enroll works with the password-only token, removes unfinished set-ups, and answers the QR code', async () => {
