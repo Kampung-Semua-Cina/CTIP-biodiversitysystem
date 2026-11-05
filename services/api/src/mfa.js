@@ -34,6 +34,8 @@ async function authRequest(path, { method = 'POST', token, body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  // Logged on the server only, so a failed set-up can be traced (no codes or keys).
+  if (!res.ok) console.warn(`MFA: ${method} ${path} -> ${res.status} ${data.error_code ?? data.code ?? ''} ${data.msg ?? data.message ?? ''}`.trim());
   return { ok: res.ok, status: res.status, data };
 }
 
