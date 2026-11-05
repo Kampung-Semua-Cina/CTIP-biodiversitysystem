@@ -688,84 +688,123 @@ photo: only the real photo is added.
 
 ---
 
-# Since commit `5c8f01e`: IoT monitoring access (officers read, admins read and write)
+# Since commit `5c8f01e`: IoT monitoring access (sensor nodes admin only, alerts for officers and admins)
 
-*Written 5 Nov 2026. API permissions, contract, two database migrations, and the Monitoring
-page on web and mobile. Nothing below is committed yet.*
+*Written 5 Nov 2026, corrected later that day. API permissions, contract and database
+migrations. Nothing below is committed yet.*
 
-The team's rule for IoT monitoring: **Admin can read and write, Officer can read.** Admin-only
-node editing (PATCH `/sensor-nodes/:id`) follows Nicole's meeting minutes and Michelle's
-CTIP-48 change on main (#54). Making alerts read-only for officers was decided on 5 Nov 2026.
+The team's role table (Nicole): **only adding, editing or deleting sensor nodes is admin only.
+Officers see the nodes, and officers and admins do everything with alerts** (CTIP-78:
+officers acknowledge and resolve). Admin-only node editing matches Michelle's CTIP-48 change
+on main (#54).
 
 | | Botanist | Officer | Admin |
 |---|---|---|---|
 | See nodes, live readings, history and webcam images | No | Yes | Yes |
-| See alerts, their notes, who they are assigned to and the outcome | No | Yes | Yes |
-| Get a notification when an alert is raised | No | Yes | Yes |
-| Assign, acknowledge, add notes to and resolve alerts | No | **No** | Yes |
-| Change a node's alert limits (thresholds) | No | **No** | Yes |
+| See alerts and get a notification when one is raised | No | Yes | Yes |
+| Assign, acknowledge, add notes to and resolve alerts | No | Yes | Yes |
+| Change a node's alert limits (thresholds) | No | No | Yes |
 | Register, edit and deactivate nodes; manage device keys | No | No | Yes |
 
 - **Botanists get no access** because each node sits next to an endangered plant, so its
   position gives away the plant's exact spot.
-- **Officers watch** nodes and alerts and are told when an alert is raised, but every change
-  goes through an admin.
-- **Only admins change anything:** CTIP-48 ("Admin can register, edit and deactivate a sensor
-  node"), CLAUDE.md (IoT node registration under the System Administrator), and least privilege.
+- **Officers handle alerts** because they are the people who act on a disturbance.
+- **Only admins manage devices:** CTIP-48, CLAUDE.md (IoT node registration under the System
+  Administrator), and least privilege.
+
+## What went wrong, and the fix
+
+`20261105210000_alerts_admin_write.sql` made alerts **read-only for officers**, based on a
+misreading of "Officer can READ" (it applies to sensor nodes, not alerts). It was pushed to
+the live database before the branch was merged, while the live API and website (from main)
+still let officers act on alerts. **Result on the live site: officers got an error when they
+acknowledged, resolved, assigned or added a note to an alert.**
+
+Also, 7 migrations of this branch (`20261104000000` to `20261105210000`) were live but not on
+main, so nobody working from main could run `db push`, and the "Supabase Preview" check
+failed. Merging this branch (PR #56) fixes that.
+
+The fix, **`20261105220000_alerts_officer_admin_write.sql`** (written by the team):
+
+- Gives officers alert and alert-note writes back (`alerts: staff write`,
+  `alert notes: staff write`). `20261105210000` is already live, so it is **not edited**.
+- Drops `trg_sensor_nodes_guard` in case the first version of `20261105200000` went live:
+  that file was edited after it may have been pushed.
+- Adds F-08's "active users only" rule again on `discussions`, `discussion_audience`,
+  `discussion_posts` and `table_versions`, in case F-08 ran before those tables existed
+  (F-08 skips tables that do not exist yet).
+
+Both extra steps do nothing if already done.
+
+**Rule from now on: never edit a migration after it is pushed; add a new one. Tell Michelle
+and Amberlyn before any `db push`.**
+
+### Other force-pushed migrations: checked, no harm to main
+
+| Migration | Effect on the live site built from main |
+|---|---|
+| `profile_self_edit` | New profile columns; main does not use them |
+| `discussion_board`, `table_versions` | New tables and change-counting triggers only |
+| `user_soft_delete` | Soft delete and a 30-day purge (only with pg_cron or this branch's API). The new notification-type list still allows every type main creates. |
+| `species_status_lower_case` | Rewrites statuses to lower case. Main ignores case already, and its species form uses lower-case options, so this helps. |
+| `sensor_nodes_admin_manage` | Nodes admin only; matches the team rule |
 
 ## Before this goes live
 
-- [ ] Tell Amberlyn, then dry-run and push both migrations:
-      `supabase/migrations/20261105200000_sensor_nodes_admin_manage.sql` and
-      `supabase/migrations/20261105210000_alerts_admin_write.sql`.
+- [ ] Tell Michelle and Amberlyn, then push. `npx supabase@2 db push --dry-run --linked`
+      (5 Nov 2026) lists exactly:
+      `20261105220000_alerts_officer_admin_write.sql` and
+      `20261105230000_specimen_delete_admin_only.sql` (next section).
 - [ ] **Two approvals on the PR:** `packages/api-contract/openapi.yaml` changed (team rule).
-- [ ] Tell the officers: they can no longer acknowledge, resolve, assign or add notes to
-      alerts, or change alert limits. An admin has to do it.
 - [ ] Redeploy the API on Render after merging.
 - [ ] Update `docs/security/threat-modelling.md` (lines 44 and 56 say only the Admin reads
-      alerts): officers read nodes and alerts too, and only the Admin writes.
+      alerts): officers see nodes and handle alerts; only the Admin manages nodes.
 
-## What changed
+## What changed (compared with main)
 
 | Before | Now | Where |
 |---|---|---|
 | `POST /sensor-nodes` allowed officers and admins | **Admins only.** The route still answers 501 (not built). | `services/api/src/permissions.js`, contract |
-| `PATCH /sensor-nodes/:id` allowed officers and admins | **Admins only**, alert limits included | `services/api/src/permissions.js`, contract |
-| `POST /alerts/:id/assign`, `/acknowledge`, `/resolve` and `/notes` allowed officers and admins | **Admins only.** `GET /alerts`, `/alerts/:id` and `/alerts/:id/notes` stay officer and admin. | `services/api/src/permissions.js`, contract |
-| The database let officers insert, update and **delete** nodes (`nodes: staff`) | Read: officers and admins. Register, change and delete: **admins only**. | `20261105200000_sensor_nodes_admin_manage.sql` |
-| The database let officers insert, update and delete alerts and notes (`alerts: staff`, `alert notes: staff`) | Read: officers and admins. Write: **admins only**. | `20261105210000_alerts_admin_write.sql` (new) |
-| Web Monitoring page: officers had the alert-limits form and the Assign, Acknowledge, Add note and Resolve controls | Officers see the limits, the progress, who it is assigned to and the notes, plus "Only an admin can act on alerts." Admins keep every control. | `apps/web/src/pages/SensorOverview.jsx` |
-| Mobile alert detail: officers had Acknowledge and Resolve | Officers read the alert only; admins keep the buttons | `apps/mobile/pages/Monitoring.js` |
-| The test only pinned node registration | One test lists every sensor and alert route: writes admin only, reads officer and admin, never botanists | `services/api/test/rbac.test.js` |
-
-Fixing the API alone would have left the database open: the API runs each query as the user,
-so someone with an officer's token could still write straight through Supabase. The
-migrations close that, so the database is a second layer, as everywhere else.
-
-An earlier draft of the node migration let officers change alert limits through a trigger
-(`guard_sensor_node_update()`). It is gone; the migration drops it if it was ever applied.
+| `PATCH /sensor-nodes/:id` allowed officers and admins | **Admins only**, alert limits included (also on main, #54) | `services/api/src/permissions.js`, contract |
+| Alert routes (assign, acknowledge, resolve, notes) | **Unchanged: officers and admins** | `services/api/src/permissions.js` |
+| The database let officers insert, update and delete nodes (`nodes: staff`) | Read: officers and admins. Register, change and delete: **admins only**. | `20261105200000_sensor_nodes_admin_manage.sql` |
+| Alerts and alert notes in the database | Officers and admins read and write (after `20261105210000` and `20261105220000`) | migrations |
+| Web Monitoring page: alert-limits form for officers | Admins only; officers see the limits (main, #54). The alert controls are unchanged. | `apps/web/src/pages/SensorOverview.jsx` |
+| The test only pinned node registration | One test: node writes admin only; node reads and every alert route officer and admin; never botanists | `services/api/test/rbac.test.js` |
 
 The coming telemetry ingest (setting `last_seen` or `status`, creating alerts) will need a
 server-side key that bypasses row-level security, or its own policy.
 
-**Assigning an alert:** admins can still assign an alert to an officer (the officer gets a
-notification and sees their name on it), but only an admin can record what happened.
+## Only admins delete plants (`20261105230000_specimen_delete_admin_only.sql`)
+
+Team rule: officers cannot delete plants. The API and the apps have **no way to delete a plant**
+(`PATCH /specimens/:id` only accepts `species_id`, `proposed_species_name` and
+`endangered_override`), so nothing visible changes. The gap was in the database: the
+`specimens: update` policy lets officers (any plant) and botanists (their own) update the row,
+and `guard_specimen_update()` did not check `is_deleted`, so either could soft-delete a plant
+straight through Supabase.
+
+The migration replaces `guard_specimen_update()` (last set in `20261028000000`) with the same
+checks plus: **only an admin may change `is_deleted`** (delete or restore). Nothing in the API,
+the apps or the database functions sets `is_deleted` on a plant today, so nothing stops working.
+There is still no "delete plant" button for admins; that would be a new feature.
 
 ## Still to build (not permissions)
 
 - **Device keys** per node: today one shared `X-Sensor-Key` from the API's `.env` (CTIP-48).
 - **Choosing which officers get alerts for each node:** only per-alert assignment exists
-  (`POST /alerts/:id/assign`, admin). Per-node routing is not built.
+  (`POST /alerts/:id/assign`). Per-node routing is not built.
 - `POST /sensor-nodes`, `GET /sensor-nodes/:id`, `/telemetry` and the webcam image routes still
   answer 501.
 
 ## Tests
 
-- API: **181/181 pass**. The role test checks every route: an officer now gets 403 on every
-  sensor and alert write.
-- **Not tested:** the migrations against the database (not pushed yet). After the push, check
-  as an officer, through Supabase directly, that these are refused: changing a node or its
-  alert limits, updating an alert, adding an alert note.
+- API: **181/181 pass**. The role test checks every route.
+- **Not tested against the database** until the push. After it, check:
+  - as an officer: acknowledging, resolving, assigning and adding a note to an alert work again
+  - as an officer, through Supabase directly: changing a node, its alert limits, or a plant's
+    `is_deleted` is refused
+  - as a deactivated user: discussions cannot be read
 
 ---
 
@@ -815,7 +854,7 @@ this plant right now" instead of crashing. File: `apps/web/src/pages/PublicPlant
 | "Are you sure you want to make this public?" when creating a species | Done (typed word `PUBLISH`) |
 | Discussion (botanists, officers), sent to particular people | Done: group buttons plus a people search; the tick-box drop-down is "Send to…" |
 | "Just looking around?" with links to the plant library and map | Done (section 2) |
-| IoT monitoring: Admin read and write, Officer read | Done (section above) |
+| IoT monitoring: sensor nodes admin only, officers see them; alerts for officers and admins | Done (section above) |
 | Email account rate limit | Done (`services/api/src/emailLimit.js`) |
 | Deactivated users kept apart from current users | Done ("Not active" table) |
 | Harder deactivation with a confirmation | Done (typed word `DEACTIVATE`) |
@@ -826,7 +865,7 @@ this plant right now" instead of crashing. File: `apps/web/src/pages/PublicPlant
 New browser test `apps/web/tests/every-page.spec.js`. Against the fake API, it opens every
 page as a visitor, botanist, officer and admin, on a desktop and a phone-sized screen. It fails
 on any uncaught error, console error, the error screen or a "no access" message. It also checks
-that an officer sees alerts read-only and an admin keeps the buttons.
+that officers and admins both get the alert buttons (Acknowledge, Resolve, Add note).
 
 - Pages: `#/`, about, contact, staff, book, plants, a species page, a tag page, map, scan,
   login, plus each role's staff pages (dashboard, add, records, review, reports, species,

@@ -1,7 +1,7 @@
 // apps/web/tests/every-page.spec.js
 // Opens every page as every role (visitor, botanist, officer, admin) against the
 // mocked API and fails on an uncaught error, a console error, or the error screen.
-// Also checks that officers can only read alerts while admins can act on them.
+// Also checks that officers and admins can both act on alerts.
 import { test, expect } from "@playwright/test";
 import { newState, open, openAsVisitor, specimen, SPECIES } from "./helpers/mockApi.js";
 
@@ -53,18 +53,13 @@ for (const role of Object.keys(STAFF)) {
   });
 }
 
-test("officer: alerts are read only", async ({ page }) => {
-  await open(page, withSensors("officer"), "#/monitoring");
-  await expect(page.getByText("Overheat").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Acknowledge", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Resolve", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add note", exact: true })).toHaveCount(0);
-  await expect(page.getByText("Only an admin can act on alerts.")).toBeVisible();
-});
-
-test("admin: can act on alerts", async ({ page }) => {
-  await open(page, withSensors("admin"), "#/monitoring");
-  await expect(page.getByText("Overheat").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Acknowledge", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Resolve", exact: true })).toBeVisible();
-});
+// Team rule: officers and admins both handle alerts (acknowledge, resolve, assign, notes).
+for (const role of ["officer", "admin"]) {
+  test(`${role}: can act on alerts`, async ({ page }) => {
+    await open(page, withSensors(role), "#/monitoring");
+    await expect(page.getByText("Overheat").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Acknowledge", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Resolve", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add note", exact: true })).toBeVisible();
+  });
+}

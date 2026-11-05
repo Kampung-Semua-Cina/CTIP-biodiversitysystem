@@ -1585,7 +1585,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: assignAlert
-      summary: Assign an alert to a staff member (admin; officers read alerts only)
+      summary: Assign an alert to a staff member (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1608,7 +1608,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: acknowledgeAlert
-      summary: Acknowledge an alert (admin; officers read alerts only)
+      summary: Acknowledge an alert (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -1623,7 +1623,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: resolveAlert
-      summary: Resolve an alert and record the outcome (admin; officers read alerts only)
+      summary: Resolve an alert and record the outcome (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1660,7 +1660,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: addAlertNote
-      summary: Add a note to an alert (admin; officers read alerts only)
+      summary: Add a note to an alert (officer/admin)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:

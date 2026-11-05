@@ -93,15 +93,14 @@ export const routes = [
   ['get', '/sensor-nodes/:id/images', OFFICER_ADMIN],
   ['post', '/sensor-nodes/:id/images', SENSOR],
 
-  // Alerts: officers read them, only admins act on them (IoT: admin read and
-  // write, officer read; team decision)
+  // Alerts: officers and admins do everything (CTIP-78; team role table)
   ['get', '/alerts', OFFICER_ADMIN],
   ['get', '/alerts/:id', OFFICER_ADMIN],
-  ['post', '/alerts/:id/assign', ADMIN],
-  ['post', '/alerts/:id/acknowledge', ADMIN],
-  ['post', '/alerts/:id/resolve', ADMIN],
+  ['post', '/alerts/:id/assign', OFFICER_ADMIN],
+  ['post', '/alerts/:id/acknowledge', OFFICER_ADMIN],
+  ['post', '/alerts/:id/resolve', OFFICER_ADMIN],
   ['get', '/alerts/:id/notes', OFFICER_ADMIN],
-  ['post', '/alerts/:id/notes', ADMIN],
+  ['post', '/alerts/:id/notes', OFFICER_ADMIN],
 
   // Discussion board: who can read a thread is decided by RLS (owner, public or shared)
   ['post', '/discussions', ANY_STAFF],
