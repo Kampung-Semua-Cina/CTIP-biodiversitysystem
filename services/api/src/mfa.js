@@ -54,6 +54,16 @@ export function mfaStep(user, role) {
   return MFA_ROLES.includes(role) ? 'setup' : 'none';
 }
 
+// Supabase gives the QR code as "data:image/svg+xml;utf-8,<svg ...>" with the
+// SVG not encoded, so characters like # break it and browsers show no picture.
+// Sent on as base64, which every browser and the website's CSP (data:) accept.
+export function qrImage(qr) {
+  const m = /^data:image\/svg\+xml;(?:charset=)?utf-?8,([\s\S]*)$/i.exec(qr ?? '');
+  if (!m) return qr;
+  const svg = /^%3C/i.test(m[1]) ? decodeURIComponent(m[1]) : m[1];
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+}
+
 const tooMany = (req) => overLimit(req, 'mfa-verify', { limit: ATTEMPT_LIMIT, windowMs: ATTEMPT_WINDOW_MS });
 
 export const mfaHandlers = {
@@ -73,7 +83,7 @@ export const mfaHandlers = {
       body: { factor_type: 'totp', friendly_name: 'Daun Sense', issuer: 'Daun Sense' },
     });
     if (!r.ok || !r.data?.totp) return fail(res, 502, 'AUTH_ERROR', 'Two-step sign-in is not working right now. Please try again.');
-    res.status(201).json({ factor_id: r.data.id, qr_code: r.data.totp.qr_code, secret: r.data.totp.secret, uri: r.data.totp.uri });
+    res.status(201).json({ factor_id: r.data.id, qr_code: qrImage(r.data.totp.qr_code), secret: r.data.totp.secret, uri: r.data.totp.uri });
   },
 
   // Checks the 6-digit code and answers with a new session that says aal2.
