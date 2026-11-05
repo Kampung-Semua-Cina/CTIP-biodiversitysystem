@@ -7,6 +7,7 @@ import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry, keepPhotoUrl } from "./utils.js";
 import {
   getAuthToken,
+  clearAuthToken,
   setAuthToken,
   getSession,
   freshAuthToken,
@@ -210,11 +211,17 @@ function collectionMatches(a = [], b = []) {
       if (res.offline) markMiss();
       // VA-70: a password-only session (the 6-digit step was never finished):
       // sign out, so the person signs in again and gets the code step.
+      // Only when the session that was refused is still the one in use: a slow
+      // load from an older session (Render waking up) must not sign out a new
+      // sign-in that is waiting for its 6-digit code. No API sign-out either:
+      // it would end that session for another tab still on the code step, and a
+      // password-only session can do nothing but finish the 6-digit step.
       if (res.code === "MFA_REQUIRED") {
+        if (!token || getAuthToken() !== token) return { ok: false, message: res.message };
         sessionEpoch.current += 1;
         setUserId(null);
         setAuthTokenState(null);
-        await signOutApi();
+        clearAuthToken();
         notify("Sign in again and enter the 6-digit code from your authenticator app.");
         return { ok: false, message: res.message }; // the next load shows the visitor view
       }
