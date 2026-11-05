@@ -3,6 +3,7 @@ import { supabaseFresh } from './supabase.js';
 import { parseBody, fail } from './validate.js';
 import { tooMany as overLimit, resetRateLimits } from './rateLimit.js';
 import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } from './emailLimit.js';
+import { mfaStep } from './mfa.js';
 
 // Sign-in, session refresh and passwords (CTIP-114). The web and mobile apps
 // never talk to Supabase directly: they send these requests to the API, and
@@ -21,15 +22,26 @@ const NewPassword = z.strictObject({
   new_password: z.string().min(8, 'Use at least 8 characters').max(200),
 });
 
-// What the apps store. expires_at is in seconds since 1970, as Supabase sends it.
-const toSession = (s) => ({
+// What the apps store. expires_at is in seconds since 1970, as Supabase sends it
+// (the MFA verify answer has only expires_in, so it is worked out from that).
+export const toSession = (s) => ({
   access_token: s.access_token,
   refresh_token: s.refresh_token,
-  expires_at: s.expires_at,
+  expires_at: s.expires_at ?? (s.expires_in ? Math.floor(Date.now() / 1000) + s.expires_in : undefined),
   expires_in: s.expires_in,
   token_type: s.token_type ?? 'bearer',
   user: { id: s.user?.id, email: s.user?.email },
 });
+
+// The user_role claim of a token Supabase has just issued to us. Read without
+// checking the signature: it came straight from Supabase, not from the caller.
+function roleIn(token) {
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).user_role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Every sign-in now reaches Supabase from the API's address, so Supabase's own
 // per-address limit no longer tells callers apart. This limit does, per caller
@@ -67,7 +79,11 @@ export const sessionHandlers = {
       if (error.status === 429) return fail(res, 429, 'TOO_MANY_ATTEMPTS', 'Too many sign-in attempts. Wait a few minutes and try again.');
       return fail(res, 502, 'AUTH_ERROR', 'Signing in is not working right now. Please try again.');
     }
-    res.json(toSession(data.session));
+    // mfa: what comes next. "verify": type the 6-digit code (POST /auth/mfa/verify).
+    // "setup": officers and admins must set up an authenticator app first
+    // (POST /auth/mfa/enroll). "none": signed in. Until then the session only
+    // reaches the two MFA routes (VA-70).
+    res.json({ ...toSession(data.session), mfa: mfaStep(data.user ?? data.session.user, roleIn(data.session.access_token)) });
   },
 
   'post /auth/refresh': async (req, res) => {

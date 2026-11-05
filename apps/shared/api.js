@@ -356,6 +356,21 @@ export async function signInApi(email, password) {
   return res;
 }
 
+/**
+ * Two-step sign-in (VA-70). After a correct password the sign-in answer says
+ * mfa: "none" | "verify" | "setup". "setup": POST /v1/auth/mfa/enroll answers a
+ * QR code (and a key to type in by hand) for an authenticator app. Then
+ * POST /v1/auth/mfa/verify with the 6-digit code answers a new session, which
+ * is stored in place of the password-only one.
+ */
+export const mfaEnrollApi = () => apiFetch("/auth/mfa/enroll", { method: "POST", token: getAuthToken() });
+
+export async function mfaVerifyApi(code) {
+  const res = await apiFetch("/auth/mfa/verify", { method: "POST", token: getAuthToken(), body: { code } });
+  if (res.ok && res.data?.access_token) setSession(res.data);
+  return res;
+}
+
 /** POST /v1/auth/sign-out with the current token, then forgets the session. Never fails. */
 export async function signOutApi() {
   const token = getAuthToken();

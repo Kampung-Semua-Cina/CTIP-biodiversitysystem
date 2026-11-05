@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { createVerifier } from './auth/verifyToken.js';
 import { checkSecureConfig } from './https.js';
+import { MFA_ROLES } from './mfa.js';
 
 checkSecureConfig(process.env);
 
@@ -12,6 +13,9 @@ const app = createApp({
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
   requireHttps: process.env.REQUIRE_HTTPS === 'true',
   trustProxy,
+  // VA-70: every staff member needs the 6-digit code. MFA_OFF=true only for a
+  // local test database where nobody can set it up; never on Render.
+  mfaRoles: process.env.MFA_OFF === 'true' ? [] : MFA_ROLES,
 });
 
 const port = process.env.PORT ?? 8000;

@@ -1,16 +1,19 @@
 import express from 'express';
 import cors from 'cors';
 import { routes, PUBLIC, SENSOR } from './permissions.js';
-import { requireAuth, allow } from './auth/middleware.js';
+import { requireAuth, allow, requireMfa } from './auth/middleware.js';
+import { MFA_SETUP_ROUTES } from './mfa.js';
 import { handlers as defaultHandlers } from './handlers.js';
 import { requireHttps as httpsOnly } from './https.js';
 
 const notImplemented = (req, res) =>
   res.status(501).json({ code: 'NOT_IMPLEMENTED', message: `${req.method} ${req.path} is not built yet` });
 
-export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [], requireHttps = false, trustProxy = false }) {
+// mfaRoles: roles whose token must say aal2 (VA-70). server.js passes every staff
+// role (botanist, officer, admin); the older tests leave it empty, and test/mfa.test.js checks the rule.
+export function createApp({ verify, handlers = defaultHandlers, corsOrigins = [], requireHttps = false, trustProxy = false, mfaRoles = [] }) {
   const app = express();
-    app.disable('x-powered-by'); // F-12: don't tell attackers we run Express
+  app.disable('x-powered-by'); // F-12: don't tell attackers we run Express
   app.set('trust proxy', trustProxy);
   if (requireHttps) app.use(httpsOnly());
   app.use(cors({ origin: corsOrigins }));
@@ -24,7 +27,7 @@ export function createApp({ verify, handlers = defaultHandlers, corsOrigins = []
     } else if (roles === SENSOR) {
       v1[method](path, notImplemented); // X-Sensor-Key check comes with the sensor ticket
     } else {
-      v1[method](path, requireAuth(verify), allow(...roles), handler);
+      v1[method](path, requireAuth(verify), allow(...roles), requireMfa(mfaRoles, MFA_SETUP_ROUTES.has(`${method} ${path}`)), handler);
     }
   }
   app.use('/v1', v1);

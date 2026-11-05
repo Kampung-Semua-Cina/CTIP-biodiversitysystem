@@ -1,5 +1,6 @@
 // apps/web/src/pages/Login.jsx
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useStore } from "../../../shared/store.js";
 import { go, useRoute } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
@@ -10,16 +11,22 @@ import { PasswordInput } from "../components/Bits.jsx";
 // signed in (StoreProvider reads the session from the address), where the
 // person chooses a new password. #/login?expired=1: the link was used or too old.
 // After a first sign-in with the default password, staff are asked to choose a new one.
+// Two-step sign-in (VA-70): after the password, every staff member types the
+// 6-digit code from their authenticator app ("mfa"). The first time, they scan
+// a QR code to set the app up ("mfa-setup").
 export default function Login() {
-  const { login, signIn, changePassword, notify, loginWithToken, apiStatus } = useStore();
+  const { login, signIn, changePassword, notify, loginWithToken, apiStatus, mfaEnroll, mfaVerify, mfaCancel } = useStore();
   const { query } = useRoute();
   const [tokenInput, setTokenInput] = useState("");
   const [isTokenBusy, setIsTokenBusy] = useState(false);
-  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token
+  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token | mfa | mfa-setup
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pending, setPending] = useState(null); // user id waiting to choose a new password
+  const [code, setCode] = useState(""); // the 6-digit code (VA-70)
+  const [setup, setSetup] = useState(null); // { qr, secret, uri } while setting up the app
+  const [busy, setBusy] = useState(false);
 
   const switchTo = (next) => {
     setMode(next);
@@ -31,6 +38,17 @@ export default function Login() {
     e.preventDefault();
     const res = await login(email, pw);
     if (!res.ok) return notify(res.message);
+    if (res.mfa === "verify") {
+      setCode("");
+      return setMode("mfa");
+    }
+    if (res.mfa === "setup") {
+      const en = await mfaEnroll();
+      if (!en.ok) return notify(en.message);
+      setSetup(en);
+      setCode("");
+      return setMode("mfa-setup");
+    }
     if (res.first) {
       setPending(res.id);
       return setMode("first");
@@ -38,6 +56,42 @@ export default function Login() {
     signIn(res.id);
     go("/dashboard");
   };
+
+  // VA-70: check the 6-digit code, then carry on as after a normal sign-in.
+  const checkCode = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const res = await mfaVerify(code);
+    setBusy(false);
+    if (!res.ok) return notify(res.message);
+    setSetup(null);
+    if (mode === "mfa-setup") notify("Two-step sign-in is set up");
+    signIn(res.id);
+    go("/dashboard");
+  };
+
+  const cancelCode = async () => {
+    await mfaCancel();
+    setSetup(null);
+    switchTo("signin");
+  };
+
+  const codeField = (
+    <label>
+      6-digit code
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]{6}"
+        placeholder="123456"
+        required
+        autoFocus
+        style={{ letterSpacing: "0.3em", fontSize: 20 }}
+      />
+    </label>
+  );
 
   // The reset-link form and the first sign-in prompt: set the new password.
   const change = async (e) => {
@@ -105,6 +159,43 @@ export default function Login() {
           <p className="mute" style={{ marginTop: 16 }}>
             Just looking around? Browse the <a href="#/plants">plant library</a> or the <a href="#/map">plant map</a>, no account needed.
           </p>
+        </form>
+      )}
+
+      {mode === "mfa" && (
+        <form onSubmit={checkCode}>
+          <h1>Enter your code</h1>
+          <p className="mute">Open your authenticator app (for example Google Authenticator) and type the 6-digit code for Daun Sense.</p>
+          {codeField}
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit" disabled={busy || code.length !== 6}><Icon name="check" size={18} /> {busy ? "Checking..." : "Verify"}</button>
+            <button className="btn ghost" type="button" onClick={cancelCode}><Icon name="chevL" size={18} /> Back to sign in</button>
+          </div>
+          <p className="mute small" style={{ marginTop: 12 }}>Lost your phone? Ask an admin to reset your two-step sign-in.</p>
+        </form>
+      )}
+
+      {mode === "mfa-setup" && setup && (
+        <form onSubmit={checkCode}>
+          <h1>Set up two-step sign-in</h1>
+          <p className="mute">
+            Every staff account needs a 6-digit code as well as its password. Install an authenticator app on your phone
+            (for example Google Authenticator or Microsoft Authenticator), then scan this code with it.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", margin: "12px 0" }}>
+            {/* Drawn here from the set-up link (same library as the tag QR codes), so it
+                does not depend on the picture format Supabase sends. */}
+            {setup.uri
+              ? <QRCodeSVG value={setup.uri} size={200} marginSize={2} title="QR code to scan with your authenticator app" />
+              : <img src={setup.qr} alt="QR code to scan with your authenticator app" width={200} height={200} />}
+          </div>
+          <p className="mute small">Can't scan it? Type this key into the app instead: <code style={{ wordBreak: "break-all" }}>{setup.secret}</code></p>
+          <p className="mute">Then type the 6-digit code the app shows.</p>
+          {codeField}
+          <div className="row wrap gap-top">
+            <button className="btn" type="submit" disabled={busy || code.length !== 6}><Icon name="check" size={18} /> {busy ? "Checking..." : "Finish set-up"}</button>
+            <button className="btn ghost" type="button" onClick={cancelCode}><Icon name="chevL" size={18} /> Cancel</button>
+          </div>
         </form>
       )}
 

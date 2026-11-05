@@ -9,6 +9,7 @@ import { fieldHandlers } from './field.js';
 import { staffHandlers } from './staff.js';
 import { discussionHandlers } from './discussions.js';
 import { sessionHandlers } from './session.js';
+import { mfaHandlers } from './mfa.js';
 import { protectSpecimen } from './distribution.js';
 import { tooMany } from './rateLimit.js';
 import { dbLoad } from './dbLoad.js';
@@ -164,4 +165,5 @@ export const handlers = {
   ...staffHandlers,
   ...discussionHandlers,
   ...sessionHandlers,
+  ...mfaHandlers,
 };
