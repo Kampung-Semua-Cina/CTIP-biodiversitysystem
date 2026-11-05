@@ -190,36 +190,44 @@ export function setApiBaseUrl(url) {
   customBaseUrl = url ? url.replace(/\/+$/, "") : null;
 }
 
+// Where the API is:
+// - mobile: set once at start-up, before anything is sent (apps/mobile/index.js
+//   calls configureApiAddress() in apiAddress.js);
+// - web: VITE_API_URL, else /v1 on the site's own address (the Vite dev server
+//   proxies it to the Render API);
+// - Node scripts and tests: the Render API.
 export function getApiBaseUrl() {
   if (customBaseUrl) return customBaseUrl.endsWith("/v1") ? customBaseUrl : customBaseUrl + "/v1";
-
-  // Check if we are running in React Native / Expo environment.
-  // In React Native, `document` is undefined, whereas in web browser `document` is defined.
-  const isRN =
-    (typeof navigator !== "undefined" && (navigator.product === "ReactNative" || /ReactNative/i.test(navigator.userAgent || ""))) ||
-    (typeof document === "undefined" && typeof window !== "undefined") ||
-    (typeof globalThis !== "undefined" && Boolean(globalThis.Expo || globalThis.HermesInternal || globalThis.__fbBatchedBridge || globalThis.nativeCallSyncHook));
-
-  if (isRN) {
-    const fromEnv = typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_URL : undefined;
-    return fromEnv ? fromEnv.replace(/\/+$/, "") + "/v1" : "https://ctip-biodiversitysystem.onrender.com/v1";
+  if (typeof document !== "undefined") {
+    const fromVite = import.meta.env?.VITE_API_URL;
+    return fromVite ? fromVite.replace(/\/+$/, "") + "/v1" : "/v1";
   }
-
-  // Browser environment: use Vite proxy path or environment variable
-  if (typeof window !== "undefined" && typeof document !== "undefined") {
-    try {
-      if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) {
-        return import.meta.env.VITE_API_URL.replace(/\/+$/, "") + "/v1";
-      }
-    } catch {
-      // ignore
-    }
-    // Default to /v1 in web browser (proxied by Vite to https://ctip-biodiversitysystem.onrender.com/v1)
-    return "/v1";
-  }
-
-  // Default to Render API for node / mobile
   return "https://ctip-biodiversitysystem.onrender.com/v1";
+}
+
+// What the user sees for an error result from apiFetch(). Anything not listed
+// falls back to the API's own message, or a general one for server errors.
+const USER_MESSAGES = {
+  ACCOUNT_NOT_ACTIVE: "Your account is waiting for an Admin to approve it.",
+  FORBIDDEN: "Your role is not allowed to do this.",
+  UNAUTHENTICATED: "Please sign in again.",
+  INVALID_TOKEN: "Please sign in again.",
+  TOKEN_EXPIRED: "Your session has ended. Please sign in again.",
+  NOT_FOUND: "We couldn't find that. It may have been deleted.",
+  VERSION_CONFLICT: "Someone changed this while you were working on it. Reload and try again.",
+  FILE_TOO_LARGE: "That file is too large. Photos can be at most 10 MB.",
+  UNSUPPORTED_FILE_TYPE: "Photos must be JPEG, PNG or WebP.",
+  NETWORK_ERROR: "Can't reach the server. Check your connection and try again.",
+  INTERNAL_ERROR: "Something went wrong on the server. Please try again.",
+};
+
+export function userMessage({ status, code, message, details }) {
+  if (USER_MESSAGES[code]) return USER_MESSAGES[code];
+  if (code === "VALIDATION_ERROR" && details?.fields?.length) {
+    return details.fields.map((f) => (f.path ? `${f.path}: ${f.message}` : f.message)).join("\n");
+  }
+  if (status >= 500) return USER_MESSAGES.INTERNAL_ERROR;
+  return message || "Something went wrong. Please try again.";
 }
 
 /**

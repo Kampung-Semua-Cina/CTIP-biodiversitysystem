@@ -181,7 +181,7 @@ apps/
                     Chrome, LeafletMap, Toast, Logo, PhotoGallery, SpeciesPicker, format
     hooks/          useSpeciesSearch (debounced, paged GET /public/species, CTIP-26)
     draftStore.js   SQLite crash-safe draft cache (CTIP-57), encrypted (CTIP-107)
-    api.js, apiAddress.js   API client; defaults to the Render API
+    apiAddress.js   sets the API address at start-up; defaults to the Render API
     eas.json        APK build profiles (EXPO_PUBLIC_API_URL lives here)
     tests/          Playwright/emulator + Ollama agent tests
     AGENTS.md       Expo note: read the SDK 57 docs before writing code
@@ -190,12 +190,11 @@ apps/
     src/components/ Site (page frame), RouteView, Shell (staff sidebar), Chrome,
                     Bits, LeafletMap, MiniMap, PhotoEditor/Gallery, TagPrint, ErrorBoundary
     src/routes.js, useRoute.js   hash routing
-    src/api.js      the site's API client
     tests/          Playwright agent tests (live sign-in suite needs DEMO_PASSWORD)
   shared/     used by BOTH apps. Plain .js with no JSX (Vite does not compile
               JSX in .js files). The apps keep no copies of these.
-    api.js          session (sign-in, refresh) and every call the store makes
-    apiClient.js    generic client: token, refresh, error messages (CTIP-54)
+    api.js          the one API client (apiFetch): session (sign-in, refresh),
+                    every call the apps make, error messages (CTIP-54)
     StoreProvider.js, store.js, selectors.js, permissions.js   app state and rules
     tokens.js       design tokens
     mapConfig.js, mapHtml.js   Leaflet settings and the WebView map page
