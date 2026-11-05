@@ -2,7 +2,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, fail, dbError, UUID } from './validate.js';
-import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
+import { detectImageType, stripMetadata, EXTENSIONS, receiveFile } from './images.js';
 
 // Species photo upload (CTIP-85). The file comes to the API, which checks its
 // real type and size, removes location metadata, and stores it in Supabase
@@ -37,13 +37,7 @@ export const speciesMediaHandlers = {
   // multipart/form-data: file (the image), caption, credit, is_primary, sort_order
   'post /species/:id/media': async (req, res) => {
     if (!UUID.test(req.params.id)) return fail(res, 404, 'NOT_FOUND', 'Species not found');
-    try {
-      await new Promise((resolve, reject) => receive(req, res, (err) => (err ? reject(err) : resolve())));
-    } catch (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return fail(res, 413, 'FILE_TOO_LARGE', 'Photos can be at most 10 MB');
-      return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
-    }
-    if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    if (!(await receiveFile(receive, req, res))) return;
     const type = detectImageType(req.file.buffer);
     if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP');
     const fields = parseBody(MediaFields, req, res);

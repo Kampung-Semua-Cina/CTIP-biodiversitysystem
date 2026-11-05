@@ -2,7 +2,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
 import { parseBody, fail, dbError, UUID } from './validate.js';
-import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
+import { detectImageType, stripMetadata, EXTENSIONS, receiveFile } from './images.js';
 import { protectSpecimen } from './distribution.js';
 
 // Field work: a botanist registers a plant on a QR tag (specimen), records
@@ -75,6 +75,20 @@ const findObservation = (db, req) => visibleTo(
   db.from('observations').select(OBS_COLUMNS).eq('id', req.params.id).eq('is_deleted', false),
   req.user,
 ).maybeSingle();
+
+// The observation named in the URL, or null after answering 500 or 404.
+async function observationOr404(db, req, res) {
+  const { data, error } = await findObservation(db, req);
+  if (error) {
+    dbError(res, error);
+    return null;
+  }
+  if (!data) {
+    obsNotFound(res);
+    return null;
+  }
+  return data;
+}
 
 // HEIC (iPhone camera) is recognised only so it can be refused with a clear message:
 // stripMetadata cannot remove its location (CTIP-110). detectImageType covers the other three.
@@ -201,10 +215,8 @@ export const fieldHandlers = {
     const body = parseBody(Submit, req, res);
     if (!body) return;
     const db = supabaseAs(req.user);
-    const current = await findObservation(db, req);
-    if (current.error) return dbError(res, current.error);
-    if (!current.data) return obsNotFound(res);
-    const obs = current.data;
+    const obs = await observationOr404(db, req, res);
+    if (!obs) return;
 
     const { comment, ...edits } = body;
     let changes;
@@ -234,9 +246,8 @@ export const fieldHandlers = {
   'get /observations/:id/photos': async (req, res) => {
     if (!UUID.test(req.params.id)) return obsNotFound(res);
     const db = supabaseAs(req.user);
-    const obs = await findObservation(db, req);
-    if (obs.error) return dbError(res, obs.error);
-    if (!obs.data) return obsNotFound(res);
+    const obs = await observationOr404(db, req, res);
+    if (!obs) return;
     const { data, error } = await db.from('observation_photos').select(PHOTO_COLUMNS)
       .eq('observation_id', req.params.id).order('created_at');
     if (error) return dbError(res, error);
@@ -250,13 +261,7 @@ export const fieldHandlers = {
   // (CTIP-85). Path convention: observation-photos/{observation_id}/{photo_id}.ext
   'post /observations/:id/photos': async (req, res) => {
     if (!UUID.test(req.params.id)) return obsNotFound(res);
-    try {
-      await new Promise((resolve, reject) => receive(req, res, (err) => (err ? reject(err) : resolve())));
-    } catch (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return fail(res, 413, 'FILE_TOO_LARGE', 'Photos can be at most 10 MB');
-      return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
-    }
-    if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
+    if (!(await receiveFile(receive, req, res))) return;
     const type = photoType(req.file.buffer);
     if (!type || type === 'image/heic') {
       return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP. HEIC photos can carry their location, so they are not accepted.');
@@ -267,15 +272,14 @@ export const fieldHandlers = {
     if (!notes.success) return fail(res, 422, 'VALIDATION_ERROR', 'caption can be at most 200 characters, and traits must come from the list');
 
     const db = supabaseAs(req.user);
-    const obs = await findObservation(db, req);
-    if (obs.error) return dbError(res, obs.error);
-    if (!obs.data) return obsNotFound(res);
+    const obs = await observationOr404(db, req, res);
+    if (!obs) return;
 
     const already = await db.from('observation_photos').select(PHOTO_COLUMNS).eq('id', photoId).maybeSingle();
     if (already.error) return dbError(res, already.error);
     if (already.data) return res.status(200).json((await withSignedUrls(db, [already.data]))[0]);
 
-    const key = `${obs.data.id}/${photoId}.${EXTENSIONS[type]}`;
+    const key = `${obs.id}/${photoId}.${EXTENSIONS[type]}`;
     // upsert: a retry after the file landed but the record did not writes the same path again.
     const cleanBuffer = stripMetadata(req.file.buffer, type);
     const stored = await db.storage.from(PHOTO_BUCKET).upload(key, cleanBuffer, { contentType: type, upsert: true });
@@ -284,7 +288,7 @@ export const fieldHandlers = {
     const { data, error } = await db
       .from('observation_photos')
       .insert({
-        id: photoId, observation_id: obs.data.id, s3_bucket: PHOTO_BUCKET, s3_key: key,
+        id: photoId, observation_id: obs.id, s3_bucket: PHOTO_BUCKET, s3_key: key,
         content_type: type, size_bytes: cleanBuffer.length, upload_status: 'uploaded',
         caption: notes.data.caption ?? null, traits: notes.data.traits,
       })
@@ -300,9 +304,8 @@ export const fieldHandlers = {
   'get /observations/:id/comments': async (req, res) => {
     if (!UUID.test(req.params.id)) return obsNotFound(res);
     const db = supabaseAs(req.user);
-    const obs = await findObservation(db, req);
-    if (obs.error) return dbError(res, obs.error);
-    if (!obs.data) return obsNotFound(res);
+    const obs = await observationOr404(db, req, res);
+    if (!obs) return;
     const { data, error } = await db.from('observation_comments').select(COMMENT_COLUMNS)
       .eq('observation_id', req.params.id).order('created_at');
     if (error) return dbError(res, error);
@@ -314,12 +317,11 @@ export const fieldHandlers = {
     const body = parseBody(CommentCreate, req, res);
     if (!body) return;
     const db = supabaseAs(req.user);
-    const obs = await findObservation(db, req);
-    if (obs.error) return dbError(res, obs.error);
-    if (!obs.data) return obsNotFound(res);
+    const obs = await observationOr404(db, req, res);
+    if (!obs) return;
     const { data, error } = await db
       .from('observation_comments')
-      .insert({ observation_id: obs.data.id, author_id: req.user.id, body: body.body })
+      .insert({ observation_id: obs.id, author_id: req.user.id, body: body.body })
       .select(COMMENT_COLUMNS)
       .single();
     if (error) return dbError(res, error);
