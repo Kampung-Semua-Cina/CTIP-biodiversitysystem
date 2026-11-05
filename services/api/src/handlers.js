@@ -5,9 +5,11 @@ import { speciesMediaHandlers } from './speciesMedia.js';
 import { observationHandlers } from './observations.js';
 import { fieldHandlers } from './field.js';
 import { staffHandlers } from './staff.js';
+import { discussionHandlers } from './discussions.js';
 import { sessionHandlers } from './session.js';
 import { protectSpecimen } from './distribution.js';
 import { tooMany } from './rateLimit.js';
+import { dbLoad } from './dbLoad.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -52,6 +54,13 @@ const QR_ID = /^[A-Z0-9-]{1,32}$/;
 // Implemented endpoints, keyed "method path" to match permissions.js.
 // Anything not listed here answers 501 until someone builds it.
 export const handlers = {
+  // Is the API up? Never touches the database, so a busy database does not
+  // look like a dead API. db is how busy recent queries found it (dbLoad.js).
+  'get /health': (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, db: dbLoad(), time: new Date().toISOString() });
+  },
+
   // Also the botanist's species lookup on mobile (CTIP-26, CTIP-87). Each row
   // carries one cover photo, not the gallery; GET /public/species/:id has that.
   'get /public/species': async (req, res) => {
@@ -158,5 +167,6 @@ export const handlers = {
   ...observationHandlers,
   ...fieldHandlers,
   ...staffHandlers,
+  ...discussionHandlers,
   ...sessionHandlers,
 };

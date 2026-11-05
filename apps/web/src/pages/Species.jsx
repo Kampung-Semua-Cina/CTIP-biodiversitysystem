@@ -5,9 +5,10 @@ import Icon from "../components/Icon.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
 import SpeciesForm from "../components/SpeciesForm.jsx";
 import { Chip, Empty, Modal } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import { useStore } from "../../../shared/store.js";
 import { fuzzyMatch } from "../../../shared/fuzzy.js";
-import { BLANK_SPECIES } from "../../../shared/data.js";
+import { BLANK_SPECIES, isThreatened } from "../../../shared/data.js";
 import { speciesMedia, speciesObservationPhotos } from "../../../shared/selectors.js";
 
 // Officer and admin page for the species encyclopedia: add, edit, photos, publish, delete, restore.
@@ -24,6 +25,14 @@ export default function Species() {
   const [form, setForm] = useState(null); // species being edited, or BLANK for a new one
   const [removing, setRemoving] = useState(null);
   const [photosOf, setPhotosOf] = useState(null); // species whose photos are open in the editor
+  const [ask, confirmDialog] = useConfirm();
+
+  const flipPublish = async (s) => {
+    const ok = await ask(s.is_published
+      ? { title: "Unpublish species", body: <p>Hide <i className="sci">{s.scientific_name}</i> from the public catalogue? Visitors will no longer see it or its plants.</p>, confirmLabel: "Unpublish" }
+      : { title: "Make species public", body: <p>Make <i className="sci">{s.scientific_name}</i> visible to everyone in the public catalogue? Approved plants of this species will appear to visitors.</p>, confirmLabel: "Make public", word: "PUBLISH" });
+    if (ok) togglePublish(s.id);
+  };
 
   const list = db.species
     .filter((s) => !s.is_deleted)
@@ -33,8 +42,8 @@ export default function Species() {
     if (sort === "scientific") return (a.scientific_name || "").localeCompare(b.scientific_name || "");
     if (sort === "family") return (a.family || "").localeCompare(b.family || "");
     if (sort === "endangered") {
-      const ea = a.conservation_status === "endangered" ? 1 : 0;
-      const eb = b.conservation_status === "endangered" ? 1 : 0;
+      const ea = isThreatened(a.conservation_status) ? 1 : 0;
+      const eb = isThreatened(b.conservation_status) ? 1 : 0;
       return eb - ea || (a.common_name || a.scientific_name || "").localeCompare(b.common_name || b.scientific_name || "");
     }
     if (sort === "plants") {
@@ -70,6 +79,7 @@ export default function Species() {
 
   return (
     <Shell seg="species">
+      {confirmDialog}
       <div className="row between wrap">
         <h2>Species</h2>
         <button className="btn" onClick={() => setForm(BLANK_SPECIES)}><Icon name="plus" size={18} /> Add species</button>
@@ -105,7 +115,7 @@ export default function Species() {
                   <td>{s.family}</td>
                   <td><Chip value={s.conservation_status} /></td>
                   <td>
-                    <button className={"switch" + (s.is_published ? " on" : "")} role="switch" aria-checked={s.is_published} onClick={() => togglePublish(s.id)} aria-label={`Publish ${s.scientific_name}`}><i /></button>
+                    <button className={"switch" + (s.is_published ? " on" : "")} role="switch" aria-checked={s.is_published} onClick={() => flipPublish(s)} aria-label={`Publish ${s.scientific_name}`}><i /></button>
                   </td>
                   <td className="actions">
                     <button className="ic" onClick={() => setForm(s)} aria-label={`Edit ${s.scientific_name}`}><Icon name="pencil" size={18} /></button>

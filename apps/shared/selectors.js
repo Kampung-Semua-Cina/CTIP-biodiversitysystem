@@ -244,7 +244,7 @@ export function speciesCatalogue(db, role) {
         raw_media: media,
         observation_photos: obsPhotos,
         photo: (media.length > 0 ? media[0]?.url : defaultObsPhoto) || defaultObsPhoto || null,
-        endangered: s.conservation_status === "endangered",
+        endangered: isThreatened(s.conservation_status), // any case; critically endangered too
       };
     });
 }

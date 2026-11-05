@@ -10,6 +10,7 @@ import { useStore } from "../../../shared/store.js";
 import { tagUrl, unfinishedPlants } from "../../../shared/selectors.js";
 import { can } from "../../../shared/permissions.js";
 import { go, useRoute } from "../useRoute.js";
+import { photoFileProblem } from "../../../shared/utils.js";
 
 // Botanist form. Step 1 binds a QR tag to the plant (scan, pick an unused tag, or generate a new one).
 // Step 2 records what was seen. Location comes from the phone's GPS.
@@ -81,6 +82,12 @@ export default function AddPlant() {
   const onScanFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Not a picture (e.g. a video renamed to .jpg): say so instead of guessing.
+    const problem = await photoFileProblem(file);
+    if (problem) {
+      e.target.value = "";
+      return notify(`${problem}.`);
+    }
     try {
       if ("BarcodeDetector" in window) {
         const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
@@ -146,8 +153,16 @@ export default function AddPlant() {
     setSpot(valid ? { lat, lng, acc: null } : { lat: null, lng: null, acc: null });
   };
 
-  const onPhotos = (e) => {
-    const files = [...e.target.files];
+  // Only real pictures: each file's contents are checked, so a video renamed to .jpg
+  // is refused with the reason instead of showing as an empty box.
+  const onPhotos = async (e) => {
+    const input = e.target;
+    const all = [...input.files];
+    input.value = "";
+    const found = await Promise.all(all.map(photoFileProblem));
+    const problems = found.filter(Boolean);
+    if (problems.length) notify(`${problems.join(". ")}.`);
+    const files = all.filter((f, i) => !found[i]);
     const added = files.map((f) => ({
       file: f,
       url: URL.createObjectURL(f),
@@ -155,8 +170,7 @@ export default function AddPlant() {
       type: f.type,
       size: f.size,
     }));
-    setPhotos([...photos, ...added]);
-    e.target.value = "";
+    setPhotos((current) => [...current, ...added]);
   };
 
   // Changed their mind: drop the photo before sending, and free its preview.

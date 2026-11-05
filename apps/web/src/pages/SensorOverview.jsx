@@ -3,6 +3,7 @@ import { useState } from "react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip, Empty, Mono, Pills, Sparkline } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import { useStore } from "../../../shared/store.js";
 import { nameOf, plantView } from "../../../shared/selectors.js";
 import { fmtDateTime, label } from "../../../shared/utils.js";
@@ -15,25 +16,29 @@ export default function SensorOverview() {
     const { db, role, setThresholds, notify } = useStore();
   const [nodeId, setNodeId] = useState(db.nodes?.[0]?.id || null);
   const [tab, setTab] = useState("acknowledged");
+  const [ask, confirmDialog] = useConfirm();
 
   const node = db.nodes?.find((n) => n.id === nodeId) || db.nodes?.[0] || null;
   const data = node ? db.telemetry[node.id] || [] : [];
-  const plantOf = (n) => plantView(db, db.plants.find((p) => p.id === n.specimen_id));
+  // A node can be unassigned, or its plant not visible to this role: show a placeholder, never crash.
+  const plantOf = (n) => plantView(db, db.plants.find((p) => p.id === n.specimen_id)) || { name: "No plant assigned", qr_id: "-" };
   const byNewest = (a, b) => b.created_at.localeCompare(a.created_at);
   const open = db.alerts.filter((a) => a.status === "open").sort(byNewest);
   const history = db.alerts.filter((a) => a.status !== "open" && (tab === "all" || a.status === tab)).sort(byNewest);
   const online = (db.nodes || []).filter((n) => n.status === "active").length;
 
-  const saveLimits = (e) => {
+  const saveLimits = async (e) => {
     e.preventDefault();
     if (!node) return;
     const f = new FormData(e.target);
+    if (!(await ask({ title: "Change alert limits", body: `Change the alert limits for ${node.name} to ${Number(f.get("temp_max"))}°C max and ${Number(f.get("moisture_min"))}% soil moisture min? New alerts will use these limits.`, confirmLabel: "Save limits" }))) return;
     setThresholds(node.id, { temp_max: Number(f.get("temp_max")), moisture_min: Number(f.get("moisture_min")) });
     notify("Limits saved");
   };
 
   return (
     <Shell seg="monitoring" plain>
+      {confirmDialog}
       <div className="pagehead">
         <div>
           <h1>Monitoring</h1>
@@ -72,9 +77,9 @@ export default function SensorOverview() {
                   {up && last ? (
                     <span className="row"><span><Mono>{last.temperature}°C</Mono> temp</span><span><Mono>{last.soil_moisture}%</Mono> soil</span></span>
                   ) : (
-                    <span className="warntext"><b>No data since {fmtDateTime(n.last_seen)}</b></span>
+                    <span className="warntext"><b>{n.last_seen ? `No data since ${fmtDateTime(n.last_seen)}` : "No data yet"}</b></span>
                   )}
-                  <small className="mute">{up ? `Updated ${fmtDateTime(n.last_seen)}` : "Check the node's battery or Wi-Fi"}</small>
+                  <small className="mute">{up ? (n.last_seen ? `Updated ${fmtDateTime(n.last_seen)}` : "Waiting for the first reading") : "Check the node's battery or Wi-Fi"}</small>
                 </button>
               );
             })}
@@ -130,22 +135,31 @@ function AlertCard({ alert }) {
   const { db, ackAlert, resolveAlert, assignAlert, addAlertNote, notify } = useStore();
   const [outcome, setOutcome] = useState("");
   const [note, setNote] = useState("");
+  const [ask, confirmDialog] = useConfirm();
   const node = db.nodes.find((n) => n.id === alert.node_id);
+
+  const resolve = async () => {
+    if (!outcome.trim()) return notify("Write what was found first");
+    if (!(await ask({ title: "Resolve alert", body: `Mark this ${alert.type} alert as resolved? It will leave the open list and its outcome (“${outcome.trim()}”) is recorded.`, confirmLabel: "Resolve alert" }))) return;
+    resolveAlert(alert.id, outcome.trim());
+    notify("Alert resolved");
+  };
   const notes = db.alertNotes.filter((n) => n.alert_id === alert.id);
   const officers = db.profiles.filter((p) => p.role === "officer" && p.is_active);
 
   return (
     <article className={"glass record sev-" + alert.severity}>
+      {confirmDialog}
       <header>
         <div>
           <b>{alert.type}</b>
-          <small className="mute block">{node.name} · {fmtDateTime(alert.created_at)}</small>
+          <small className="mute block">{node?.name || "Unknown node"} · {fmtDateTime(alert.created_at)}</small>
         </div>
         <span className="row"><Chip value={alert.severity} /><Chip value={alert.status} /></span>
       </header>
 
       <p className="mute small">
-        {node.name}'s reading: {Object.entries(alert.reading).map(([k, v], i) => <span key={k}>{i > 0 && " · "}{label(k)} <Mono>{v}</Mono></span>)}
+        {node?.name || "Unknown node"}'s reading: {Object.entries(alert.reading || {}).map(([k, v], i) => <span key={k}>{i > 0 && " · "}{label(k)} <Mono>{v}</Mono></span>)}
       </p>
 
       <ol className="progress" aria-label="Alert progress">
@@ -178,7 +192,7 @@ function AlertCard({ alert }) {
           </div>
           <div className="row gap-top-s">
             <input value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="What was found? (needed to resolve)" aria-label="Outcome" />
-            <button className="btn" onClick={() => { if (!outcome.trim()) return notify("Write what was found first"); resolveAlert(alert.id, outcome.trim()); notify("Alert resolved"); }}><Icon name="shield" size={18} /> Resolve</button>
+            <button className="btn" onClick={resolve}><Icon name="shield" size={18} /> Resolve</button>
           </div>
         </>
       )}

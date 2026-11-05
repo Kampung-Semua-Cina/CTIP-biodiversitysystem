@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import Shell from "../components/Shell.jsx";
 import Icon from "../components/Icon.jsx";
 import { Chip, Mono, Modal } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import TagPrint from "../components/TagPrint.jsx";
 import { useStore } from "../../../shared/store.js";
 import { tagUrl } from "../../../shared/selectors.js";
@@ -18,6 +19,12 @@ export default function Tags() {
   const [viewing, setViewing] = useState(null); // tag whose QR code is open
   const [removing, setRemoving] = useState(null); // unused tag waiting for delete confirmation
   const [printing, setPrinting] = useState(null); // qr_ids ticked when the print setup opens
+  const [ask, confirmDialog] = useConfirm();
+
+  const retire = async (t) => {
+    if (!(await ask({ title: "Retire QR tag", body: <p>Retire <Mono>{t.qr_id}</Mono>? A retired tag can no longer be put on a plant or printed, and this cannot be undone.</p>, confirmLabel: "Retire tag", danger: true }))) return;
+    retireTag(t.qr_id);
+  };
 
   const remove = () => {
     notify(deleteTag(removing.qr_id) ? `${removing.qr_id} deleted` : "Only unused tags can be deleted");
@@ -36,6 +43,7 @@ export default function Tags() {
 
   return (
     <Shell seg="tags">
+      {confirmDialog}
       <h2>QR tags</h2>
       <form className="row wrap" onSubmit={make}>
         <label>How many<input type="number" min="1" max="50" value={count} onChange={(e) => setCount(e.target.value)} /></label>
@@ -58,7 +66,7 @@ export default function Tags() {
                   <button className="btn ghost small-btn" onClick={() => setViewing(t)} aria-label={`Show QR code for ${t.qr_id}`}><Icon name="qr" size={16} /> QR</button>
                   {t.status === "unused" && (
                     <>
-                      <button className="btn ghost small-btn" onClick={() => retireTag(t.qr_id)}><Icon name="x" size={16} /> Retire</button>
+                      <button className="btn ghost small-btn" onClick={() => retire(t)}><Icon name="x" size={16} /> Retire</button>
                       <button className="ic" onClick={() => setRemoving(t)} aria-label={`Delete ${t.qr_id}`}><Icon name="trash" size={18} /></button>
                     </>
                   )}

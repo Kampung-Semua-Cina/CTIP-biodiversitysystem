@@ -82,6 +82,34 @@ export function Modal({ title, onClose, children, wide }) {
   );
 }
 
+// "Are you sure?" popup. Pass `word` for critical actions (passwords, going public, ...):
+// the Confirm button stays off until the person types that word.
+export function ConfirmDialog({ title, children, confirmLabel = "Confirm", danger, word, onConfirm, onCancel }) {
+  const [typed, setTyped] = useState("");
+  const ready = !word || typed.trim().toLowerCase() === word.toLowerCase();
+  const submit = (e) => {
+    e.preventDefault();
+    if (ready) onConfirm();
+  };
+  return (
+    <Modal title={title} onClose={onCancel}>
+      <form onSubmit={submit}>
+        <div>{children}</div>
+        {word && (
+          <label className="gap-top-s">
+            Type <b>{word}</b> to confirm
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus autoComplete="off" spellCheck={false} aria-label={`Type ${word} to confirm`} />
+          </label>
+        )}
+        <div className="row gap-top-s">
+          <button className={"btn" + (danger ? " danger" : "")} type="submit" disabled={!ready} autoFocus={!word}>{confirmLabel}</button>
+          <button className="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function Empty({ icon = "leaf", children }) {
   return (
     <div className="empty">

@@ -2,11 +2,11 @@
 import { useState } from "react";
 import Icon from "../components/Icon.jsx";
 import { Avatar, Chip, PasswordInput } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
 import { useStore } from "../../../shared/store.js";
 import { ROLE_LABEL } from "../../../shared/permissions.js";
 import { PHOTO_TYPES, fmtDate } from "../../../shared/utils.js";
-
-const MAX_PHOTO = 2 * 1024 * 1024; // 2 MB
+import { prepareAvatar } from "../avatarImage.js";
 
 // Staff edit their own account here: photo, name, username, phone and password.
 // Email and role are set by an admin, so they are shown but not editable.
@@ -33,20 +33,32 @@ export default function Account() {
 
 function PhotoCard({ me }) {
   const { updateProfile, notify } = useStore();
+  const [ask, confirmDialog] = useConfirm();
 
-  const pick = (e) => {
+  const removePhoto = async () => {
+    if (!(await ask({ title: "Remove profile photo", body: "Remove your profile photo? Your initials will be shown instead.", confirmLabel: "Remove photo", danger: true }))) return;
+    updateProfile({ avatar_url: null });
+  };
+
+  const [busy, setBusy] = useState(false);
+
+  // Any photo is fine: it is rotated upright, cropped to a centred square and shrunk to
+  // 256 px before it is saved, so a big phone photo never hits the API's size limit.
+  const pick = async (e) => {
     const file = e.target.files[0];
     e.target.value = ""; // so picking the same file again still fires
     if (!file) return;
     if (!PHOTO_TYPES.includes(file.type)) return notify("Choose a JPG, PNG or WebP image");
-    if (file.size > MAX_PHOTO) return notify("Photo must be 2 MB or smaller");
-    // Supabase: upload to Storage and save its public URL. Here the image is kept as a data URL.
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const res = await updateProfile({ avatar_url: reader.result });
+    setBusy(true);
+    try {
+      const avatar_url = await prepareAvatar(file);
+      const res = await updateProfile({ avatar_url });
       notify(res.ok ? "Photo updated" : res.message || "Could not update photo");
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      notify(err.message || "Could not process the photo");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -57,18 +69,19 @@ function PhotoCard({ me }) {
         <div>
           <div className="row wrap">
             <label className="btn ghost filebtn">
-              <Icon name="upload" size={16} /> {me.avatar_url ? "Change photo" : "Upload photo"}
-              <input type="file" accept={PHOTO_TYPES.join(",")} onChange={pick} hidden />
+              <Icon name="upload" size={16} /> {busy ? "Processing…" : me.avatar_url ? "Change photo" : "Upload photo"}
+              <input type="file" accept={PHOTO_TYPES.join(",")} onChange={pick} disabled={busy} hidden />
             </label>
             {me.avatar_url && (
-              <button className="btn ghost" onClick={() => updateProfile({ avatar_url: null })}>
+              <button className="btn ghost" onClick={removePhoto}>
                 <Icon name="trash" size={16} /> Remove
               </button>
             )}
           </div>
-          <p className="mute small">JPG, PNG or WebP, up to 2 MB. Without a photo your initials are shown.</p>
+          <p className="mute small">JPG, PNG or WebP. It is cropped to a square and resized for you. Without a photo your initials are shown.</p>
         </div>
       </div>
+      {confirmDialog}
     </section>
   );
 }
@@ -115,10 +128,13 @@ function PasswordCard() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
+  const [ask, confirmDialog] = useConfirm();
 
   const save = async (e) => {
     e.preventDefault();
     if (next !== again) return notify("The new passwords do not match");
+    if (next === current) return notify("Choose a password different from your current one");
+    if (!(await ask({ title: "Change password", body: "You are about to change the password you sign in with. Use the new one from now on.", confirmLabel: "Change password", word: "CHANGE" }))) return;
     const res = await changeMyPassword(current, next);
     if (!res.ok) return notify(res.message);
     setCurrent("");
@@ -139,6 +155,7 @@ function PasswordCard() {
           <button className="btn" type="submit">Change password</button>
         </div>
       </form>
+      {confirmDialog}
     </section>
   );
 }

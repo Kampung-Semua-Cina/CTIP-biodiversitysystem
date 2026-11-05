@@ -48,3 +48,12 @@ test("a photo link is kept between refreshes, then swapped before it expires", (
   t.mock.timers.tick(2 * 60 * 60 * 1000);
   assert.equal(keepPhotoUrl(cache, "p1", "https://x/a?token=3"), "https://x/a?token=3");
 });
+
+test("signing in swaps a cached visitor photo link for the signed one straight away", () => {
+  const cache = new Map();
+  const visitor = "https://x/storage/v1/object/public/observation-photos/o1/p1.jpg";
+  const signed = "https://x/storage/v1/object/sign/observation-photos/o1/p1.jpg?token=abc";
+  assert.equal(keepPhotoUrl(cache, "p1", visitor), visitor);
+  assert.equal(keepPhotoUrl(cache, "p1", signed), signed);
+  assert.equal(keepPhotoUrl(cache, "p1", signed.replace("abc", "def")), signed, "a new token for the same file keeps the old link");
+});

@@ -510,8 +510,11 @@ export async function fetchDistribution({ speciesId, family, token } = {}) {
  * rows this user's role may see. Visitor: GET /v1/public/workspace, published
  * species and their photos. Photo rows come with a `url` ready to show.
  */
-export async function fetchWorkspace({ token } = {}) {
-  return token ? apiFetch("/workspace", { token, timeout: 20000 }) : apiFetch("/public/workspace", { timeout: 20000 });
+// cursor: from the last answer, so only what changed comes back (staff only).
+export async function fetchWorkspace({ token, cursor } = {}) {
+  if (!token) return apiFetch("/public/workspace", { timeout: 20000 });
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch(`/workspace${query}`, { token, timeout: 20000 });
 }
 
 const enc = encodeURIComponent;
@@ -524,6 +527,9 @@ export const updateMeApi = (changes, { token } = {}) => send("PATCH", "/me", cha
 // Accounts (Admin)
 export const createProfileApi = (profile, { token } = {}) => send("POST", "/profiles", profile, token);
 export const updateProfileApi = (id, changes, { token } = {}) => send("PATCH", `/profiles/${enc(id)}`, changes, token);
+// Soft delete: the account is off at once and can be restored for 30 days.
+export const deleteProfileApi = (id, { token } = {}) => send("DELETE", `/profiles/${enc(id)}`, undefined, token);
+export const restoreProfileApi = (id, { token } = {}) => send("POST", `/profiles/${enc(id)}/restore`, undefined, token);
 
 // Plants and observations
 export const findSpecimenByQrApi = (qrId, { token } = {}) => apiFetch(`/specimens/by-qr/${enc(qrId)}`, { token });
@@ -533,6 +539,13 @@ export const createObservationApi = (obs, { token } = {}) => send("POST", "/obse
 // Draft/queued: sent as it is. Returned: with fixes (height_cm, morphology, notes) and an optional comment.
 export const submitObservationApi = (id, body = {}, { token } = {}) => send("POST", `/observations/${enc(id)}/submit`, body, token);
 export const addCommentApi = (id, body, { token } = {}) => send("POST", `/observations/${enc(id)}/comments`, { body }, token);
+
+// Discussion board: threads shared with people or role groups, public or private
+export const createDiscussionApi = (thread, { token } = {}) => send("POST", "/discussions", thread, token);
+export const fetchDiscussionApi = (id, { token } = {}) => apiFetch(`/discussions/${enc(id)}`, { token });
+export const updateDiscussionApi = (id, changes, { token } = {}) => send("PATCH", `/discussions/${enc(id)}`, changes, token);
+export const deleteDiscussionApi = (id, { token } = {}) => send("DELETE", `/discussions/${enc(id)}`, undefined, token);
+export const addDiscussionPostApi = (id, post, { token } = {}) => send("POST", `/discussions/${enc(id)}/posts`, post, token);
 
 // The file part of an upload. In the browser a File or Blob; in React Native / Expo,
 // standard Blob, File or WinterCG part with bytes, with fallback to legacy URI.
@@ -644,11 +657,13 @@ export const markAllReadApi = ({ token } = {}) => send("POST", "/notifications/r
  */
 export async function pingBackend() {
   const start = Date.now();
-  const res = await apiFetch("/public/species", { timeout: 3000 });
+  // /health answers without a database call. An API from before it existed
+  // answers 404, which still means it is up.
+  const res = await apiFetch("/health", { token: null, timeout: 10000 });
   const latency = Date.now() - start;
 
   if (res.ok || (res.status >= 200 && res.status < 500)) {
-    return { online: true, latency, status: res.status, url: getApiBaseUrl() };
+    return { online: true, latency, status: res.status, url: getApiBaseUrl(), db: res.ok ? res.data?.db : null };
   }
 
   return { online: false, latency, code: res.code, message: res.message, url: getApiBaseUrl() };

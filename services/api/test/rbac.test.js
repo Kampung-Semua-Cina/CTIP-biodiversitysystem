@@ -128,3 +128,25 @@ test('unknown paths outside /v1 get a JSON 404', async () => {
   assert.equal(res.status, 404);
   assert.equal(res.body.code, 'NOT_FOUND');
 });
+
+// The agreed sensor access (CTIP-48, CTIP-77, CTIP-78, team role table), written
+// out so a change to permissions.js cannot quietly widen or narrow it: botanists
+// nothing (a node gives away an endangered plant's spot), officers see nodes and
+// handle alerts, only admins add or edit nodes.
+test('sensor and alert access: botanist none, officer sees nodes and handles alerts, admin manages nodes', () => {
+  const who = (method, path) => routes.find(([m, p]) => m === method && p === path)?.[2];
+  for (const [method, path] of [
+    ['post', '/sensor-nodes'], ['patch', '/sensor-nodes/:id'], // alert limits too
+  ]) {
+    assert.deepEqual(who(method, path), ['admin'], `${method} ${path} must be admin only`);
+  }
+  for (const [method, path] of [
+    ['get', '/sensor-nodes'], ['get', '/sensor-nodes/:id'],
+    ['get', '/sensor-nodes/:id/telemetry'], ['get', '/sensor-nodes/:id/images'],
+    ['get', '/alerts'], ['get', '/alerts/:id'], ['get', '/alerts/:id/notes'],
+    ['post', '/alerts/:id/assign'], ['post', '/alerts/:id/acknowledge'],
+    ['post', '/alerts/:id/resolve'], ['post', '/alerts/:id/notes'],
+  ]) {
+    assert.deepEqual(who(method, path), ['officer', 'admin'], `${method} ${path}: officers and admins`);
+  }
+});

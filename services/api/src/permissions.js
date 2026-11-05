@@ -16,6 +16,9 @@ export const routes = [
   ['post', '/auth/password-reset', PUBLIC],
   ['post', '/me/password', ANY_STAFF],
 
+  // Health check for the apps' "API down" notice: no database call
+  ['get', '/health', PUBLIC],
+
   // Public (Visitor)
   ['get', '/public/species', PUBLIC],
   ['get', '/public/species/:id', PUBLIC],
@@ -31,6 +34,8 @@ export const routes = [
   ['get', '/profiles', ADMIN],
   ['post', '/profiles', ADMIN],
   ['patch', '/profiles/:id', ADMIN],
+  ['delete', '/profiles/:id', ADMIN], // soft delete, removed for good after 30 days
+  ['post', '/profiles/:id/restore', ADMIN],
 
   // QR tags
   ['get', '/qr-tags', ANY_STAFF],
@@ -88,7 +93,7 @@ export const routes = [
   ['get', '/sensor-nodes/:id/images', OFFICER_ADMIN],
   ['post', '/sensor-nodes/:id/images', SENSOR],
 
-  // Alerts
+  // Alerts: officers and admins do everything (CTIP-78; team role table)
   ['get', '/alerts', OFFICER_ADMIN],
   ['get', '/alerts/:id', OFFICER_ADMIN],
   ['post', '/alerts/:id/assign', OFFICER_ADMIN],
@@ -96,6 +101,13 @@ export const routes = [
   ['post', '/alerts/:id/resolve', OFFICER_ADMIN],
   ['get', '/alerts/:id/notes', OFFICER_ADMIN],
   ['post', '/alerts/:id/notes', OFFICER_ADMIN],
+
+  // Discussion board: who can read a thread is decided by RLS (owner, public or shared)
+  ['post', '/discussions', ANY_STAFF],
+  ['get', '/discussions/:id', ANY_STAFF],
+  ['patch', '/discussions/:id', ANY_STAFF], // owner only
+  ['delete', '/discussions/:id', ANY_STAFF], // owner or admin
+  ['post', '/discussions/:id/posts', ANY_STAFF],
 
   // Notifications
   ['get', '/notifications', ANY_STAFF],

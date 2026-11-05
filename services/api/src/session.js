@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { supabaseFresh } from './supabase.js';
 import { parseBody } from './validate.js';
 import { tooMany as overLimit, resetRateLimits } from './rateLimit.js';
+import { recordEmailSent, isEmailRateLimit, emailLimitInfo, emailLimitMessage } from './emailLimit.js';
 
 // Sign-in, session refresh and passwords (CTIP-114). The web and mobile apps
 // never talk to Supabase directly: they send these requests to the API, and
@@ -98,6 +99,12 @@ export const sessionHandlers = {
     const redirectTo = process.env.PASSWORD_RESET_REDIRECT_URL || undefined;
     const { error } = await supabaseFresh().auth.resetPasswordForEmail(body.email, { redirectTo });
     if (error) console.warn('password reset email not sent:', error.message);
+    // The limit is for the whole project, so saying so tells nobody whether this address has an account.
+    if (isEmailRateLimit(error)) {
+      const info = emailLimitInfo();
+      return res.status(429).json({ code: 'EMAIL_RATE_LIMIT', message: `${emailLimitMessage(info)} No reset email was sent.`, details: info });
+    }
+    if (!error) recordEmailSent();
     res.status(202).json({ sent: true });
   },
 

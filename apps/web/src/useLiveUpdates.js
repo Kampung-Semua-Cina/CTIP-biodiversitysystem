@@ -4,15 +4,18 @@ import { useStore } from "../../shared/store.js";
 import { can } from "../../shared/permissions.js";
 import { nameOf, plantView } from "../../shared/selectors.js";
 
-const POLL_MS = 5000;
-const RETRY_MS = 15000; // gentler while the API is not answering
+const POLL_MS = 5000; // the first poll; after that the API sets the pace
+const RETRY_MS = 15000; // at least this long after a failed load
 const PAGE_TITLE = document.title;
 
 // Keeps a signed-in person's data fresh without a page refresh: a botanist's new
-// record reaches the officer within about 5 seconds. Each load waits for the last
-// one to finish, and a tab in the background does not load at all.
+// record reaches the officer within about 5 seconds while the database is quick.
+// Each poll fetches only what changed since the last one, and waits as long as
+// the API says (nextPollDelay: 5 s when the database is free, up to 60 s when it
+// is busy). Each load waits for the last one to finish, and a tab in the
+// background does not load at all.
 export function useLiveUpdates() {
-  const { db, me, role, loadFromApi, notify } = useStore();
+  const { db, me, role, loadFromApi, nextPollDelay, notify } = useStore();
   const signedIn = !!me;
 
   useEffect(() => {
@@ -24,14 +27,14 @@ export function useLiveUpdates() {
     const tick = async () => {
       if (stopped || running) return;
       clearTimeout(timer);
-      let wait = POLL_MS;
       if (document.visibilityState === "visible") {
         running = true;
         const res = await loadFromApi(true).catch(() => ({ ok: false }));
         running = false;
-        if (!res.ok) wait = RETRY_MS;
+        if (!stopped) timer = setTimeout(tick, res.ok ? nextPollDelay() : Math.max(RETRY_MS, nextPollDelay()));
+        return;
       }
-      if (!stopped) timer = setTimeout(tick, wait);
+      if (!stopped) timer = setTimeout(tick, nextPollDelay()); // hidden: check again later
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") tick();
@@ -44,7 +47,7 @@ export function useLiveUpdates() {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [signedIn, loadFromApi]);
+  }, [signedIn, loadFromApi, nextPollDelay]);
 
   // Tell an officer when a new record arrives, wherever they are on the site.
   const known = useRef(null); // ids already waiting; null until the first load

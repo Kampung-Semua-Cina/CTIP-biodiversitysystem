@@ -101,6 +101,10 @@ export default function Login() {
           <p className="mute small" style={{ marginTop: 12 }}>
             Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
           </p>
+          {/* Visitors need no account: point them to the public pages. */}
+          <p className="mute" style={{ marginTop: 16 }}>
+            Just looking around? Browse the <a href="#/plants">plant library</a> or the <a href="#/map">plant map</a>, no account needed.
+          </p>
         </form>
       )}
 

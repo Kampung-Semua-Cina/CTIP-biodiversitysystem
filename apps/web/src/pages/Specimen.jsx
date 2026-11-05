@@ -8,6 +8,8 @@ import PhotoGallery from "../components/PhotoGallery.jsx";
 import PhotoEditor from "../components/PhotoEditor.jsx";
 import PublicPlant from "./PublicPlant.jsx";
 import { Chip, Empty, Mono, Sci } from "../components/Bits.jsx";
+import { useConfirm } from "../useConfirm.jsx";
+import { decisionPrompt } from "../decisionPrompt.jsx";
 import { useStore } from "../../../shared/store.js";
 import { can } from "../../../shared/permissions.js";
 import { lastUpdated, nameOf, plantVisits, shownCoords, tagUrl, visiblePlants } from "../../../shared/selectors.js";
@@ -25,6 +27,7 @@ export default function Specimen({ qr }) {
   const [tab, setTab] = useState("overview");
   const [editing, setEditing] = useState(false);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
+  const [ask, confirmDialog] = useConfirm();
 
   const plant = visiblePlants(db, role).find((p) => p.qr_id === qr);
   // Visitors are sent no plants at start-up: ask the API for this one (CTIP-33).
@@ -65,8 +68,15 @@ export default function Specimen({ qr }) {
   ].filter(Boolean);
   const active = tabs.some(([k]) => k === tab) ? tab : "overview";
 
+  // Hiding a location is safe and saves at once; showing it to the public needs a typed word.
+  const changeHidden = async (hide) => {
+    if (!hide && !(await ask({ title: "Show exact location", confirmLabel: "Show location", word: "REVEAL", body: <p>Show the exact location of <b>{plant.qr_id}</b> to the public? Anyone will be able to find this plant on the map.</p> }))) return;
+    setPlantLocationHidden(plant.id, hide);
+  };
+
   return (
     <>
+      {confirmDialog}
       <nav className="crumbs" aria-label="Breadcrumb">
         <a href={staff ? "#/dashboard" : "#/plants"}>{staff ? "Tagged plants" : "Plants"}</a> <span aria-hidden="true">›</span>{" "}
         {plant.species ? <a href={"#/plants/" + plant.species.id}>{plant.name}</a> : <span>{plant.name}</span>} <span aria-hidden="true">›</span>{" "}
@@ -199,7 +209,12 @@ export default function Specimen({ qr }) {
                   </li>
                 ))}
               </ul>
-              {can(role, "discuss") && visits[0] && <a className="btn ghost" href={"#/discussion/" + (comments.at(-1)?.observation_id || visits[0].id)}><Icon name="chat" size={16} /> Open in Discussion</a>}
+              {can(role, "discuss") && visits[0] && (
+                <p className="row wrap">
+                  <a className="btn ghost" href={"#/discussion/" + (comments.at(-1)?.observation_id || visits[0].id)}><Icon name="chat" size={16} /> Open in Discussion</a>
+                  <a className="btn ghost" href={"#/discussion?obs=" + visits[0].id}><Icon name="send" size={16} /> Start a discussion</a>
+                </p>
+              )}
             </div>
           )}
         </section>
@@ -220,7 +235,7 @@ export default function Specimen({ qr }) {
                       type="checkbox"
                       checked={plant.endangered}
                       disabled={hideLocationRule(plant.species?.conservation_status).locked}
-                      onChange={(e) => setPlantLocationHidden(plant.id, e.target.checked)}
+                      onChange={(e) => changeHidden(e.target.checked)}
                       aria-label="Hide the exact location from the public"
                     />
                     <span>
@@ -274,6 +289,7 @@ export default function Specimen({ qr }) {
 function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservation, setPlantSpecies, setPlantLocationHidden, notify, onClose }) {
   const [comment, setComment] = useState("");
   const [hideChoice, setHideChoice] = useState(null); // null until the officer changes it
+  const [ask, confirmDialog] = useConfirm();
   const isPending = obs.status === "synced";
   const hideRule = hideLocationRule(plant.species?.conservation_status, rawPlant?.endangered_override, hideChoice);
 
@@ -284,6 +300,7 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
     if (decision === "approve" && !rawPlant?.species_id) {
       return notify("Confirm the species before approving");
     }
+    if (!(await ask(decisionPrompt(decision, plant.qr_id, { hidden: hideRule.on, hasCoords: rawPlant?.lat != null, speciesPublished: plant.species?.is_published })))) return;
     if (decision === "approve" && !hideRule.locked && hideRule.on !== !!rawPlant.endangered_override) {
       if (!(await setPlantLocationHidden(rawPlant.id, hideRule.on))) return;
     }
@@ -301,6 +318,7 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
 
   return (
     <section className="glass pad gap-bottom-s" style={{ border: "2px solid var(--acc)", borderRadius: "var(--r-card, 16px)", background: "var(--sunken)" }}>
+      {confirmDialog}
       <div className="row between wrap gap-bottom-s" style={{ alignItems: "center" }}>
         <div className="row wrap" style={{ alignItems: "center", gap: 8 }}>
           <Icon name="clipboard" size={20} />
@@ -401,11 +419,12 @@ function OfficerReviewCard({ obs, rawPlant, plant, speciesList, reviewObservatio
 function Visits({ db, visits, photos, rawPlant, canReview, speciesList, reviewObservation, setPlantSpecies, notify }) {
   const [reviewingId, setReviewingId] = useState(null);
   const [commentsById, setCommentsById] = useState({});
+  const [ask, confirmDialog] = useConfirm();
 
   if (!visits.length) return <div className="glass pad"><Empty>No visits recorded yet.</Empty></div>;
   const withHeight = [...visits].reverse().filter((v) => v.height_cm != null);
 
-  const handleVisitDecide = (obsId, decision) => {
+  const handleVisitDecide = async (obsId, decision) => {
     const comment = commentsById[obsId] || "";
     if (decision !== "approve" && !comment.trim()) {
       return notify("Add a note so the botanist knows why");
@@ -413,6 +432,7 @@ function Visits({ db, visits, photos, rawPlant, canReview, speciesList, reviewOb
     if (decision === "approve" && !rawPlant?.species_id) {
       return notify("Confirm the species before approving");
     }
+    if (!(await ask(decisionPrompt(decision, rawPlant?.qr_id || "this record", { hasCoords: false, speciesPublished: rawPlant?.species?.is_published ?? true })))) return;
     reviewObservation(obsId, decision, comment.trim());
     notify(
       decision === "approve"
@@ -427,6 +447,7 @@ function Visits({ db, visits, photos, rawPlant, canReview, speciesList, reviewOb
 
   return (
     <>
+      {confirmDialog}
       {withHeight.length > 1 && <HeightChart visits={withHeight} />}
       <ol className="timeline">
         {visits.map((v) => {

@@ -3,3 +3,4 @@
 
 # Shell scripts run on Linux (CI, Mosquitto, ESP32 tooling) and must stay LF.
 *.sh text eol=lf
+graphify-out/graph.json merge=graphify
