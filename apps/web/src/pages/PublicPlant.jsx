@@ -4,7 +4,7 @@ import Icon from "../components/Icon.jsx";
 import MiniMap from "../components/MiniMap.jsx";
 import PhotoGallery from "../components/PhotoGallery.jsx";
 import { Chip, Mono, Sci } from "../components/Bits.jsx";
-import { fetchPublicPlantByTag } from "../api.js";
+import { fetchPublicPlantByTag } from "../../../shared/api.js";
 import { orderedPhotos } from "../../../shared/selectors.js";
 
 // The page a QR tag opens for a visitor (CTIP-33). Visitors get no plants in

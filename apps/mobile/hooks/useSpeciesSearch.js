@@ -5,12 +5,26 @@
 // typing delay, the requests and React state.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { api } from '../api.js';
+import { apiFetch, userMessage } from '../../shared/api.js';
 import {
   buildSpeciesQuery, initialSearchState, nextSearchState, failSearchState, hasMore as more,
 } from '../../shared/speciesSearch.js';
 
 const IDLE = { key: null, items: [], page: 0, total: null, loading: false, error: null };
+
+// One page of GET /public/species. Sent without a token: it is a public route.
+// A failure rejects with { code, userMessage }, which searchErrorMessage() in
+// speciesSearch.js turns into what the botanist sees; no connection, a timeout
+// and an unreachable API all count as NETWORK_ERROR.
+async function fetchSpeciesPage(query) {
+  const params = Object.entries(query).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+  const res = await apiFetch(`/public/species?${params}`, { token: null });
+  if (!res.ok) {
+    const code = res.offline ? 'NETWORK_ERROR' : res.code;
+    throw Object.assign(new Error(res.message), { code, userMessage: userMessage({ ...res, code }) });
+  }
+  return { data: res.data ?? [], meta: res.raw?.meta };
+}
 
 export function useSpeciesSearch({ q, family, debounceMs = 300 }) {
   const first = buildSpeciesQuery({ q, family });
@@ -22,8 +36,8 @@ export function useSpeciesSearch({ q, family, debounceMs = 300 }) {
   // One page for the search named `forKey`. Late answers to an older search are
   // dropped by nextSearchState/failSearchState, because their key no longer matches.
   const fetchPage = useCallback((forKey, query) => {
-    api.get('/public/species', { query })
-      .then((res) => setState((s) => nextSearchState(s, { key: forKey, data: res?.data ?? [], meta: res?.meta })))
+    fetchSpeciesPage(query)
+      .then(({ data, meta }) => setState((s) => nextSearchState(s, { key: forKey, data, meta })))
       .catch((error) => setState((s) => failSearchState(s, { key: forKey, error })));
   }, []);
 
