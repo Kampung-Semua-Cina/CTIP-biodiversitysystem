@@ -1,5 +1,6 @@
 // apps/web/src/pages/Login.jsx
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useStore } from "../../../shared/store.js";
 import { go, useRoute } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
@@ -24,7 +25,7 @@ export default function Login() {
   const [newPw, setNewPw] = useState("");
   const [pending, setPending] = useState(null); // user id waiting to choose a new password
   const [code, setCode] = useState(""); // the 6-digit code (VA-70)
-  const [setup, setSetup] = useState(null); // { qr, secret } while setting up the app
+  const [setup, setSetup] = useState(null); // { qr, secret, uri } while setting up the app
   const [busy, setBusy] = useState(false);
 
   const switchTo = (next) => {
@@ -182,7 +183,11 @@ export default function Login() {
             (for example Google Authenticator or Microsoft Authenticator), then scan this code with it.
           </p>
           <div style={{ display: "flex", justifyContent: "center", margin: "12px 0" }}>
-            <img src={setup.qr} alt="QR code to scan with your authenticator app" width={200} height={200} style={{ background: "#fff", padding: 8, borderRadius: 8 }} />
+            {/* Drawn here from the set-up link (same library as the tag QR codes), so it
+                does not depend on the picture format Supabase sends. */}
+            {setup.uri
+              ? <QRCodeSVG value={setup.uri} size={200} marginSize={2} title="QR code to scan with your authenticator app" />
+              : <img src={setup.qr} alt="QR code to scan with your authenticator app" width={200} height={200} />}
           </div>
           <p className="mute small">Can't scan it? Type this key into the app instead: <code style={{ wordBreak: "break-all" }}>{setup.secret}</code></p>
           <p className="mute">Then type the 6-digit code the app shows.</p>

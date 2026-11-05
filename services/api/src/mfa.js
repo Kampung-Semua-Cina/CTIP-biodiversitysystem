@@ -54,13 +54,17 @@ export function mfaStep(user, role) {
   return MFA_ROLES.includes(role) ? 'setup' : 'none';
 }
 
-// Supabase gives the QR code as "data:image/svg+xml;utf-8,<svg ...>" with the
-// SVG not encoded, so characters like # break it and browsers show no picture.
-// Sent on as base64, which every browser and the website's CSP (data:) accept.
+// Supabase gives the QR code as an SVG: either raw ("<svg ...>") or as
+// "data:image/svg+xml;utf-8,<svg ...>" with the SVG not encoded, so characters
+// like # break it and browsers show no picture. Sent on as base64, which every
+// browser and the website's CSP (data:) accept.
 export function qrImage(qr) {
-  const m = /^data:image\/svg\+xml;(?:charset=)?utf-?8,([\s\S]*)$/i.exec(qr ?? '');
-  if (!m) return qr;
-  const svg = /^%3C/i.test(m[1]) ? decodeURIComponent(m[1]) : m[1];
+  const text = String(qr ?? '').trim();
+  if (/^data:[^,]*;base64,/i.test(text)) return text;
+  let svg = text;
+  const m = /^data:image\/svg\+xml[^,]*,([\s\S]*)$/i.exec(text);
+  if (m) svg = /^%3C/i.test(m[1]) ? decodeURIComponent(m[1]) : m[1];
+  if (!/<svg[\s>]/i.test(svg)) return text;
   return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
 }
 

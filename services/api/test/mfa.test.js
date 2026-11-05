@@ -161,7 +161,7 @@ test('the MFA routes still need a signed-in token', async () => {
 
 test('the QR code is sent as a base64 picture the browser can show', () => {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg"><path fill="#000" d="M0 0h1"/></svg>';
-  for (const raw of [`data:image/svg+xml;utf-8,${svg}`, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`]) {
+  for (const raw of [svg, `data:image/svg+xml;utf-8,${svg}`, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`]) {
     const out = qrImage(raw);
     assert.match(out, /^data:image\/svg\+xml;base64,/);
     assert.equal(Buffer.from(out.split(',')[1], 'base64').toString('utf8'), svg);
