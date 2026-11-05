@@ -1,7 +1,7 @@
 import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 import { protectSpecimen } from './distribution.js';
 
@@ -66,8 +66,6 @@ const PhotoNotes = z.strictObject({
   traits: z.array(z.enum(['Whole plant', 'Tree trunk', 'Bark', 'Leaf', 'Flower', 'Fruit', 'Seed', 'Root'])).max(8),
 });
 
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
-const dbError = (res, error) => fail(res, 500, 'DB_ERROR', error.message);
 const isDuplicate = (error, constraint) => error?.code === '23505' && error.message.includes(constraint);
 const obsNotFound = (res) => fail(res, 404, 'NOT_FOUND', 'Observation not found');
 

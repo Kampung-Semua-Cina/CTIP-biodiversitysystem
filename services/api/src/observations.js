@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 
 // Observation review (CTIP-86): the officer's review queue (CTIP-29) and the
@@ -41,8 +41,7 @@ const RPC_ERRORS = {
   CTSP0: [422, 'SPECIES_REQUIRED'],
 };
 
-const notFound = (res) => res.status(404).json({ code: 'NOT_FOUND', message: 'Observation not found' });
-const dbError = (res, error) => res.status(500).json({ code: 'DB_ERROR', message: error.message });
+const notFound = (res) => fail(res, 404, 'NOT_FOUND', 'Observation not found');
 
 // Botanists only ever see what they recorded.
 const visibleTo = (query, user) => (user.role === 'botanist' ? query.eq('recorded_by', user.id) : query);
@@ -59,7 +58,7 @@ export const observationHandlers = {
   'get /observations': async (req, res) => {
     const query = ListQuery.safeParse(req.query);
     if (!query.success) {
-      return res.status(422).json({ code: 'VALIDATION_ERROR', message: 'Bad status, specimen_id, page or limit' });
+      return fail(res, 422, 'VALIDATION_ERROR', 'Bad status, specimen_id, page or limit');
     }
     const { status, specimen_id, page, limit } = query.data;
     let q = visibleTo(
@@ -113,7 +112,7 @@ export const observationHandlers = {
     });
     if (error) {
       const known = RPC_ERRORS[error.code];
-      if (known) return res.status(known[0]).json({ code: known[1], message: error.message });
+      if (known) return fail(res, known[0], known[1], error.message);
       return dbError(res, error);
     }
     if (body.decision === 'approve') {

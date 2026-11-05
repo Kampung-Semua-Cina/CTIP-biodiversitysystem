@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { parseBody, UUID } from './validate.js';
+import { parseBody, fail, dbError, validationError, UUID } from './validate.js';
 
 // Staff species endpoints (CTIP-46). Only Officer and Admin reach these:
 // permissions.js and the RBAC middleware enforce that, and Supabase RLS
@@ -78,11 +78,7 @@ export function applySearch(query, { q, family, conservation_status, created_fro
   return query;
 }
 
-const badQuery = (res, error) => res.status(422).json({
-  code: 'VALIDATION_ERROR',
-  message: 'Bad search or paging parameters',
-  details: { fields: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
-});
+const badQuery = (res, error) => validationError(res, error, 'Bad search or paging parameters');
 
 // For handlers outside this file: the parsed filters, or null after a 422.
 export function parseSearch(req, res) {
@@ -98,11 +94,9 @@ export function parsePublicList(req, res) {
   return result.success ? result.data : null;
 }
 
-const notFound = (res) => res.status(404).json({ code: 'NOT_FOUND', message: 'Species not found' });
-const dbError = (res, error) => res.status(500).json({ code: 'DB_ERROR', message: error.message });
+const notFound = (res) => fail(res, 404, 'NOT_FOUND', 'Species not found');
 const isDuplicate = (error, constraint) => error.code === '23505' && error.message.includes(constraint);
-const duplicateName = (res) =>
-  res.status(409).json({ code: 'DUPLICATE_SPECIES', message: 'A species with this scientific name already exists' });
+const duplicateName = (res) => fail(res, 409, 'DUPLICATE_SPECIES', 'A species with this scientific name already exists');
 
 export const speciesHandlers = {
   'get /species': async (req, res) => {

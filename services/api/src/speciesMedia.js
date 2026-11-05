@@ -1,7 +1,7 @@
 import multer from 'multer';
 import { z } from 'zod';
 import { supabaseAs } from './supabase.js';
-import { UUID } from './validate.js';
+import { parseBody, fail, dbError, UUID } from './validate.js';
 import { detectImageType, stripMetadata, EXTENSIONS } from './images.js';
 
 // Species photo upload (CTIP-85). The file comes to the API, which checks its
@@ -31,7 +31,6 @@ const MediaUpdate = z.strictObject({
   sort_order: z.number().int().min(0).max(1000).optional(),
 }).refine((b) => Object.keys(b).length > 0, 'Send at least one field to change');
 
-const fail = (res, status, code, message) => res.status(status).json({ code, message });
 const mediaNotFound = (res) => fail(res, 404, 'NOT_FOUND', 'Photo not found');
 
 export const speciesMediaHandlers = {
@@ -47,18 +46,12 @@ export const speciesMediaHandlers = {
     if (!req.file) return fail(res, 422, 'VALIDATION_ERROR', 'Send one image in a form field called "file"');
     const type = detectImageType(req.file.buffer);
     if (!type) return fail(res, 415, 'UNSUPPORTED_FILE_TYPE', 'Photos must be JPEG, PNG or WebP');
-    const fields = MediaFields.safeParse(req.body ?? {});
-    if (!fields.success) {
-      return res.status(422).json({
-        code: 'VALIDATION_ERROR',
-        message: 'Request body failed validation',
-        details: { fields: fields.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
-      });
-    }
+    const fields = parseBody(MediaFields, req, res);
+    if (!fields) return;
 
     const db = supabaseAs(req.user);
     const species = await db.from('species').select('id').eq('id', req.params.id).eq('is_deleted', false).maybeSingle();
-    if (species.error) return fail(res, 500, 'DB_ERROR', species.error.message);
+    if (species.error) return dbError(res, species.error);
     if (!species.data) return fail(res, 404, 'NOT_FOUND', 'Species not found');
 
     // Path convention from supabase/migrations/..._storage.sql: {species_id}/{media_id}.ext
@@ -68,7 +61,7 @@ export const speciesMediaHandlers = {
       .upload(key, stripMetadata(req.file.buffer, type), { contentType: type, upsert: false });
     if (stored.error) return fail(res, 502, 'STORAGE_ERROR', stored.error.message);
 
-    const { is_primary = false, sort_order = 0, ...text } = fields.data;
+    const { is_primary = false, sort_order = 0, ...text } = fields;
     const { data, error } = await db
       .from('species_media')
       .insert({ id, species_id: req.params.id, s3_bucket: BUCKET, s3_key: key, ...text, is_primary, sort_order, uploaded_by: req.user.id })
@@ -76,7 +69,7 @@ export const speciesMediaHandlers = {
       .single();
     if (error) {
       await db.storage.from(BUCKET).remove([key]); // no record, so do not keep the file
-      return fail(res, 500, 'DB_ERROR', error.message);
+      return dbError(res, error);
     }
     if (is_primary) {
       // Only one cover photo per species.
@@ -89,25 +82,19 @@ export const speciesMediaHandlers = {
   // a new picture is a new upload.
   'patch /species/:id/media/:mediaId': async (req, res) => {
     if (!UUID.test(req.params.id) || !UUID.test(req.params.mediaId)) return mediaNotFound(res);
-    const body = MediaUpdate.safeParse(req.body ?? {});
-    if (!body.success) {
-      return res.status(422).json({
-        code: 'VALIDATION_ERROR',
-        message: 'Request body failed validation',
-        details: { fields: body.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) },
-      });
-    }
+    const body = parseBody(MediaUpdate, req, res);
+    if (!body) return;
     const db = supabaseAs(req.user);
     const { data, error } = await db
       .from('species_media')
-      .update(body.data)
+      .update(body)
       .eq('id', req.params.mediaId)
       .eq('species_id', req.params.id)
       .select('id, species_id, caption, credit, is_primary, sort_order, created_at')
       .maybeSingle();
-    if (error) return fail(res, 500, 'DB_ERROR', error.message);
+    if (error) return dbError(res, error);
     if (!data) return mediaNotFound(res);
-    if (body.data.is_primary) {
+    if (body.is_primary) {
       await db.from('species_media').update({ is_primary: false }).eq('species_id', req.params.id).neq('id', data.id);
     }
     res.json(data);
@@ -125,7 +112,7 @@ export const speciesMediaHandlers = {
       .eq('species_id', req.params.id)
       .select('s3_bucket, s3_key')
       .maybeSingle();
-    if (error) return fail(res, 500, 'DB_ERROR', error.message);
+    if (error) return dbError(res, error);
     if (!data) return mediaNotFound(res);
     // Older rows may hold a full link instead of a Storage path; there is no file of ours to remove.
     if (data.s3_bucket === BUCKET && !/^[a-z]+:/i.test(data.s3_key)) {
