@@ -1,0 +1,6 @@
+email,role,is_active
+admin@test.local,admin,true
+botanist-a@test.local,botanist,true
+botanist-b@test.local,botanist,true
+deactivated@test.local,botanist,false
+officer@test.local,officer,true
