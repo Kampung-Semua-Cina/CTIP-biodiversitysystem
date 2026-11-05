@@ -1,6 +1,7 @@
 // apps/mobile/pages/Monitoring.js
 // Sensor nodes near protected plants: open alerts first, then a 24-hour chart and
-// each node's latest reading. Alert detail lets the officer acknowledge or resolve.
+// each node's latest reading. Alert detail lets an admin acknowledge or resolve;
+// officers read alerts only.
 import React, { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 
@@ -97,7 +98,8 @@ export function Monitor({ nav }) {
 
 export function AlertDetail({ nav, params = {} }) {
   usePolling(5000);
-  const { db, ackAlert, resolveAlert, addAlertNote, notify } = useStore();
+  const { db, role, ackAlert, resolveAlert, addAlertNote, notify } = useStore();
+  const canAct = role === 'admin';
   const { c } = useTheme();
   const [note, setNote] = useState('');
   const a = db.alerts.find((x) => x.id === params.id);
@@ -117,7 +119,7 @@ export function AlertDetail({ nav, params = {} }) {
       header={<Bar title={a.type} sub={`${node?.name} · ${dateTime(a.created_at)}`} onBack={nav.back} />}
       top={16}
       gap={18}
-      footer={a.status === 'resolved' ? null : (
+      footer={a.status === 'resolved' || !canAct ? null : (
         <>
           <Button label="Resolve" kind={a.status === 'open' ? 'secondary' : 'primary'} flex={1} onPress={resolve} />
           {a.status === 'open' ? <Button label="Acknowledge" icon="check" flex={1.4} onPress={ack} /> : null}
@@ -152,7 +154,7 @@ export function AlertDetail({ nav, params = {} }) {
           ))}
         </Section>
       ) : null}
-      {a.status === 'resolved' ? <Txt v="body">Outcome: {a.outcome || '-'}</Txt> : <Area label="What did you find?" value={note} onChangeText={setNote} placeholder="Add a note for the team" />}
+      {a.status === 'resolved' ? <Txt v="body">Outcome: {a.outcome || '-'}</Txt> : !canAct ? <Txt v="small" color={c.ink2}>Only an admin can act on alerts.</Txt> : <Area label="What did you find?" value={note} onChangeText={setNote} placeholder="Add a note for the team" />}
     </Screen>
   );
 }

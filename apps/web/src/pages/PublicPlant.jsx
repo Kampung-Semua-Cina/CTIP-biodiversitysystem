@@ -18,7 +18,9 @@ export default function PublicPlant({ qr }) {
     let current = true;
     fetchPublicPlantByTag(qr).then((res) => {
       if (!current) return;
-      if (res.ok) setState({ qr, status: "found", plant: res.data });
+      // The API always sends the species with the plant; anything else is shown as an error, not a crash.
+      if (res.ok && res.data?.species) setState({ qr, status: "found", plant: res.data });
+      else if (res.ok) setState({ qr, status: "error", message: "We could not load this plant right now. Please try again." });
       else if (res.status === 404) setState({ qr, status: "missing" });
       else setState({ qr, status: "error", message: res.status === 429 ? "Too many plants looked up from here. Wait a minute and try again." : "We could not load this plant right now. Please try again." });
     });

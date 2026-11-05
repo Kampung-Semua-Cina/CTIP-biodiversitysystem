@@ -123,7 +123,8 @@ export default function SensorOverview() {
   );
 }
 
-// Assign -> Acknowledge -> Resolve, so officers can see where an alert is.
+// Assign -> Acknowledge -> Resolve, so everyone can see where an alert is.
+// Officers read alerts only; admins assign, acknowledge, add notes and resolve.
 const STEPS = ["Assign", "Acknowledge", "Resolve"];
 function stepOf(alert) {
   if (alert.status === "resolved") return 3;
@@ -132,7 +133,8 @@ function stepOf(alert) {
 }
 
 function AlertCard({ alert }) {
-  const { db, ackAlert, resolveAlert, assignAlert, addAlertNote, notify } = useStore();
+  const { db, role, ackAlert, resolveAlert, assignAlert, addAlertNote, notify } = useStore();
+  const canAct = role === "admin";
   const [outcome, setOutcome] = useState("");
   const [note, setNote] = useState("");
   const [ask, confirmDialog] = useConfirm();
@@ -168,6 +170,7 @@ function AlertCard({ alert }) {
         ))}
       </ol>
 
+      {canAct ? (
       <div className="row wrap">
         <label className="inline">Assigned to
           <select value={alert.assigned_to || ""} onChange={(e) => { assignAlert(alert.id, e.target.value); notify("Alert assigned"); }}>
@@ -176,6 +179,9 @@ function AlertCard({ alert }) {
         </label>
         {alert.status === "open" && <button className="btn" onClick={() => { ackAlert(alert.id); notify("Alert acknowledged"); }}><Icon name="check" size={18} /> Acknowledge</button>}
       </div>
+      ) : (
+        <p className="mute small">Assigned to {alert.assigned_to ? nameOf(db, alert.assigned_to) : "nobody yet"}</p>
+      )}
       {alert.acknowledged_by && <p className="mute small">Acknowledged by {nameOf(db, alert.acknowledged_by)} · {fmtDateTime(alert.acknowledged_at)}</p>}
 
       <ul className="plain thread">
@@ -184,6 +190,8 @@ function AlertCard({ alert }) {
 
       {alert.status === "resolved" ? (
         <p className="mute">Outcome: {alert.outcome}</p>
+      ) : !canAct ? (
+        <p className="mute small">Only an admin can act on alerts.</p>
       ) : (
         <>
           <div className="row">

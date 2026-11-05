@@ -6,8 +6,9 @@ export const SPECIES = "33333333-3333-4333-8333-333333333333";
 export const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 export const iso = (minutes) => new Date(Date.UTC(2026, 9, 30, 8, minutes)).toISOString();
 
-export const jwt = () => {
-  const claims = { sub: ME, email: "officer@example.com", user_role: "officer", exp: Math.floor(Date.now() / 1000) + 3600 };
+// role: who is signed in (officer unless a spec asks for another role).
+export const jwt = (role = "officer") => {
+  const claims = { sub: ME, email: `${role}@example.com`, user_role: role, exp: Math.floor(Date.now() / 1000) + 3600 };
   return `h.${btoa(JSON.stringify(claims)).replace(/=+$/, "")}.s`;
 };
 
@@ -44,7 +45,7 @@ export function mockApi(page, state) {
         observation_photos: state.photos, observation_reviews: [], observation_comments: [], alerts: state.alerts || [], alert_notes: [], sensor_nodes: state.sensorNodes || [],
         notifications: [], audit_logs: [],
         profiles: [
-          { id: ME, full_name: "Olive Officer", email: "officer@example.com", role: "officer", is_active: true },
+          { id: ME, full_name: "Olive Officer", email: "officer@example.com", role: state.role || "officer", is_active: true },
           { id: BOTANIST, full_name: "Bo Tanist", email: "bo@example.com", role: "botanist", is_active: true },
         ],
         zones: [],
@@ -64,6 +65,8 @@ export function mockApi(page, state) {
       return json({ data: state.observations.filter((o) => o.status === wanted), meta: { total: state.observations.filter((o) => o.status === wanted).length } });
     }
     if (path === "/distribution") return json({ data: state.points });
+    // Like the real route: 404 unless a spec gives the published plant.
+    if (path.startsWith("/public/tags/")) return state.publicPlant ? json(state.publicPlant) : json({ code: "NOT_FOUND", message: "No published plant on this tag" }, 404);
     if (path === "/species" && method === "POST") {
       const made = species({ ...body, id: "44444444-4444-4444-8444-444444444444", is_published: false });
       state.species = [...state.species, made];
@@ -96,7 +99,7 @@ export const newState = (over = {}) => ({
 export async function open(page, state, hash) {
   await page.addInitScript((session) => {
     window.localStorage.setItem("daun_session", JSON.stringify(session));
-  }, { access_token: jwt(), refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: ME, email: "officer@example.com" } });
+  }, { access_token: jwt(state.role), refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: ME, email: `${state.role || "officer"}@example.com` } });
   await page.route(/(tile\.openstreetmap|arcgisonline|opentopomap)/, (r) => r.abort());
   await mockApi(page, state);
   await page.goto("/" + hash);

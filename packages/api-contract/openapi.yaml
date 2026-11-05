@@ -1401,11 +1401,11 @@ paths:
     patch:
       tags: [Sensors]
       operationId: updateSensorNode
-      summary: Update status or alert thresholds
+      summary: Update status or alert thresholds (admin)
       description: >
-        Officers may change the alert limits (thresholds) only; anything else
-        about a node is the admin's. The database enforces this too (migration
-        20261105200000_sensor_nodes_admin_manage).
+        Admin only, including the alert limits (thresholds); officers can read
+        nodes but not change them (CTIP-48). The database enforces this too
+        (migration 20261105200000_sensor_nodes_admin_manage).
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1585,7 +1585,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: assignAlert
-      summary: Assign an alert to a staff member
+      summary: Assign an alert to a staff member (admin; officers read alerts only)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1608,7 +1608,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: acknowledgeAlert
-      summary: Acknowledge an alert
+      summary: Acknowledge an alert (admin; officers read alerts only)
       parameters:
         - $ref: '#/components/parameters/Id'
       responses:
@@ -1623,7 +1623,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: resolveAlert
-      summary: Resolve an alert and record the outcome
+      summary: Resolve an alert and record the outcome (admin; officers read alerts only)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -1660,7 +1660,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: addAlertNote
-      summary: Add a note to an alert
+      summary: Add a note to an alert (admin; officers read alerts only)
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
