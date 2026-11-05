@@ -728,8 +728,11 @@ The fix, **`20261105220000_alerts_officer_admin_write.sql`** (written by the tea
 
 - Gives officers alert and alert-note writes back (`alerts: staff write`,
   `alert notes: staff write`). `20261105210000` is already live, so it is **not edited**.
-- Drops `trg_sensor_nodes_guard` in case the first version of `20261105200000` went live:
-  that file was edited after it may have been pushed.
+- Makes sensor node updates admin only (`nodes: update`) and drops `trg_sensor_nodes_guard`
+  and its function. `20261105200000` was edited after it was pushed, and the live database
+  has its first version: officers may update nodes, and only that trigger kept them to the
+  alert limits. Dropping the trigger without the policy would have let officers change any
+  column of a node (found in review, 5 Nov 2026).
 - Adds F-08's "active users only" rule again on `discussions`, `discussion_audience`,
   `discussion_posts` and `table_versions`, in case F-08 ran before those tables existed
   (F-08 skips tables that do not exist yet).

@@ -29,14 +29,23 @@ create policy "alert notes: staff write" on public.alert_notes for all to authen
 -- ---------------------------------------------------------------------
 -- Make the live database match the files, whatever order they were
 -- pushed in (both steps are safe if already done):
--- 1. 20261105200000 was edited after it may have been pushed; its final
---    version drops the officer alert-limit trigger. Drop it here too.
+-- 1. 20261105200000 was edited after it was pushed. The live database got
+--    its first version: "nodes: update" for officers AND admins, with a
+--    trigger that kept officers to the alert limits. The final version
+--    makes updates admin only and drops the trigger. Do both here: dropping
+--    the trigger alone would let officers change any column of a node.
 -- 2. F-08 (20261105140000) skips tables that did not exist yet. If it ran
 --    before the discussion and version tables were made, they lack the
 --    "active users only" rule. Add it again for those tables.
 -- ---------------------------------------------------------------------
 
+drop policy if exists "nodes: update" on public.sensor_nodes;
+create policy "nodes: update" on public.sensor_nodes for update to authenticated
+  using (public.my_role() = 'admin')
+  with check (public.my_role() = 'admin');
+
 drop trigger if exists trg_sensor_nodes_guard on public.sensor_nodes;
+drop function if exists public.guard_sensor_node_update();
 
 do $$
 declare
