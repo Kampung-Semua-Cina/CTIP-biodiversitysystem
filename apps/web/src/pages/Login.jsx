@@ -4,18 +4,21 @@ import { useStore } from "../../../shared/store.js";
 import { go, useRoute } from "../useRoute.js";
 import Icon from "../components/Icon.jsx";
 import { PasswordInput } from "../components/Bits.jsx";
+import { getStaffPageContent } from "../../../shared/publicContent.js";
+import { PARK } from "../../../shared/site.js";
 
 // Staff login with email and password, through the API (CTIP-114).
 // "Forgot password" emails a reset link. The link opens #/login?reset=1 already
 // signed in (StoreProvider reads the session from the address), where the
 // person chooses a new password. #/login?expired=1: the link was used or too old.
 // After a first sign-in with the default password, staff are asked to choose a new one.
+// Shown at #/login and on the Staff area page (#/staff) for anyone signed out.
 export default function Login() {
-  const { login, signIn, changePassword, notify, loginWithToken, apiStatus } = useStore();
+  const { login, signIn, changePassword, notify, apiStatus } = useStore();
   const { query } = useRoute();
-  const [tokenInput, setTokenInput] = useState("");
-  const [isTokenBusy, setIsTokenBusy] = useState(false);
-  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first | token
+  const staff = getStaffPageContent(PARK);
+  const [busy, setBusy] = useState(false); // a sign-in is on its way: no second click
+  const [mode, setMode] = useState(query.reset ? "reset" : query.expired ? "change" : "signin"); // signin | change | reset | first
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -29,7 +32,10 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     const res = await login(email, pw);
+    setBusy(false);
     if (!res.ok) return notify(res.message);
     if (res.first) {
       setPending(res.id);
@@ -57,16 +63,6 @@ export default function Login() {
     if (res.ok) switchTo("signin");
   };
 
-  const submitToken = async (e) => {
-    e.preventDefault();
-    setIsTokenBusy(true);
-    const res = await loginWithToken(tokenInput);
-    setIsTokenBusy(false);
-    if (res.ok) {
-      go("/dashboard");
-    }
-  };
-
   const skip = () => {
     signIn(pending);
     go("/dashboard");
@@ -85,58 +81,34 @@ export default function Login() {
         <img src="/logo.svg" alt="Daun Sense" style={{ width: 56, height: 56, borderRadius: 14 }} />
       </div>
       {mode === "signin" && (
-        <form onSubmit={submit}>
-          <h1>Staff sign in</h1>
-          <p className="mute">
-            For botanists, conservation officers and admins. Accounts are created by administrator invitation only. Sign in with your registered email or username.
-          </p>
-          <label>Email or username<input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
-          <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
-          <div className="row wrap gap-top">
-            <button className="btn" type="submit"><Icon name="user" size={18} /> Sign in</button>
-
-            <button className="btn ghost" type="button" onClick={() => switchTo("token")}><Icon name="shield" size={18} /> Sign in with API token</button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("change")}><Icon name="key" size={18} /> Forgot password</button>
-          </div>
-          <p className="mute small" style={{ marginTop: 12 }}>
-            Backend API: <span className={`api-badge ${apiStatus === "connected" ? "on" : "off"}`}>{apiStatus === "connected" ? "Online (/v1)" : "Offline (Sample Mode)"}</span>
-          </p>
-          {/* Visitors need no account: point them to the public pages. */}
-          <p className="mute" style={{ marginTop: 16 }}>
-            Just looking around? Browse the <a href="#/plants">plant library</a> or the <a href="#/map">plant map</a>, no account needed.
-          </p>
-        </form>
-      )}
-
-      {mode === "token" && (
-        <form onSubmit={submitToken}>
-          <h1>API Token Sign In</h1>
-          <p className="mute">
-            Sign in with an access token you already have. Your identity and permissions will be verified via <code>GET /v1/me</code>.
-          </p>
-          <label>
-            Access token (JWT)
-            <textarea
-              rows={4}
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="eyJhbGciOi..."
-              required
-              style={{ fontFamily: "monospace", fontSize: 13, resize: "vertical" }}
-            />
-          </label>
-          <p className="mute small">
-            Endpoint: <code>/v1/me</code> · Header: <code>Authorization: Bearer &lt;token&gt;</code>
-          </p>
-          <div className="row wrap gap-top">
-            <button className="btn" type="submit" disabled={isTokenBusy}>
-              <Icon name="check" size={18} /> {isTokenBusy ? "Verifying token..." : "Verify & Sign In"}
+        <>
+          <form onSubmit={submit}>
+            <h1>Staff sign in</h1>
+            <p className="mute">{staff.description}</p>
+            {apiStatus === "offline" && (
+              <div className="callout" role="status">
+                <p><Icon name="wifiOff" size={16} /> The server is not answering right now. It can take up to a minute to wake up, so try again shortly.</p>
+              </div>
+            )}
+            <label>Email or username<input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@sfc.my" autoComplete="username" required /></label>
+            <label>Password<PasswordInput value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required /></label>
+            <p className="login-forgot">
+              <button type="button" className="textlink" onClick={() => switchTo("change")}>Forgot password?</button>
+            </p>
+            <button className="btn full" type="submit" disabled={busy}>
+              <Icon name="user" size={18} /> {busy ? "Signing in…" : "Sign in"}
             </button>
-            <button className="btn ghost" type="button" onClick={() => switchTo("signin")}>
-              <Icon name="chevL" size={18} /> Back to email sign in
-            </button>
+          </form>
+
+          {/* Visitors need no account: send them to the public pages. */}
+          <div className="login-browse">
+            <p><b>Just looking around?</b> <span className="mute">No account needed.</span></p>
+            <p className="textlinks">
+              <a href="#/plants"><Icon name="leaf" size={18} /> Browse the plant library</a>
+              <a href="#/map"><Icon name="map" size={18} /> Open the plant map</a>
+            </p>
           </div>
-        </form>
+        </>
       )}
 
       {mode === "change" && (

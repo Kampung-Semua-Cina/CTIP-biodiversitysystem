@@ -63,3 +63,21 @@ for (const role of ["officer", "admin"]) {
     await expect(page.getByRole("button", { name: "Add note", exact: true })).toBeVisible();
   });
 }
+
+// "Staff sign in" opens #/staff: the form is right there, with no API-token option,
+// and visitors get working links to the plant library and the map.
+test("visitor: #/staff shows the sign-in form and links to plants and map", async ({ page }) => {
+  await openAsVisitor(page, newState(), "#/staff");
+  await expect(page.getByRole("heading", { name: "Staff sign in" })).toBeVisible();
+  await expect(page.getByLabel("Email or username")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.getByText(/API token/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
+  await page.getByRole("button", { name: /Back to sign in/ }).click();
+  await page.getByRole("link", { name: "Browse the plant library" }).click();
+  await expect(page).toHaveURL(/#\/plants$/);
+  await page.goto("/#/staff");
+  await page.getByRole("link", { name: "Open the plant map" }).click();
+  await expect(page).toHaveURL(/#\/map$/);
+});

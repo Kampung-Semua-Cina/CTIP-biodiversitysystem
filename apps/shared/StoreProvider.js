@@ -7,7 +7,6 @@ import { can } from "./permissions.js";
 import { uid, nowIso, photoProblem, CAPTION_MAX, withExponentialRetry, keepPhotoUrl } from "./utils.js";
 import {
   getAuthToken,
-  setAuthToken,
   getSession,
   freshAuthToken,
   restoreSession,
@@ -576,42 +575,6 @@ function collectionMatches(a = [], b = []) {
     await signOutApi();
     notify("Signed out");
     loadFromApi(true); // load the visitor view again
-  };
-
-  const loginWithToken = async (token) => {
-    if (!token || !token.trim()) return { ok: false, message: "Provide an access token" };
-    const cleanToken = token.trim();
-    setIsSyncing(true);
-    try {
-      const res = await fetchMe(cleanToken);
-      if (!res.ok) {
-        const msg = res.message || "Failed to authenticate with backend API";
-        notify(msg);
-        return { ok: false, message: msg, code: res.code };
-      }
-      const profile = res.data;
-      setAuthToken(cleanToken);
-      setAuthTokenState(cleanToken);
-      setDb((prevDb) => {
-        const exists = prevDb.profiles.some((p) => p.id === profile.id);
-        return {
-          ...prevDb,
-          profiles: exists
-            ? prevDb.profiles.map((p) => (p.id === profile.id ? { ...p, ...profile } : p))
-            : [...prevDb.profiles, profile],
-        };
-      });
-      setUserId(profile.id);
-      setApiStatus("connected");
-      notify(`Signed in as ${profile.full_name || profile.email} (${profile.role})`);
-      return { ok: true, profile };
-    } catch (err) {
-      const msg = err?.message || "Error connecting to backend API";
-      notify(msg);
-      return { ok: false, message: msg };
-    } finally {
-      setIsSyncing(false);
-    }
   };
 
   // useCallback: SpeciesPage lists this in an effect's dependencies. As a plain
@@ -1368,7 +1331,6 @@ function collectionMatches(a = [], b = []) {
     pollFromBackend: () => loadFromApi(true),
     nextPollDelay,
     refreshFromBackend: () => syncWithBackend(false),
-    loginWithToken,
     getBackendSpeciesById,
     getDistributionPoints,
   };

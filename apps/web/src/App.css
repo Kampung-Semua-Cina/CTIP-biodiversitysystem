@@ -95,6 +95,19 @@ small.sci, .sci.small { font-size: var(--t-sci-size); line-height: var(--t-sci-l
 .site .textlink:hover, .site .textlinks a:hover { text-decoration: underline; }
 .textlinks { display: flex; flex-wrap: wrap; gap: var(--s-2) 20px; }
 
+/* Sign-in form (#/staff, #/login) */
+.btn.full { width: 100%; margin-top: var(--s-3); }
+.login-forgot { display: flex; justify-content: flex-end; margin: calc(-1 * var(--s-2)) 0 0; }
+.site button.textlink, button.textlink {
+  min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: var(--t-small-size, 14px);
+  color: var(--acc); font-weight: 700; cursor: pointer;
+}
+button.textlink:hover { text-decoration: underline; }
+.login-browse { margin-top: var(--s-5, 24px); padding-top: var(--s-4, 16px); border-top: 1px solid var(--line); }
+.login-browse p { margin: 0 0 var(--s-2); }
+.login-browse .textlinks a { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--acc); font-weight: 700; }
+.login-browse .textlinks a:hover { text-decoration: underline; }
+
 .row { display: flex; align-items: center; gap: var(--s-3); }
 .row.wrap { flex-wrap: wrap; }
 .row.center { justify-content: center; }

@@ -8,6 +8,7 @@ import { useStore } from "../../../shared/store.js";
 import { visiblePlants, speciesCatalogue } from "../../../shared/selectors.js";
 import { go } from "../useRoute.js";
 import { SITE, PARK } from "../../../shared/site.js";
+import Login from "./Login.jsx";
 
 // Single import for all shared copy
 import {
@@ -162,25 +163,18 @@ export function Contact() {
   );
 }
 
+// "Staff sign in" in the header opens this. Signed out: the sign-in form itself,
+// so staff do not need a second click. Signed in: a way to their dashboard.
 export function StaffPage() {
-  const { role, me } = useStore();
+  const { me } = useStore();
   const content = getStaffPageContent(PARK);
+  if (!me) return <Login />;
 
   return (
     <section className="glass pad prose narrow">
       <h1>{content.title}</h1>
-      {me ? (
-        <>
-          <p>You are signed in as {me.full_name}.</p>
-          <a className="btn" href="#/dashboard"><Icon name="dashboard" size={18} /> Go to dashboard</a>
-        </>
-      ) : (
-        <>
-          <p>{content.description}</p>
-          <a className="btn" href="#/login"><Icon name="user" size={18} /> Go to login</a>
-        </>
-      )}
-      {role === "visitor" && <p className="mute">{content.visitorHint}</p>}
+      <p>You are signed in as {me.full_name}.</p>
+      <a className="btn" href="#/dashboard"><Icon name="dashboard" size={18} /> Go to dashboard</a>
     </section>
   );
 }
